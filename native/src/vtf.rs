@@ -301,6 +301,11 @@ pub fn encode_vtf_bytes(
 
 // ------------------------------------------------------------------------------------------------ reading
 
+/// `v >> i` that does not panic for i >= 64 (mip counts come from the file).
+fn shr(v: usize, i: usize) -> usize {
+    v.checked_shr(i as u32).unwrap_or(0)
+}
+
 fn mip_bytes(fmt: u32, w: usize, h: usize) -> Option<usize> {
     let blocks = w.div_ceil(4).max(1) * h.div_ceil(4).max(1);
     Some(match fmt {
@@ -347,7 +352,7 @@ pub fn decode_vtf(b: &[u8], max_dim: usize) -> Result<(usize, usize, Vec<u8>), S
         }
     }
     let fmt_size = |w, h| mip_bytes(fmt, w, h).ok_or_else(|| format!("unsupported VTF format {fmt}"));
-    let sizes: Vec<(usize, usize)> = (0..nmips.max(1)).map(|i| ((w >> i).max(1), (h >> i).max(1))).collect();
+    let sizes: Vec<(usize, usize)> = (0..nmips.clamp(1, 32)).map(|i| (shr(w, i).max(1), shr(h, i).max(1))).collect();
     let mut start = vec![0usize; sizes.len()];
     for i in (0..sizes.len()).rev() {
         start[i] = off;

@@ -68,6 +68,7 @@ def compile_qc(qc: Path, sandbox: Path | None = None, studiomdl: Path | None = N
     errors = [l.strip() for l in log.splitlines() if re.search(r"\bERROR\b", l, re.I)]
     warnings = [w.strip() for w in re.findall(r"WARNING:[^\n]*", log)
                 if "Collision building" not in w and "no any vertex animations" not in w
-                and "fastest tracing" not in w and "2-dimensional geometry" not in w]
+                and "fastest tracing" not in w and "2-dimensional geometry" not in w
+                and "bounding box out of range" not in w]            # harmless: a prop bigger than the idle box
     ok = p.returncode == 0 and "Completed" in log and not errors
     return CompileResult(ok, log, [], errors, warnings)

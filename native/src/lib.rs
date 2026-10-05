@@ -23,6 +23,8 @@ pub mod flac;
 pub mod ww2ogg;
 pub mod wwise;
 pub mod par;
+#[cfg(test)]
+mod fuzz;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod rpkg;
 

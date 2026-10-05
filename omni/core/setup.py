@@ -54,9 +54,19 @@ def game_packages(folder: Path | str) -> tuple[Path, list[Path]] | None:
     return None
 
 
+_detected: tuple[float, Path | None] = (0.0, None)
+
+
 def detect_game() -> Path | None:
+    """The game in the Steam libraries (looked up at most every 30 s: ``status()`` is called on every page load)."""
+    global _detected
+    import time
+    if time.time() - _detected[0] < 30:
+        return _detected[1]
     p = find_steam_game(*GAME_NAMES)
-    return p if p and game_packages(p) else None
+    found = p if p and game_packages(p) else None
+    _detected = (time.time(), found)
+    return found
 
 
 def assets_ok(root: Path | None = None) -> dict:
