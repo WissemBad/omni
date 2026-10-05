@@ -26,6 +26,7 @@ const current = computed(() => sources.value.find((s) => s.id === sid.value))
 const route = useRoute()
 const items = computed(() => {
   const c = current.value
+  if (route.path === '/games') return [{ label: 'Jeux', icon: 'i-ri-gamepad-line', to: '/games' }]
   if (route.path === '/setup')
     return [{ label: 'Installation', icon: 'i-ri-install-line', to: '/setup' }]
   if (!c) return []
@@ -40,6 +41,7 @@ const items = computed(() => {
   if (caps.includes('sounds'))
     rows.push({ label: 'Sons', icon: 'i-ri-music-2-line', to: `/${c.id}/sounds` })
   rows.push({ label: 'Réglages', icon: 'i-ri-settings-3-line', to: `/${c.id}/settings` })
+  rows.push({ label: 'Jeux', icon: 'i-ri-gamepad-line', to: '/games' })
   return rows
 })
 </script>

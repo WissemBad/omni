@@ -60,6 +60,8 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
     @asynccontextmanager
     async def lifespan(_app):
         settings.apply()
+        from .. import games
+        games.ensure_defaults()
         warm()
         threading.Thread(target=look_for_update, daemon=True, name="update-check").start()
         yield
@@ -281,7 +283,8 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         return jobs.remove(jid)
 
     # ------------------------------------------------------------------------------------------ workbenches
-    from . import output, routes_models, routes_setup, routes_sounds, routes_textures
+    from . import output, routes_games, routes_models, routes_setup, routes_sounds, routes_textures
+    routes_games.register(app, source_ids=registry.source_ids)
     routes_setup.register(app, jobs=jobs, reset_runtime=reset_runtime)
     routes_models.register(app, jobs=jobs, need=need, catalog_of=catalog_of, texcat_of=texcat_of,
                            converted=converted, conv_reset=conv_reset)

@@ -18,6 +18,12 @@ All notable changes to this project are documented here. The format follows [Kee
   Lua in the addon); a warning in the jobs panel when GMod is open while models are written.
 - **Updates.** The latest GitHub release is checked at launch (read token for a private repository); one click
   downloads the installer, verifies its SHA-256 and installs.
+- **Game library** (`/games`): add a game by its folder, omni identifies the engine and game (Glacier: 007 First Light,
+  HITMAN; Unreal: project and engine version) and offers the ones found in Steam. Unsupported engines are listed
+  as "bientôt".
+- "Tout installer" on the setup page: extraction, names, model compiler and Garry's Mod as one resumable job.
+- Faster models: the SMD writer of props runs in Rust (parallel chunks, byte-identical output) and the
+  overlapping-triangle removal is vectorised (no per-triangle Python tuples).
 - Convert "everything matching a filter" server-side (no more 50,000 keys through the browser).
 - Installer fetches the WebView2 runtime when it is missing.
 - CI: packaged-app smoke test (`scripts/smoke_package.py`) on release and on pull requests touching the packaging;

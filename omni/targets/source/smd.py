@@ -14,6 +14,22 @@ def _fmt_rows(a: np.ndarray) -> list[str]:
 
 def write_reference(path: Path, submeshes, material_names: dict[str, str], scale: float) -> int:
     """Triangles in the file's own winding (verified in game: reversing them shows inside-out models)."""
+    from ...native import N
+    if N is not None and hasattr(N, "smd_static"):
+        lines, count = [HEADER], 0
+        for sm in submeshes:
+            uv = np.ascontiguousarray(sm.uvs, dtype=np.float64).copy()
+            uv[:, 1] = 1.0 - uv[:, 1]
+            text, n = N.smd_static(material_names.get(sm.material_key, "default"),
+                                   np.ascontiguousarray(sm.positions * scale, dtype=np.float64),
+                                   np.ascontiguousarray(sm.normals, dtype=np.float64), uv,
+                                   np.ascontiguousarray(sm.indices, dtype=np.int64))
+            lines.append(text)
+            count += n
+        lines.append("end\n")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("".join(lines), encoding="ascii")
+        return count
     lines = [HEADER]
     count = 0
     for sm in submeshes:

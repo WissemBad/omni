@@ -109,7 +109,7 @@ watch(
   { immediate: true },
 )
 
-async function start(step: 'extract' | 'names' | 'studiomdl') {
+async function start(step: 'extract' | 'names' | 'studiomdl' | 'auto') {
   busy.value = step
   try {
     const { job } = await api<{ job: string }>(`/setup/${step}`, { method: 'POST' })
@@ -148,6 +148,21 @@ const finish = () => navigateTo('/')
       </div>
 
       <UAlert v-if="failed" color="error" variant="subtle" icon="i-ri-error-warning-line" title="Installation indisponible" :description="failed" />
+
+      <!-- one button: everything that is missing, in order -->
+      <UCard v-if="status?.game.ok && !status.can_convert" :ui="{ body: 'space-y-3 p-4 sm:p-5' }">
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="min-w-0 flex-1">
+            <h2 class="text-base font-semibold text-highlighted">Installer automatiquement</h2>
+            <p class="text-sm text-muted">Extraction des ressources, noms, compilateur de modèles, Garry’s Mod : tout ce qui manque, dans l’ordre. Interruptible et reprenable.</p>
+          </div>
+          <UButton label="Tout installer" icon="i-ri-magic-line" size="lg" :loading="busy === 'auto' || !!running" :disabled="spaceShort || !!running" @click="start('auto')" />
+        </div>
+        <template v-if="running">
+          <UProgress :model-value="running.total ? running.done : null" :max="running.total || undefined" />
+          <p class="truncate text-xs text-muted">{{ pct(running) }} % · {{ last(running) }}</p>
+        </template>
+      </UCard>
 
       <!-- 1. game + assets -->
       <UCard :ui="{ body: 'space-y-4 p-4 sm:p-5' }">

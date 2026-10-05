@@ -60,9 +60,51 @@ pub fn triangles(material: &str, m: &Mesh) -> Result<(String, usize), String> {
     Ok((out, m.indices.len() / 3))
 }
 
+/// Static (single bone, no weights) triangles of a prop: `"<material>\n<3 vertex lines>\n"` per triangle. Positions are
+/// already scaled and the V coordinate already flipped. Built in parallel chunks (a prop can have millions of rows).
+pub fn static_triangles(material: &str, pos: &[f64], nrm: &[f64], uv: &[f64], indices: &[i64]) -> Result<(String, usize), String> {
+    let n = pos.len() / 3;
+    if nrm.len() != n * 3 || uv.len() != n * 2 {
+        return Err("inconsistent mesh arrays".into());
+    }
+    if indices.len() % 3 != 0 || indices.iter().any(|&i| i < 0 || i as usize >= n) {
+        return Err("bad triangle indices".into());
+    }
+    const CHUNK: usize = 3 * 2048;
+    let parts: Vec<String> = indices
+        .par_chunks(CHUNK)
+        .map(|chunk| {
+            let mut s = String::with_capacity(chunk.len() / 3 * (material.len() + 1 + 3 * 80));
+            for tri in chunk.chunks_exact(3) {
+                s.push_str(material);
+                s.push('\n');
+                for &i in tri {
+                    let i = i as usize;
+                    let _ = writeln!(
+                        s,
+                        "0 {:.5} {:.5} {:.5} {:.5} {:.5} {:.5} {:.5} {:.5}",
+                        pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2], nrm[i * 3], nrm[i * 3 + 1], nrm[i * 3 + 2], uv[i * 2], uv[i * 2 + 1]
+                    );
+                }
+            }
+            s
+        })
+        .collect();
+    Ok((parts.concat(), indices.len() / 3))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn static_rows_match_the_skinned_writer_without_links() {
+        let (s, c) = static_triangles("m", &[1.0, 2.0, -0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0], &[0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0],
+                                      &[0.0, 1.0, 0.5, 0.5, 1.0, 0.0], &[0, 1, 2]).unwrap();
+        assert_eq!(c, 1);
+        assert_eq!(s, "m\n0 1.00000 2.00000 -0.00000 0.00000 0.00000 1.00000 0.00000 1.00000\n0 0.00000 0.00000 0.00000 0.00000 0.00000 1.00000 0.50000 0.50000\n0 1.00000 1.00000 1.00000 0.00000 0.00000 1.00000 1.00000 0.00000\n");
+        assert!(static_triangles("m", &[0.0; 3], &[0.0; 3], &[0.0; 2], &[0, 0, 1]).is_err());
+    }
 
     #[test]
     fn formats_like_python() {

@@ -96,6 +96,50 @@ def register(app: FastAPI, *, jobs, reset_runtime) -> None:
         return _job("extract", "Extraction des ressources du jeu", lambda job: setup.extract_assets(
             Path(game), lambda m: jobs.log(job, m), lambda d, t: jobs.count(job, d, t), jobs.cancel_event(job)))
 
+    @app.post("/api/setup/auto")
+    def auto():
+        """Everything that is missing, in order, as one job: extraction of the game's resources, the names, the model
+        compiler, Garry's Mod. Steps already done are skipped, so it is also the "repair" button."""
+        game = CONFIG.game or setup.detect_game()
+        if not game:
+            raise HTTPException(400, "Choisis d’abord le dossier du jeu")
+
+        def run(job):
+            say = lambda m: jobs.log(job, m)  # noqa: E731
+            cancel = jobs.cancel_event(job)
+            st = setup.status()
+            stages = [("extract", 80, not st["assets"]["ok"]), ("names", 10, not st["names"]["ok"]),
+                      ("studiomdl", 10, not st["studiomdl"]["ok"])]
+            base, done = 0, []
+            for name, weight, needed in stages:
+                if not needed:
+                    base += weight
+                    continue
+                if cancel.is_set():
+                    break
+                say({"extract": "Extraction des ressources du jeu…", "names": "Noms des ressources…",
+                     "studiomdl": "Compilateur de modèles…"}[name])
+
+                def count(d, t, base=base, weight=weight):
+                    jobs.count(job, base + int(weight * d / max(t, 1)), 100)
+                if name == "extract":
+                    setup.extract_assets(Path(game), say, count, cancel)
+                elif name == "names":
+                    setup.fetch_names(say, count, cancel, release=registry.reset)
+                else:
+                    setup.fetch_studiomdl(say, count, cancel)
+                done.append(name)
+                base += weight
+            if (CONFIG.gmod / "garrysmod").is_dir() and not settings.get("paths", "gmod"):
+                settings.save({"paths": {"gmod": str(CONFIG.gmod)}})
+                say("Garry’s Mod détecté et enregistré")
+            reset_runtime()
+            final = setup.status()
+            return {"étapes": ", ".join(done) or "rien à faire", "prêt": final["ready"], "conversion": final["can_convert"]}
+        job = jobs.create("setup", "Installation du jeu", "", 100, dedupe="setup:auto")
+        jobs.run(job, run)
+        return {"job": job["id"]}
+
     @app.post("/api/setup/names")
     def names():
         return _job("names", "Liste des noms (Bond-Hashes)", lambda job: setup.fetch_names(

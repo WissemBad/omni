@@ -257,6 +257,20 @@ fn smd_triangles<'py>(
         .map_err(err)
 }
 
+/// smd_static(material, positions (n,3), normals (n,3), uvs (n,2, V flipped), indices int64) -> (text, triangles)
+#[pyfunction]
+fn smd_static<'py>(
+    py: Python<'py>,
+    material: &str,
+    positions: PyReadonlyArray2<'py, f64>,
+    normals: PyReadonlyArray2<'py, f64>,
+    uvs: PyReadonlyArray2<'py, f64>,
+    indices: numpy::PyReadonlyArray1<'py, i64>,
+) -> PyResult<(String, usize)> {
+    let (p, n, u, i) = (positions.as_slice()?, normals.as_slice()?, uvs.as_slice()?, indices.as_slice()?);
+    py.allow_threads(|| smd::static_triangles(material, p, n, u, i)).map_err(err)
+}
+
 /// weld(positions (n,3), triangles (m,3) int64, cell=1e-4) -> (vertices, triangles): merged seams, no degenerate triangles
 #[pyfunction]
 #[pyo3(signature = (positions, triangles, cell=1e-4))]
@@ -298,6 +312,7 @@ pub fn omni_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(template_index, m)?)?;
     m.add_function(wrap_pyfunction!(py_lbs, m)?)?;
     m.add_function(wrap_pyfunction!(smd_triangles, m)?)?;
+    m.add_function(wrap_pyfunction!(smd_static, m)?)?;
     m.add_function(wrap_pyfunction!(weld, m)?)?;
     m.add_function(wrap_pyfunction!(mesh_volume, m)?)?;
     crate::py_media::register(m)?;

@@ -8,12 +8,16 @@ pub use rayon::prelude::*;
 #[cfg(not(feature = "parallel"))]
 pub trait ParSlice<T> {
     fn par_iter(&self) -> std::slice::Iter<'_, T>;
+    fn par_chunks(&self, n: usize) -> std::slice::Chunks<'_, T>;
 }
 
 #[cfg(not(feature = "parallel"))]
 impl<T> ParSlice<T> for [T] {
     fn par_iter(&self) -> std::slice::Iter<'_, T> {
         self.iter()
+    }
+    fn par_chunks(&self, n: usize) -> std::slice::Chunks<'_, T> {
+        self.chunks(n)
     }
 }
 
