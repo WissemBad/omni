@@ -275,11 +275,10 @@ def _find_source(sid: str, catalog, rel_path: str) -> dict | None:
     if not rel_path.startswith(prefix) or rel_path.startswith(prefix + "pm/"):
         return None
     inner = rel_path[len(prefix):-4]
-    db = catalog.db
-    rows = db.execute("SELECT key, rel, cat, name FROM assets WHERE rel = ?", (inner,)).fetchall()
+    rows = catalog._query("SELECT key, rel, cat, name FROM assets WHERE rel = ?", (inner,))
     tail = inner.rsplit("_", 1)[-1]
     if not rows and len(tail) == 6:
-        rows = db.execute("SELECT key, rel, cat, name FROM assets WHERE lower(key) LIKE ?", (f"%{tail}",)).fetchall()
+        rows = catalog._query("SELECT key, rel, cat, name FROM assets WHERE lower(key) LIKE ?", (f"%{tail}",))
     for r in rows:
         if _model_path(sid, r["rel"], r["key"]) == f"omni/{sid}/{inner}":
             return {"key": r["key"], "rel": r["rel"], "cat": r["cat"]}

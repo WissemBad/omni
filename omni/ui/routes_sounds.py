@@ -101,8 +101,8 @@ def register(app: FastAPI, *, jobs, need) -> None:
     @app.post("/api/{sid}/sounds/export")
     def sound_export(sid: str, req: SoundExport):
         src = need(sid, "sounds")
-        if jobs.running("sounds", sid):
-            raise HTTPException(409, "un export des sons est déjà en cours")
+        if b := jobs.busy():
+            raise HTTPException(409, f"Un travail est déjà en cours : {b['label']}")
         st = settings.load()["sounds"]
         fmt = req.format or st["format"]
         job = jobs.create("sounds", f"Sons ({fmt})", sid)

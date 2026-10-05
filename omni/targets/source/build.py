@@ -41,7 +41,7 @@ class BuildOptions:
 @dataclass
 class BuildResult:
     key: str
-    status: str = "FAILED"            # OK | PARTIAL | FAILED
+    status: str = "FAILED"            # OK | PARTIAL | FAILED | SKIPPED (nothing to convert)
     model: str = ""
     triangles: int = 0
     materials: int = 0
@@ -100,6 +100,12 @@ def _game_lods(source, h: int, model, materials: dict, names: dict, dropped: set
 
 
 MAX_MATERIALS = 128                    # studiomdl limit (skin variants included)
+BIG_MESH = 50_000                      # triangles above which a studiomdl timeout is blamed on the mesh
+
+
+def compile_timeout(triangles: int) -> int:
+    """Seconds studiomdl may take: 60 s base, one more per 1,500 triangles, 10 minutes at most."""
+    return int(min(600, 60 + triangles / 1500))
 
 
 def _variant_skins(source, h: int, model, names: dict, dropped: set, cache, addon: Path, cd: str,
@@ -195,7 +201,8 @@ def build_model(source, key: str, cfg: Config = CONFIG, opts: BuildOptions | Non
             model.submeshes = [sm for sm in model.submeshes if sm.material_key not in dropped]
             res.notes.append(f"{len(dropped)} decal material(s) without usable alpha removed")
             if not model.submeshes:
-                res.errors.append("only decal layers (nothing to draw)")
+                res.status = "SKIPPED"
+                res.notes.append("only decal layers (nothing to draw)")
                 return res
         res.materials = len(materials)
         res.seconds["materials"] = round(time.perf_counter() - t, 3)
@@ -259,22 +266,32 @@ def build_model(source, key: str, cfg: Config = CONFIG, opts: BuildOptions | Non
         (work / "model.qc").write_text("\n".join(qc + phys_qc) + "\n")
         res.seconds["write"] = round(time.perf_counter() - t, 3)
 
+        outdir = cfg.sandbox / "models" / Path(mpath).parent
+        dest = addon / "models" / Path(mpath).parent
+        stem = Path(mpath).name
+
+        def clear(folder: Path) -> None:
+            for f in folder.glob(stem + ".*"):
+                f.unlink(missing_ok=True)
+
         t = time.perf_counter()
-        cr = compile_qc(work / "model.qc", cfg.sandbox, cfg.studiomdl)
-        if not cr.ok and phys_qc:
-            # the physics compiler hangs or fails on some degenerate/huge hulls: keep the model, drop its collision
+        clear(outdir)                                   # nothing left from an earlier run can be copied by mistake
+        timeout = compile_timeout(res.triangles)
+        cr = compile_qc(work / "model.qc", cfg.sandbox, cfg.studiomdl, timeout=timeout)
+        # the physics compiler hangs or fails on some degenerate/huge hulls: keep the model, drop its collision.
+        # A timeout on a big mesh is the mesh itself, not the hulls: retrying without them would only cost it twice.
+        if not cr.ok and phys_qc and not (cr.timed_out and res.triangles > BIG_MESH):
             (work / "model.qc").write_text("\n".join(qc) + "\n")
             res.notes.append("collision removed: studiomdl could not build it (" + (cr.errors[:1] or ["?"])[0][:80] + ")")
-            cr = compile_qc(work / "model.qc", cfg.sandbox, cfg.studiomdl)
+            clear(outdir)
+            cr = compile_qc(work / "model.qc", cfg.sandbox, cfg.studiomdl, timeout=timeout)
         res.seconds["compile"] = round(time.perf_counter() - t, 3)
         if not cr.ok:
             res.errors += cr.errors[:8] or [cr.log[-400:]]
             return res
 
-        outdir = cfg.sandbox / "models" / Path(mpath).parent
-        dest = addon / "models" / Path(mpath).parent
         dest.mkdir(parents=True, exist_ok=True)
-        stem = Path(mpath).name
+        clear(dest)                                     # a .phy of an earlier build must not outlive its model
         copied = 0
         for f in outdir.glob(stem + ".*"):
             shutil.copy2(f, dest / f.name)

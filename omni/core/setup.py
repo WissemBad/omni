@@ -103,20 +103,24 @@ def download(url: str, dest: Path, progress=None, cancel=None, sha256: str = "")
     tmp = dest.with_name(dest.name + ".part")
     h = hashlib.sha256()
     req = urllib.request.Request(url, headers={"User-Agent": "omni"})
-    with urllib.request.urlopen(req, timeout=60) as r, open(tmp, "wb") as f:
-        total = int(r.headers.get("Content-Length") or 0)
-        done = 0
-        while True:
-            if cancel is not None and cancel.is_set():
-                raise Cancelled()
-            chunk = r.read(1 << 20)
-            if not chunk:
-                break
-            f.write(chunk)
-            h.update(chunk)
-            done += len(chunk)
-            if progress:
-                progress(done, total)
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r, open(tmp, "wb") as f:
+            total = int(r.headers.get("Content-Length") or 0)
+            done = 0
+            while True:
+                if cancel is not None and cancel.is_set():
+                    raise Cancelled()
+                chunk = r.read(1 << 20)
+                if not chunk:
+                    break
+                f.write(chunk)
+                h.update(chunk)
+                done += len(chunk)
+                if progress:
+                    progress(done, total)
+    except BaseException:
+        tmp.unlink(missing_ok=True)            # a cancelled or failed download leaves no .part behind
+        raise
     if sha256 and h.hexdigest() != sha256:
         tmp.unlink(missing_ok=True)
         raise RuntimeError(f"{dest.name}: somme de contrôle inattendue ({h.hexdigest()[:12]}…) : fichier refusé")
@@ -124,8 +128,9 @@ def download(url: str, dest: Path, progress=None, cancel=None, sha256: str = "")
     return dest
 
 
-def fetch_names(say=print, count=None, cancel=None) -> dict:
-    """Download the 007 names (Bond-Hashes) and rebuild the lookup database."""
+def fetch_names(say=print, count=None, cancel=None, release=None) -> dict:
+    """Download the 007 names (Bond-Hashes) and rebuild the lookup database. ``release`` is called before the
+    old database is deleted (the running source keeps it open, which Windows does not allow to delete)."""
     import py7zr
     CONFIG.hash_list.parent.mkdir(parents=True, exist_ok=True)
     archive = CONFIG.workspace / "names" / "latest-hashes.7z"
@@ -135,6 +140,8 @@ def fetch_names(say=print, count=None, cancel=None) -> dict:
     with py7zr.SevenZipFile(archive) as z:
         z.extract(path=CONFIG.hash_list.parent, targets=["hash_list.txt"])
     archive.unlink(missing_ok=True)
+    if release is not None:
+        release()
     CONFIG.names_db.unlink(missing_ok=True)
     return names_ok()
 

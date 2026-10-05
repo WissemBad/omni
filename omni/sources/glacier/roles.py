@@ -27,6 +27,9 @@ NAMED = {
     "mapwindheight": "other", "mapwindnormal": "other", "mapdirectiontexture": "other",
 }
 
+# Slots the converter deliberately leaves out (they are not unknown: the report must not count them).
+IGNORED = frozenset({"mapwindheight", "mapwindnormal", "mapdirectiontexture"})
+
 # Defaults for the generic scheme (slot, class family) -> role. ``*`` matches any class.
 GENERIC_DEFAULTS = {
     ("maptexture2d_01", "*"): "base",
@@ -73,7 +76,7 @@ def _leaf(texture_name: str) -> tuple[str, str]:
 def resolve(slot: str, cls_family: str, texture_name: str = "", fmt: str = "") -> str:
     """Explicit slot names first, then the texture's own file name (diffuse_a / specular_a / normal_a ...,
     the author's intent), then the slot position for the generic scheme."""
-    s = re.sub(r"^map[a-z]+_tex_", "maptex_", slot.lower())      # mapRED_Tex_SRM, mapGREEN_Tex_Basecolor ...
+    s = re.sub(r"^map[a-z0-9]+(?:_[a-z0-9]+)*?_tex_", "maptex_", slot.lower())   # mapRED_Tex_SRM, mapGREEN_DIRT_Tex_Basecolor ...
     if s in NAMED:
         return NAMED[s]
     leaf, ann = _leaf(texture_name) if texture_name else ("", "")

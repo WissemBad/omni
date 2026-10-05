@@ -42,6 +42,13 @@ def get_source(source_id: str):
 
 def reset() -> None:
     """Forget the instances: a source is rebuilt (new assets folder, new names) at its next use."""
+    for inst in _instances.values():
+        close = getattr(inst, "close", None)
+        if close is not None:
+            try:
+                close()               # files a download is about to replace must not stay open
+            except Exception:  # noqa: BLE001
+                pass
     _instances.clear()
 
 

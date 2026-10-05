@@ -96,17 +96,32 @@ def load() -> dict:
         return copy.deepcopy(merged)
 
 
+_save_lock = threading.Lock()
+
+
+def _bounded(section: dict) -> dict:
+    """Keep numeric settings in a range the machine accepts (0 or 500 workers would hang or crash a batch)."""
+    for key, (lo, hi) in {"workers": (1, 61), "port": (1024, 65535)}.items():
+        if key in section:
+            try:
+                section[key] = max(lo, min(hi, int(section[key])))
+            except (TypeError, ValueError):
+                section.pop(key)
+    return section
+
+
 def save(patch: dict) -> dict:
     """Merge ``patch`` (any subset of sections/keys) into the stored settings."""
-    cur = load()
-    for section, values in (patch or {}).items():
-        if section in cur and isinstance(values, dict):
-            cur[section].update(values)
-    merged = _merge(DEFAULTS, cur)
-    _FILE.parent.mkdir(parents=True, exist_ok=True)
-    tmp = _FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(merged, indent=1, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, _FILE)
+    with _save_lock:                       # concurrent PUTs would otherwise overwrite each other's keys
+        cur = load()
+        for section, values in (patch or {}).items():
+            if section in cur and isinstance(values, dict):
+                cur[section].update(_bounded(dict(values)))
+        merged = _merge(DEFAULTS, cur)
+        _FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _FILE.with_name(f"{_FILE.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+        tmp.write_text(json.dumps(merged, indent=1, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, _FILE)
     apply(merged)
     return merged
 

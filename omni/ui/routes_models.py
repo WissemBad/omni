@@ -143,7 +143,7 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
         except Exception as e:  # noqa: BLE001
             raise HTTPException(404, str(e))
         tc = texcat_of(sid)
-        row = catalog_of(sid).db.execute("SELECT * FROM assets WHERE key = ?", (key,)).fetchone()
+        row = next(iter(catalog_of(sid)._query("SELECT * FROM assets WHERE key = ?", (key,))), None)
         tris = sum(len(sm.indices) // 3 for sm in model.submeshes)
         verts = sum(len(sm.positions) for sm in model.submeshes)
         import numpy as np
@@ -192,12 +192,15 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
     @app.post("/api/{sid}/props/convert")
     def prop_convert(sid: str, req: ConvertRequest):
         src = need(sid, "props")
+        if len(req.keys) > 1 and (b := jobs.busy()):
+            raise HTTPException(409, f"Un travail est déjà en cours : {b['label']}")
         st = settings.load()
         opts = dict(physics=req.physics if req.physics is not None else st["props"]["physics"],
                     collision=req.collision or st["props"]["collision"],
                     tex_quality=req.tex_quality or st["textures"]["quality"],
                     lossless_normals=req.lossless_normals if req.lossless_normals is not None else st["textures"]["lossless_normals"])
-        workers = req.workers or st["props"]["workers"]
+        from ..pipeline import clamp_workers
+        workers = clamp_workers(req.workers or st["props"]["workers"])
         blend = req.blend if req.blend is not None else st["props"]["blend"]
         job = jobs.create("props", f"{len(req.keys)} prop(s)", sid, len(req.keys))
 
@@ -369,6 +372,8 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
     def character_build_all(sid: str, req: CharacterBatch):
         """Every playermodel (or a list), one after the other; already built ones are skipped by default."""
         src = need(sid, "characters")
+        if b := jobs.busy():
+            raise HTTPException(409, f"Un travail est déjà en cours : {b['label']}")
         every = {c["id"]: c for c in src.characters()}
         ids_ = [i for i in (req.ids or list(every)) if i in every]
         if req.skip_built:

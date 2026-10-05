@@ -7,16 +7,26 @@ a file updates them).
 from __future__ import annotations
 
 import json
+import logging
 import os
+import struct
 from pathlib import Path
 
 from .meta import Meta, parse_meta
+
+log = logging.getLogger("omni.archive")
+
+
+def _chunk_order(p: Path) -> tuple[int, str]:
+    digits = "".join(c for c in p.name if c.isdigit())
+    return (int(digits) if digits else 1 << 30, p.name)
 
 
 class Archive:
     def __init__(self, sorted_root: Path, cache_dir: Path | None = None):
         self.root = sorted_root
-        self.chunks = [p for p in sorted(sorted_root.iterdir()) if p.is_dir()] if sorted_root.exists() else []
+        # chunk2 before chunk10: a resource present in several chunks comes from the lowest-numbered one
+        self.chunks = sorted((p for p in sorted_root.iterdir() if p.is_dir()), key=_chunk_order) if sorted_root.exists() else []
         self._index: dict[str, dict[int, Path]] = {}
         self.cache_dir = cache_dir
 
@@ -83,5 +93,6 @@ class Archive:
             return None
         try:
             return parse_meta(mp.read_bytes())
-        except Exception:
+        except (OSError, struct.error, IndexError, ValueError) as e:
+            log.warning("unreadable .meta %s: %s", mp.name, e)
             return None

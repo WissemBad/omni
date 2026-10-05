@@ -1,8 +1,10 @@
 """studiomdl invocation (StudioMDL-CE by default) inside the isolated sandbox mod."""
 from __future__ import annotations
 
+import os
 import re
 import subprocess
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -17,6 +19,7 @@ class CompileResult:
     files: list[Path] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    timed_out: bool = False
 
 
 def ensure_sandbox(sandbox: Path) -> None:
@@ -39,8 +42,14 @@ def ensure_sandbox(sandbox: Path) -> None:
     ]
     text = "\n".join(lines) + "\n"
     gi = sandbox / "gameinfo.txt"
-    if not gi.exists() or gi.read_text() != text:
-        gi.write_text(text)
+    if gi.exists() and gi.read_text() == text:
+        return
+    tmp = gi.with_name(f"gameinfo.{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.write_text(text)
+    try:
+        os.replace(tmp, gi)               # never a half-written file under a running studiomdl
+    except OSError:
+        tmp.unlink(missing_ok=True)       # another worker holds it open; it writes the same content
 
 
 def compile_qc(qc: Path, sandbox: Path | None = None, studiomdl: Path | None = None, timeout: int = 60) -> CompileResult:
@@ -54,7 +63,7 @@ def compile_qc(qc: Path, sandbox: Path | None = None, studiomdl: Path | None = N
             creationflags=NOWINDOW,
         )
     except subprocess.TimeoutExpired:
-        return CompileResult(False, "", [], [f"studiomdl timed out after {timeout}s"], [])
+        return CompileResult(False, "", [], [f"studiomdl timed out after {timeout}s"], [], timed_out=True)
     log = (p.stdout or "") + (p.stderr or "")
     errors = [l.strip() for l in log.splitlines() if re.search(r"\bERROR\b", l, re.I)]
     warnings = [w.strip() for w in re.findall(r"WARNING:[^\n]*", log)

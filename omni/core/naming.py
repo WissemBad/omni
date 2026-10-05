@@ -1,6 +1,7 @@
 """Hash-list name handling and game-safe path/identifier generation."""
 from __future__ import annotations
 
+import os
 import re
 import sqlite3
 import threading
@@ -63,6 +64,13 @@ class Names:
         self._db: sqlite3.Connection | None = None
         self._lock = threading.RLock()      # one connection shared by the web server's and the exporters' threads
 
+    def close(self) -> None:
+        """Release the database file (it is about to be replaced) without deleting it."""
+        with self._lock:
+            if self._db is not None:
+                self._db.close()
+                self._db = None
+
     def reset(self) -> None:
         """Forget the database (a new hash list was downloaded): it is rebuilt at the next lookup."""
         with self._lock:
@@ -84,11 +92,39 @@ class Names:
                 db.execute("CREATE TABLE names(h INTEGER PRIMARY KEY, t TEXT, n TEXT)")
                 self._db = db
                 return db
-            db = sqlite3.connect(self.db_path, check_same_thread=False)
-            if fresh or not db.execute("SELECT name FROM sqlite_master WHERE name='names'").fetchone():
-                self._build(db)
-            self._db = db
+            if not fresh and not self._complete():
+                self.db_path.unlink(missing_ok=True)        # a build that was killed halfway: start again
+                fresh = True
+            if fresh:
+                # one scratch file per process: several workers may find the database missing at the same time
+                tmp = self.db_path.with_name(f"{self.db_path.name}.{os.getpid()}.building")
+                tmp.unlink(missing_ok=True)
+                scratch = sqlite3.connect(tmp)
+                try:
+                    self._build(scratch)
+                    scratch.close()
+                    try:
+                        os.replace(tmp, self.db_path)       # the database exists only once it is complete
+                    except OSError:
+                        if not self._complete():            # else another process finished first: use its file
+                            raise
+                        tmp.unlink(missing_ok=True)
+                except BaseException:
+                    scratch.close()
+                    tmp.unlink(missing_ok=True)
+                    raise
+            self._db = sqlite3.connect(self.db_path, check_same_thread=False)
         return self._db
+
+    def _complete(self) -> bool:
+        try:
+            db = sqlite3.connect(self.db_path)
+            try:
+                return db.execute("SELECT 1 FROM names LIMIT 1").fetchone() is not None
+            finally:
+                db.close()
+        except sqlite3.Error:
+            return False
 
     def _build(self, db: sqlite3.Connection) -> None:
         db.execute("DROP TABLE IF EXISTS names")

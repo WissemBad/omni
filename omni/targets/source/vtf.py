@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import threading
 import struct
 from pathlib import Path
 
@@ -28,6 +29,6 @@ def write_vtf(path: Path, fmt: int, mips: list, flags: int = 0, reflectivity=(0.
     body = b"".join(m[2] for m in reversed(mips))
     path.parent.mkdir(parents=True, exist_ok=True)
     # atomic: parallel workers may produce the same shared texture at the same time
-    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     tmp.write_bytes(hdr + body)
     os.replace(tmp, path)

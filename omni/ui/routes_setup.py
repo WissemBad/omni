@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from ..core import settings, setup
 from ..core.config import CONFIG
 from ..core.windows import pick_folder
+from ..sources import registry
 
 
 class Paths(BaseModel):
@@ -76,14 +77,15 @@ def register(app: FastAPI, *, jobs, reset_runtime) -> None:
         except Exception as e:  # noqa: BLE001
             raise HTTPException(500, f"{type(e).__name__}: {e}")
 
-    def _job(kind: str, label: str, fn):
-        if jobs.running("setup"):
-            raise HTTPException(409, "Une étape d’installation est déjà en cours")
+    def _job(kind: str, label: str, fn, purge: bool = True):
+        if jobs.running():
+            raise HTTPException(409, "Un travail est déjà en cours : attends la fin ou annule-le")
         job = jobs.create("setup", label, "", 0)
 
         def run(job):
             res = fn(job)
-            reset_runtime()
+            if purge:                           # a download of tools changes nothing the catalogs were built from
+                reset_runtime()
             return res if isinstance(res, dict) else {}
         jobs.run(job, run)
         return {"job": job["id"]}
@@ -99,9 +101,10 @@ def register(app: FastAPI, *, jobs, reset_runtime) -> None:
     @app.post("/api/setup/names")
     def names():
         return _job("names", "Liste des noms (Bond-Hashes)", lambda job: setup.fetch_names(
-            lambda m: jobs.log(job, m), lambda d, t: jobs.count(job, d, t), jobs.cancel_event(job)))
+            lambda m: jobs.log(job, m), lambda d, t: jobs.count(job, d, t), jobs.cancel_event(job),
+            release=registry.reset))
 
     @app.post("/api/setup/studiomdl")
     def studiomdl():
         return _job("studiomdl", "Compilateur de modèles (StudioMDL-CE)", lambda job: setup.fetch_studiomdl(
-            lambda m: jobs.log(job, m), lambda d, t: jobs.count(job, d, t), jobs.cancel_event(job)))
+            lambda m: jobs.log(job, m), lambda d, t: jobs.count(job, d, t), jobs.cancel_event(job)), purge=False)

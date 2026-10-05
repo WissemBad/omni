@@ -57,6 +57,7 @@ class GlacierSource(Source):
         self.config = config
         self.archive = Archive(config.assets_sorted, config.cache)
         self.names = Names(config.hash_list, config.names_db)
+        self._shared: frozenset[str] | None = None
 
     # ---- characters ------------------------------------------------------------
     def characters(self) -> list[dict]:
@@ -139,6 +140,43 @@ class GlacierSource(Source):
         dirs, cont, leaf = parse_ioi(name) if name else ([], "", "")
         return AssetInfo("%016X" % h, name, dirs, cont, leaf, p.stat().st_size if p else 0, kind)
 
+    def close(self) -> None:
+        self.names.close()
+
+    def rel_path(self, info: AssetInfo) -> str:
+        """Output path of a model, unique across the game: several resources can share a readable path (truncated
+        names, ``^…_dynamic`` variants, same leaf in two folders), those get the end of their hash appended."""
+        rel = info.rel_path
+        return f"{rel}_{info.key[-6:].lower()}" if rel in self._shared_rels() else rel
+
+    def _shared_rels(self) -> frozenset[str]:
+        if self._shared is not None:
+            return self._shared
+        import json
+        import os
+        from collections import Counter
+        index = self.archive.index("PRIM")
+        db = self.names.db_path
+        sig = [len(index), db.stat().st_mtime_ns if db.exists() else 0, 1]
+        cache = self.config.cache / f"shared_rels_{self.id}.json"
+        try:
+            data = json.loads(cache.read_text(encoding="utf-8"))
+            if data["sig"] == sig:
+                self._shared = frozenset(data["rels"])
+                return self._shared
+        except (OSError, ValueError, KeyError):
+            pass
+        counts = Counter(self.info(h).rel_path for h in index)
+        self._shared = frozenset(r for r, n in counts.items() if n > 1)
+        try:
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            tmp = cache.with_name(f"{cache.name}.{os.getpid()}.tmp")
+            tmp.write_text(json.dumps({"sig": sig, "rels": sorted(self._shared)}), encoding="utf-8")
+            os.replace(tmp, cache)
+        except OSError:
+            pass
+        return self._shared
+
     def catalog_rows(self):
         """Light-weight rows for the catalog: header flags are read without parsing the whole PRIM."""
         import struct
@@ -153,7 +191,7 @@ class GlacierSource(Source):
             except (OSError, struct.error):
                 pass
             yield {
-                "key": info.key, "name": info.name, "rel": info.rel_path, "size": info.size,
+                "key": info.key, "name": info.name, "rel": self.rel_path(info), "size": info.size,
                 "cat": "/".join(info.dirs[:2]) if info.dirs else "unnamed",
                 "skinned": bool(flags & 0b1000), "linked": bool(flags & 0b100),
             }
@@ -197,7 +235,7 @@ class GlacierSource(Source):
                 except Exception:
                     pass
             role = roles.resolve(t.name, fam, tname, fmt)
-            if role == "other":
+            if role == "other" and t.name.lower() not in roles.IGNORED and t.name not in mat.unknown_slots:
                 mat.unknown_slots.append(t.name)
             if tp is None:
                 continue
@@ -427,7 +465,7 @@ class GlacierSource(Source):
                 colors=m.colors, tangents=m.tangents, joints=m.joints, weights=m.weights,
                 material_key=mk, lod_mask=m.lod_mask, zbias=m.zbias,
             ))
-        model = Model(key=info.key, name=info.rel_path, submeshes=subs, skinned=prim.weighted, warnings=warnings,
+        model = Model(key=info.key, name=self.rel_path(info), submeshes=subs, skinned=prim.weighted, warnings=warnings,
                       lod=best_lod, lods=bits or [0])
         model.rig = self.load_rig(h) if prim.weighted else None
         return model, materials
@@ -447,6 +485,11 @@ class GlacierSource(Source):
             if self.archive.find("ALOC", r) is not None:
                 out[kind] = r
         return out
+
+    def ensure_variants(self) -> None:
+        """Build the mesh -> templates index now (the batch workers then only read it)."""
+        self.prop_variants(0)
+        self._variants.ensure()
 
     def prop_variants(self, h: int) -> list[dict]:
         """Material variants the game's templates apply to this mesh (see variants.py)."""

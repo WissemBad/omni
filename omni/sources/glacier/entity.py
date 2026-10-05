@@ -27,7 +27,6 @@ import os
 import struct
 import zlib
 from dataclasses import dataclass, field
-from functools import lru_cache
 
 from ...native import N
 
@@ -195,6 +194,9 @@ class Template:
         return -1
 
 
+_MISSING = object()
+
+
 class EntityReader:
     """Decodes TEMP/TBLU pairs of a Glacier archive (cached)."""
 
@@ -203,35 +205,37 @@ class EntityReader:
         self.archive = source.archive
         self._names = None
         self._extra = tuple(extra_names)
+        self._templates: dict[int, Template | None] = {}
 
     @property
     def names(self) -> dict[int, str]:
         if self._names is None:
             import json
             from ...core.config import CONFIG
-            cache = CONFIG.cache / f"property_names_{self.source.id}.json"
+            cache = CONFIG.cache / f"property_names_{self.source.id}_v2.json"
+            materials = self.archive.index("MATI")
             if cache.exists():
                 try:
-                    known = set(json.loads(cache.read_text(encoding="utf-8"))) | set(ENGINE_PROPERTIES) | set(self._extra)
-                    self._names = {zlib.crc32(n.encode()): n for n in known}
-                    return self._names
-                except (OSError, ValueError):
+                    data = json.loads(cache.read_text(encoding="utf-8"))
+                    if data["materials"] == len(materials):
+                        known = set(data["names"]) | set(ENGINE_PROPERTIES) | set(self._extra)
+                        self._names = {zlib.crc32(n.encode()): n for n in known}
+                        return self._names
+                except (OSError, ValueError, KeyError, TypeError):
                     pass
             from .mati import parse_mati
             known = set(ENGINE_PROPERTIES) | set(self._extra)
-            for i, (_h, p) in enumerate(self.archive.index("MATI").items()):
-                if i > 8000:
-                    break
+            for _h, p in materials.items():              # every material: a partial dictionary drops colour overrides
                 try:
                     mt = parse_mati(p.read_bytes())
-                except Exception:  # noqa: BLE001
+                except Exception:  # noqa: BLE001 - one unreadable material must not hide the others
                     continue
                 known |= {q.name for q in mt.params} | {t.name for t in mt.textures}
             self._names = {zlib.crc32(n.encode()): n for n in known}
             try:
                 cache.parent.mkdir(parents=True, exist_ok=True)
                 tmp = cache.with_suffix(f".{os.getpid()}.tmp")
-                tmp.write_text(json.dumps(sorted(known)), encoding="utf-8")
+                tmp.write_text(json.dumps({"materials": len(materials), "names": sorted(known)}), encoding="utf-8")
                 tmp.replace(cache)
             except OSError:
                 pass
@@ -241,8 +245,17 @@ class EntityReader:
         meta = self.archive.meta(path)
         return [r[0] for r in meta.refs] if meta else []
 
-    @lru_cache(maxsize=4096)
     def template(self, key: int) -> Template | None:
+        hit = self._templates.get(key, _MISSING)
+        if hit is not _MISSING:
+            return hit
+        t = self._template(key)
+        if len(self._templates) >= 4096:
+            self._templates.clear()
+        self._templates[key] = t
+        return t
+
+    def _template(self, key: int) -> Template | None:
         tp = self.archive.find("TEMP", key)
         if tp is None:
             return None

@@ -67,10 +67,9 @@ def register(app: FastAPI, *, jobs, need, texcat_of, catalog_of, converted) -> N
         models = []
         if "props" in src.capabilities and users["models"]:
             from ..targets.source.build import _model_path
-            db = catalog_of(sid).db
             conv = converted(sid)
             marks = ",".join("?" * len(users["models"]))
-            for r in db.execute(f"SELECT key, rel, cat FROM assets WHERE key IN ({marks})", users["models"]):
+            for r in catalog_of(sid)._query(f"SELECT key, rel, cat FROM assets WHERE key IN ({marks})", users["models"]):
                 models.append({"key": r["key"], "rel": r["rel"], "cat": r["cat"],
                                "converted": _model_path(sid, r["rel"], r["key"]) in conv})
         models.sort(key=lambda m: m["rel"])

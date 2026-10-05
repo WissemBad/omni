@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import threading
+import time
 from pathlib import Path
 
 from ...native import N
@@ -32,11 +33,39 @@ class PropVariants:
         self.resolver = OutfitResolver(source)
 
     # ---- index ----------------------------------------------------------------------
+    def ensure(self) -> None:
+        """Build the mesh -> templates index if it is missing. Processes take a lock file so that only one does it
+        (the others wait for the finished index instead of racing to replace it, which Windows refuses)."""
+        if self.db_path.exists():
+            return
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        lock = self.db_path.with_suffix(".lock")
+        while not self.db_path.exists():
+            try:
+                fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                try:
+                    if time.time() - lock.stat().st_mtime > 600:       # a builder died: take over
+                        lock.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                time.sleep(0.5)
+                continue
+            try:
+                os.close(fd)
+                self._build()
+            finally:
+                lock.unlink(missing_ok=True)
+            break
+
     def _db(self) -> sqlite3.Connection:
+        self.ensure()
+        return sqlite3.connect(self.db_path)
+
+    def _build(self) -> None:
         with self._lock:
             fresh = not self.db_path.exists()
             if fresh:
-                self.db_path.parent.mkdir(parents=True, exist_ok=True)
                 tmp = self.db_path.with_suffix(f".{os.getpid()}.tmp")
                 tmp.unlink(missing_ok=True)
                 db = sqlite3.connect(tmp)
@@ -58,7 +87,6 @@ class PropVariants:
                 db.commit()
                 db.close()
                 tmp.replace(self.db_path)
-        return sqlite3.connect(self.db_path)
 
     def templates(self, prim: int) -> list[int]:
         db = self._db()

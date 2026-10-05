@@ -191,7 +191,7 @@ def export_sounds(refs: list[SoundRef], out: Path, fmt: str = "auto", workers: i
         keep = {"english": "english(us)", "neutral": "xx"}.get(languages, languages)
         refs = [r for r in refs if not r.path.startswith("voices/") or r.path.split("/")[1] == keep]
     out.mkdir(parents=True, exist_ok=True)
-    workers = workers or os.cpu_count() or 8
+    workers = max(1, min(workers or os.cpu_count() or 8, 61))      # Windows refuses more worker processes
 
     # 1 - identical content -> one sound (header read with the hash: stubs are found on the way)
     keys = {}

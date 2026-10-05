@@ -22,6 +22,7 @@ class TextureCatalog:
         self.db = sqlite3.connect(self.path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.lock = threading.Lock()
+        self._start = threading.Lock()
         self.building = False
         self.progress = ""
         self.error = ""
@@ -53,9 +54,10 @@ class TextureCatalog:
             return self.db.execute("SELECT COUNT(*) FROM textures").fetchone()[0]
 
     def build(self) -> None:
-        if self.building:
-            return
-        self.building, self.error = True, ""
+        with self._start:                      # two callers must not both start a build
+            if self.building:
+                return
+            self.building, self.error = True, ""
         t0 = time.perf_counter()
         try:
             def say(m):

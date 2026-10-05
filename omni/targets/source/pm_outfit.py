@@ -227,8 +227,17 @@ def prepare(source, outfit_keys: list[int], opts, cfg: Config = CONFIG, name: st
     slug_name = slug(name, 40)
     vmt_cd = f"{cd}/pm/{slug_name}"
     vdir = addon / "materials" / vmt_cd
+    backup = vdir.with_name(vdir.name + ".old")
     if vdir.exists():
-        shutil.rmtree(vdir, ignore_errors=True)
+        # the previous materials stay until the new model compiled: a failed rebuild must not leave a deployed
+        # playermodel without textures. (An older backup is the last good state: keep it, the folder is a partial run.)
+        if backup.exists():
+            shutil.rmtree(vdir, ignore_errors=True)
+        else:
+            try:
+                vdir.rename(backup)
+            except OSError:
+                shutil.rmtree(vdir, ignore_errors=True)
     cache = TextureCache(source)
     converted: dict[str, tuple[str, bool]] = {}          # material variant key -> (vmt name, visible)
 
@@ -325,11 +334,32 @@ def prepare(source, outfit_keys: list[int], opts, cfg: Config = CONFIG, name: st
             pp.material_key = columns[col]
             out.append(pp)
         posed[p.prim] = out
-    return Plan(source, cfg, name, outfits, tpl, pieces, by_prim, base, groups, lod, sk, P, S, posed, columns,
+    plan = Plan(source, cfg, name, outfits, tpl, pieces, by_prim, base, groups, lod, sk, P, S, posed, columns,
                 skins, skin_of, vmt_cd, f"omni/{source.id}/pm/{slug_name}", notes, infos)
+    plan.materials_backup = backup if backup.exists() else None
+    return plan
 
 
 def compile_plan(plan: Plan, res: PMResult, title: str = "") -> None:
+    """Compile and deploy; the materials of the previous build are dropped once the new model exists, put back if
+    it does not."""
+    try:
+        _compile_plan(plan, res, title)
+    finally:
+        backup = getattr(plan, "materials_backup", None)
+        if backup is not None and backup.exists():
+            vdir = plan.addon / "materials" / plan.vmt_cd
+            if res.status == "OK":
+                shutil.rmtree(backup, ignore_errors=True)
+            else:
+                shutil.rmtree(vdir, ignore_errors=True)
+                try:
+                    backup.rename(vdir)
+                except OSError:
+                    pass
+
+
+def _compile_plan(plan: Plan, res: PMResult, title: str = "") -> None:
     cfg, tpl, S, P, sk = plan.cfg, plan.tpl, plan.S, plan.P, plan.sk
     work = cfg.sandbox / "modelsrc" / plan.mpath
     if work.exists():
@@ -385,13 +415,18 @@ def compile_plan(plan: Plan, res: PMResult, title: str = "") -> None:
     qc += pm.collision_qc(tpl, volumes)
     (work / "model.qc").write_text("\n".join(qc) + "\n")
 
+    outdir = cfg.sandbox / "models" / Path(plan.mpath).parent
+    dest = plan.addon / "models" / Path(plan.mpath).parent
+    stem = Path(plan.mpath).name
+    for f in outdir.glob(stem + ".*"):                 # nothing from an earlier compile can be copied by mistake
+        f.unlink(missing_ok=True)
     cr = compile_qc(work / "model.qc", cfg.sandbox, cfg.studiomdl, timeout=300)
     if not cr.ok:
         res.errors += cr.errors[:8] or [cr.log[-600:]]
         return
-    outdir = cfg.sandbox / "models" / Path(plan.mpath).parent
-    dest = plan.addon / "models" / Path(plan.mpath).parent
     dest.mkdir(parents=True, exist_ok=True)
+    for f in dest.glob(stem + ".*"):
+        f.unlink(missing_ok=True)
     copied = 0
     for f in outdir.glob(Path(plan.mpath).name + ".*"):
         shutil.copy2(f, dest / f.name)
