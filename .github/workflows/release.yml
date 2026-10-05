@@ -21,7 +21,7 @@ jobs:
           if ("v$v" -ne "${{ github.ref_name }}") { throw "pyproject.toml says $v, the tag is ${{ github.ref_name }}" }
           "VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
