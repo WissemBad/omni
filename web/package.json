@@ -1,5 +1,6 @@
 {
   "name": "omni-web",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "description": "omni front-end: Nuxt + Wissem UI",

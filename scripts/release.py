@@ -31,7 +31,8 @@ def main(version: str) -> None:
     sub("native/Cargo.toml", r'^version = ".*"', f'version = "{version}"')
     pkg = ROOT / "web" / "package.json"
     data = json.loads(pkg.read_text(encoding="utf-8"))
-    data["version"] = version
+    data = {k: version if k == "version" else v for k, v in data.items()} if "version" in data else {
+        k2: v2 for k, v in data.items() for k2, v2 in (((k, v), ("version", version)) if k == "name" else ((k, v),))}
     pkg.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     log = ROOT / "CHANGELOG.md"
     s = log.read_text(encoding="utf-8")

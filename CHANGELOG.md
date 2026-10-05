@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-05
+
 ### Added
 
 - Biome lint and format for the web interface (`bun run lint`, part of CI).
