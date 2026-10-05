@@ -1,0 +1,33 @@
+[project]
+name = "omni"
+version = "0.1.0"
+description = "Multi-source game asset converter -> Garry's Mod (Source)"
+requires-python = ">=3.12"
+dependencies = [
+  "numpy",
+  "Pillow",
+  "texture2ddecoder",
+  "lz4",
+  "pygltflib",
+  "fastapi",
+  "uvicorn",
+  "etcpak>=0.9.15",
+  "scipy>=1.18.1",
+  "quicktex>=0.3.1",
+  "coacd>=1.0.14",
+  "vpk>=1.4.0",
+  "wasmtime>=49.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.13.1",
+    "pytest",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

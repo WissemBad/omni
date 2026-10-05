@@ -1,0 +1,36 @@
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+
+# rust
+native/target/
+*.pyd
+*.so
+*.dylib
+*.pyd.bak
+
+# generated core
+omni/omni_core.wasm
+
+# web
+web/node_modules/
+web/.nuxt/
+web/.output/
+web/.data/
+web/dist
+
+# local data (never committed: game assets, exports, caches)
+workspace/
+Assets/
+third_party/
+*.log
+.env
+.DS_Store
+.idea/
+.vscode/

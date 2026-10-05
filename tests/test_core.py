@@ -1,0 +1,77 @@
+import struct
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from omni.core.config import CONFIG
+from omni.core.naming import parse_ioi, slug
+from omni.sources.glacier import roles
+from omni.targets.source import vtf
+
+CRANE = "010034F5BFC0DFF2"
+HAVE_ASSETS = (CONFIG.assets_sorted / "chunk0" / "PRIM" / f"{CRANE}.PRIM").exists()
+
+
+def test_parse_ioi_container_and_leaf():
+    d, c, l = parse_ioi("[assembly:/_knt/environment/geometry/props/industrial/crane_portable_a.wl2?/portable_hydraulic_arm_c.prim].prim")
+    assert d == ["props", "industrial"] and c == "crane_portable_a" and l == "portable_hydraulic_arm_c"
+
+
+def test_parse_ioi_material():
+    d, c, l = parse_ioi("[assembly:/_knt/_licensed/quixel/materials/props/rocks/quixel_granite_cliff_fox_a.mi].mi")
+    assert l == "quixel_granite_cliff_fox_a" and c == ""
+
+
+def test_slug_is_gmod_safe():
+    assert slug("Héllo World!!") == "h_llo_world"
+
+
+@pytest.mark.parametrize("slot,fam,expected", [
+    ("mapTex_Basecolor", "basic", "base"), ("mapTex_SRM", "basic", "srm"), ("mapTexture2DNormal_01", "basic", "normal"),
+    ("mapTexture2D_01", "basic", "base"), ("mapTexture2D_03", "colormask", "base"), ("mapTexture2D_03", "basic", "spec"),
+])
+def test_roles(slot, fam, expected):
+    assert roles.resolve(slot, fam) == expected
+
+
+def test_vtf_layout(tmp_path):
+    mips = [(8, 8, bytes(32)), (4, 4, bytes(8)), (2, 2, bytes(8)), (1, 1, bytes(8))]
+    out = tmp_path / "t.vtf"
+    vtf.write_vtf(out, vtf.DXT1, mips)
+    b = out.read_bytes()
+    assert b[:4] == b"VTF\0" and struct.unpack_from("<I", b, 12)[0] == 80
+    assert struct.unpack_from("<HH", b, 16) == (8, 8) and len(b) == 80 + 32 + 24
+
+
+@pytest.mark.skipif(not HAVE_ASSETS, reason="game assets not available")
+def test_prim_crane_decode():
+    from omni.sources.glacier.prim import parse_prim
+    p = parse_prim((CONFIG.assets_sorted / "chunk0" / "PRIM" / f"{CRANE}.PRIM").read_bytes())
+    assert len(p.meshes) == 4 and not p.weighted
+    for m in p.meshes:
+        assert m.indices.max() < len(m.positions) and len(m.indices) % 3 == 0
+        assert np.isfinite(m.uvs).all()
+        assert abs(np.linalg.norm(m.normals, axis=1) - 1).max() < 1e-3
+
+
+@pytest.mark.skipif(not (HAVE_ASSETS and CONFIG.studiomdl.exists()), reason="assets or compiler missing")
+def test_end_to_end_crane():
+    from omni.sources.glacier.adapter import GlacierSource
+    from omni.targets.source.build import build_model
+    r = build_model(GlacierSource(), CRANE)
+    assert r.status in ("OK", "PARTIAL") and not r.errors and r.model.endswith(".mdl")
+
+
+def test_sound_naming():
+    from omni.sources.glacier.audio import _game_path, _speaker, _conversation
+    assert _game_path("[assembly:/_knt/sound/originals/voices/english(us)/ai_dialog/a/b_001.wav].wes") == \
+        "voices/english(us)/ai_dialog/a/b_001"
+    assert _speaker("vox_cc_light_elbowdown_lh_civukf08_civukf08_003") == "civukf08"
+    assert _conversation("[assembly:/_knt/localization/knt/conversations/ai_dialog/merc04/x_merc04.sweetdialog].dialogevent") == "ai_dialog/merc04"
+
+
+def test_ogg_crc():
+    from omni.targets.audio.oggfix import _crc
+    assert _crc(b"") == 0
+    assert _crc(b"OggS") == 0x5fb0a94f

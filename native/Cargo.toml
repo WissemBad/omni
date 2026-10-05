@@ -1,0 +1,30 @@
+[package]
+name = "omni_native"
+version = "0.1.0"
+edition = "2021"
+description = "Native core of omni: textures (decode, mips, DXT, VTF, PNG), audio (Wwise -> Ogg/FLAC/WAV), game collision, skinning"
+
+[lib]
+name = "omni_native"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["python", "parallel"]
+python = ["dep:pyo3", "dep:numpy", "parallel"]
+parallel = ["dep:rayon", "texpresso/rayon"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py312", "generate-import-lib"], optional = true }
+numpy = { version = "0.22", optional = true }
+rayon = { version = "1.10", optional = true }
+lz4_flex = { version = "0.11", default-features = false, features = ["std", "safe-decode"] }
+texture2ddecoder = "0.1"
+texpresso = { version = "2" }
+lewton = "0.10"
+sha1_smol = "1"
+miniz_oxide = "0.8"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
