@@ -1,5 +1,7 @@
 """Which lane is the real UV0? Compare stored tangent with the tangent derived from each candidate UV lane."""
-import struct, pathlib, random
+import struct
+import pathlib
+import random
 
 import numpy as np
 

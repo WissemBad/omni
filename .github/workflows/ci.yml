@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  python-and-rust:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+
+      - name: Install
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run --no-sync ruff check
+
+      - name: Rust tests
+        run: cargo test --manifest-path native/Cargo.toml --no-default-features
+
+      - name: Build the Rust core
+        run: |
+          uvx maturin build --release -m native/Cargo.toml -o wheels
+          uv pip install --find-links wheels omni_native
+          uv run --no-sync python -m omni native --build --wasm
+
+      - name: Tests
+        run: uv run --no-sync pytest -q
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Registry token
+        run: printf '//npm.pkg.github.com/:_authToken=%s\n' "$TOKEN" > ~/.npmrc
+        env:
+          TOKEN: ${{ secrets.GH_PACKAGES_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Install
+        run: bun install --frozen-lockfile
+        working-directory: web
+
+      - name: Check
+        run: bun run typecheck && bun run build
+        working-directory: web

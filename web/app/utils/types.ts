@@ -121,7 +121,7 @@ export interface JobResult {
 
 export interface Job {
   id: string
-  kind: 'props' | 'character' | 'sounds' | 'textures' | 'maintenance'
+  kind: 'props' | 'character' | 'sounds' | 'textures' | 'maintenance' | 'setup'
   label: string
   source: string
   phase: 'running' | 'done' | 'error' | 'cancelled'
@@ -339,6 +339,7 @@ export interface SystemInfo {
   version: string
   workspace: string
   cpus: number
+  setup?: { ready: boolean; can_convert: boolean }
   rust: {
     enabled: boolean
     native: boolean
@@ -465,4 +466,17 @@ export interface PropDetails {
   variants: { index: number; slots: number; params: number }[]
   collision: { resource: string; dynamic: boolean; shapes: Record<string, number> } | null
   output: { path: string; converted: boolean; mtime: number }
+}
+
+// ---- setup (first run)
+export interface SetupStatus {
+  game: { path: string; ok: boolean; packages: string[]; detected: boolean }
+  assets: { path: string; ok: boolean; chunks: string[] }
+  names: { path: string; ok: boolean; bytes: number }
+  gmod: { path: string; ok: boolean; gmad: boolean }
+  studiomdl: { path: string; ok: boolean }
+  ready: boolean
+  can_convert: boolean
+  data_dir: string
+  free_bytes: number
 }

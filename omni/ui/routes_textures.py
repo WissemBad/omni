@@ -2,13 +2,12 @@
 from __future__ import annotations
 
 import re
-import sys
-import subprocess
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, Response
 
 from ..core.config import CONFIG
+from ..core.windows import reveal
 
 CHANNELS = ("rgb", "rgba", "r", "g", "b", "a")
 
@@ -131,8 +130,7 @@ def register(app: FastAPI, *, jobs, need, texcat_of, catalog_of, converted) -> N
         name = re.sub(r"[^A-Za-z0-9_.-]+", "_", (row["name"] if row else key)).strip("_") or key
         f = folder / f"{name}_{key[-6:].lower()}.png"
         f.write_bytes(png)
-        if sys.platform == "win32":
-            subprocess.Popen(["explorer", "/select,", str(f)])
+        reveal(f)
         return {"path": str(f)}
 
     @app.get("/api/{sid}/models/{key}/textures")

@@ -1,5 +1,6 @@
 """Dump PRIM -> MATI -> TEXT/TEXD chain for a hash, with names."""
-import sys, pathlib
+import sys
+import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "omni"))

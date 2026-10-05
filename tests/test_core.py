@@ -1,5 +1,4 @@
 import struct
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -69,9 +68,3 @@ def test_sound_naming():
         "voices/english(us)/ai_dialog/a/b_001"
     assert _speaker("vox_cc_light_elbowdown_lh_civukf08_civukf08_003") == "civukf08"
     assert _conversation("[assembly:/_knt/localization/knt/conversations/ai_dialog/merc04/x_merc04.sweetdialog].dialogevent") == "ai_dialog/merc04"
-
-
-def test_ogg_crc():
-    from omni.targets.audio.oggfix import _crc
-    assert _crc(b"") == 0
-    assert _crc(b"OggS") == 0x5fb0a94f

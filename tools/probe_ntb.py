@@ -1,5 +1,8 @@
 """Which 4-byte lane of the 16B NTB+UV block is what? Check unit length / orthogonality / smoothness."""
-import sys, struct, pathlib, random
+import sys
+import struct
+import pathlib
+import random
 
 import numpy as np
 

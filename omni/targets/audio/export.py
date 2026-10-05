@@ -7,8 +7,7 @@
              other names are kept as aliases in the index.
 3. convert:  by the Rust core (wwise.rs in-process: no child process, no temporary file), in parallel threads;
              files already exported are skipped, so an interrupted export resumes where it stopped. Tags (title,
-             album, artist, language, genre) go into the files when asked. Without the core, the previous
-             ww2ogg/vgmstream/ffmpeg chain runs in worker processes.
+             album, artist, language, genre) go into the files when asked.
 4. index:    index.csv (file, sha1, codec, channels, rate, seconds, sources, aliases, title, album, genre,
              language) + summary.json.
 """
@@ -27,7 +26,7 @@ from pathlib import Path
 
 from ...core.ir import SoundRef
 from ...native import R
-from .wwise import FORMATS, VORBIS, convert, wem_info
+from .wwise import FORMATS, VORBIS, wem_info
 
 MAX_REL = 180          # Windows MAX_PATH: keep room for the output root
 _EXTS = (".ogg", ".flac", ".wav", ".mp3")
@@ -155,34 +154,12 @@ def _job_native(ref: SoundRef, base: str, fmt: str, tags, force: bool = False) -
             "seconds": round(secs, 3) if secs else None, "bytes": len(out)}
 
 
-def _job_legacy(ref: SoundRef, base: str, fmt: str) -> dict:
-    """Previous chain (child processes): used only when the Rust core is unavailable."""
-    t = Path(base)
-    done = _existing(t)
-    if done is not None:
-        info = wem_info(ref.read())
-        secs = _flac_seconds(done) if done.suffix == ".flac" else (
-            info.samples / info.rate if info and info.samples and info.rate else None)
-        return {"file": str(done), "skipped": True, "codec": f"0x{info.codec:04X}" if info else "",
-                "channels": info.channels if info else "", "rate": info.rate if info else "",
-                "seconds": round(secs, 3) if secs else None}
-    try:
-        ext, data, info = convert(ref.read(), fmt)
-    except Exception as e:  # noqa: BLE001
-        return {"error": f"{type(e).__name__}: {e}"}
-    out = t.with_name(t.name + ext)
-    _write_atomic(out, data)
-    secs = round(info.samples / info.rate, 3) if info.rate and info.samples is not None else None
-    return {"file": str(out), "codec": f"0x{info.codec:04X}" if info.codec >= 0 else "", "channels": info.channels,
-            "rate": info.rate, "seconds": secs, "bytes": len(data)}
-
-
-def _chunk(items: list, fmt: str, force: bool, native: bool) -> list[dict]:
+def _chunk(items: list, fmt: str, force: bool) -> list[dict]:
     """A batch of conversions in one worker call (fewer round trips between processes)."""
     out = []
     for ref, base, tags in items:
         try:
-            out.append(_job_native(ref, base, fmt, tags, force) if native else _job_legacy(ref, base, fmt))
+            out.append(_job_native(ref, base, fmt, tags, force))
         except Exception as e:  # noqa: BLE001
             out.append({"error": f"{type(e).__name__}: {e}"})
     return out
@@ -249,16 +226,17 @@ def export_sounds(refs: list[SoundRef], out: Path, fmt: str = "auto", workers: i
         plan = plan[:limit]
 
     # 3 - convert
-    native = R.has("convert_wem")
+    if not R.has("convert_wem"):
+        raise RuntimeError("le cœur Rust est indisponible : reconstruis-le (omni native --build --wasm)")
     # processes, not threads: each has its own core instance and nothing is serialised by the GIL
-    progress(f"converting {len(plan)} sounds with {workers} processes ({'Rust core' if native else 'ww2ogg/vgmstream'})")
+    progress(f"converting {len(plan)} sounds with {workers} processes (Rust core)")
     rows, errors, done = [], [], 0
     pool = ProcessPoolExecutor(workers)
     size = 64
     chunks = [plan[i:i + size] for i in range(0, len(plan), size)]
     with pool as ex:
         futs = {ex.submit(_chunk, [(rs[0], str(out / cand), _tags(rs[0], sha) if tags else []) for sha, cand, rs in c],
-                          fmt, force, native): c for c in chunks}
+                          fmt, force): c for c in chunks}
         for f in as_completed(futs):
             if cancel is not None and cancel.is_set():
                 for x in futs:
@@ -323,7 +301,7 @@ def export_sounds(refs: list[SoundRef], out: Path, fmt: str = "auto", workers: i
             pass
     summary = {"format": fmt, "references": len(refs), "unique": len(plan), "written": len(rows),
                "errors": len(errors), "stubs_skipped": len(stubs) - len(other), "non_audio": len(other), "removed": removed, "bytes": total,
-               "seconds": round(time.perf_counter() - t0, 1), "engine": "rust" if native else "processes",
+               "seconds": round(time.perf_counter() - t0, 1), "engine": "rust",
                "by_type": {e: sum(1 for r in all_rows if r["file"].endswith(e)) for e in _EXTS},
                "cancelled": bool(cancel is not None and cancel.is_set())}
     (out / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")

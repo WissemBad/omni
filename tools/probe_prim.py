@@ -1,5 +1,9 @@
 """Survey of PRIM structure over many files: field values, subtypes, uv ranges, layout sanity."""
-import sys, struct, pathlib, collections, random
+import sys
+import struct
+import pathlib
+import collections
+import random
 
 import numpy as np
 

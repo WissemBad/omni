@@ -1,100 +1,72 @@
-# omni — sources multiples → Garry's Mod
+# omni
 
-Convertit des jeux (007 First Light d'abord) en contenu Garry's Mod : props, playermodels, textures, sons.
-**Tout se fait dans l'interface web** ; la ligne de commande reste disponible pour les scripts.
+Converts the assets of a game into Garry's Mod content: props, player models, textures and sounds. Windows desktop application, no game data included.
 
-## Lancer
+[![CI](https://github.com/Wissem-Industries/omni/actions/workflows/ci.yml/badge.svg)](https://github.com/Wissem-Industries/omni/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Wissem-Industries/omni?sort=semver)](https://github.com/Wissem-Industries/omni/releases)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-Double-cliquer **`Omni.cmd`** à la racine de `007_IMPORTATION` (ou `./omni.sh` sous Git Bash / Linux / macOS).
-Au premier lancement il installe les dépendances (`uv sync`), construit l'interface web (bun) et le cœur Rust
-WebAssembly (cargo) si besoin, puis ouvre le navigateur sur http://127.0.0.1:8770. S'il tourne déjà, il ouvre simplement la page.
+omni reads the resources of **your own copy** of a game, on your PC, and writes a ready-to-use Garry's Mod addon (MDL, VMT, VTF) plus audio files (Ogg, FLAC, MP3). Nothing is uploaded and no game file is shipped with omni.
 
-## L'interface
+The first source is *007 First Light* (Glacier engine). Sources are plugins: Hitman (same engine) and others can be added without touching the interface.
 
-| Page | Contenu |
-|---|---|
-| **Accueil** | état de la source (catalogues, convertis, exportés), exports globaux annulables avec temps restant, addon GMod (lier, .gma), santé des outils et du cœur Rust, travaux récents |
-| **Modèles** | Props et Personnages, même disposition : liste · vue 3D · inspecteur (résumé, matériaux avec les **textures brutes du jeu**, données). Conversion, playermodels (bodygroups/skins) |
-| **Textures** | les 31 775 textures du jeu : recherche, dossiers, format, rôle, taille, usage ; aperçu par canal, plein écran, export PNG ; **qui l'utilise** (matériaux + emplacements, modèles → liens vers Modèles) |
-| **Visionneuse** | ce que GMod chargera (MDL/VVD/VTX/PHY/VMT/VTF recompilés) : squelette, hitboxes, collision, comparaison avec l'original, matériaux reliés à leur matériau et leurs textures d'origine. Fonctionne aussi sur un addon décompilé |
-| **Sons** | export (Rust, parallèle, tags), explorateur avec écoute, langues, noms des événements et de la musique |
-| **Réglages** | qualité des textures (défaut : *maximum*, résolution du jeu sauf normales en 2K), effort DXT, collision, parallélisme, sons (format, langues, tags), chemin de GMod, stockage et maintenance |
+Built with Python, Rust (native and WebAssembly core), Nuxt 4, Nuxt UI 4 and [Wissem UI](https://github.com/Wissem-Industries/ui). The window is the system's Edge WebView2, not a bundled browser.
 
-Les réglages sont stockés côté serveur (`workspace/settings.json`) : l'interface, les travaux et la CLI appliquent les mêmes.
+## Install
 
-## Architecture
+Download `Omni-Setup-x.y.z.exe` (or the portable `Omni-x.y.z-windows.zip`) from the [releases](https://github.com/Wissem-Industries/omni/releases) and start Omni.
 
-```
-sources/base.py        contrat d'une source (capacités props / characters / textures / sounds)
-sources/glacier        007 First Light (Hitman : même moteur, autre profil)      → core/ir.py (neutre)
-core/                  config, settings, catalogue des props, catalogue des textures (texture → matériau → modèle)
-targets/source         VMT/VTF, SMD/QC, collision, StudioMDL, playermodels, déploiement
-targets/audio          export des sons (moteur Rust), index, tags
-ui/                    API FastAPI : routes_models, routes_textures, routes_sounds, output (visionneuse), jobs
-web/                   interface Nuxt 4 + Wissem UI (voir web/README.md)
-native/                cœur Rust (voir plus bas)
-```
+The first launch opens the setup:
 
-Ajouter un jeu : une classe qui hérite de `sources.base.Source`, déclarée dans `sources/registry.py`. Les pages
-n'affichent que les ateliers des capacités déclarées.
+1. **Game**: omni finds the game in your Steam libraries (or you pick its folder) and extracts only the resources it uses into its own data folder.
+2. **Names**: the readable resource paths come from [Bond-Hashes](https://github.com/glacier-modding/Bond-Hashes) (MIT), downloaded once.
+3. **Garry's Mod**: detected in Steam; its player animations and addons folder are used.
+4. **Compiler**: [StudioMDL-CE](https://github.com/DeadZoneLuna/StudioMDL-CE) is downloaded and verified against pinned SHA-256 sums.
 
-## Cœur Rust (`native/`)
+Requirements: Windows 10 or 11 with the WebView2 runtime (included in Windows 11), a copy of the game, Garry's Mod for model conversion, and roughly 40 GB of free space for the extracted resources. [ffmpeg](https://ffmpeg.org) is only needed for MP3 and for re-encoding non-Vorbis sounds to Ogg.
 
-Le même crate est compilé de deux façons :
+Data lives in `%LOCALAPPDATA%\omni` (override with `OMNI_HOME`). Uninstalling leaves it in place.
 
-- **module CPython natif** (`maturin`, features `python` + `parallel`) : le plus rapide, multi-thread ;
-- **WebAssembly** (`omni/omni_core.wasm`, exécuté par wasmtime) : portable, isolé, jamais bloqué par Windows.
-  `omni/native.py` expose `R.<fonction>` : le natif quand le module chargé l'a, sinon le WebAssembly.
+## Use
 
-Contenu : textures (TEXT/TEXD → mips, décodage BCn, **chaîne de mips** en lumière linéaire / normales renormalisées /
-couverture alpha préservée, DXT, VTF avec réflectivité, lecture VTF, PNG), **audio** (Wwise Vorbis → Ogg sans
-réencodage avec granules exacts et tags — portage de ww2ogg —, Platinum ADPCM, FLAC sans perte avec MD5, WAV),
-**banques Wwise** (hiérarchie HIRC : événements, états de musique, arbres de décision), collision PhysX (ALOC),
-skinning, SMD, entités.
+| Page | What it does |
+| --- | --- |
+| Home | State of the source, global exports with progress, GMod addon (link, `.gma`), tools and Rust core health |
+| Models | Props and characters with one layout: list, 3D view, inspector with materials and the game's raw textures; conversion and playermodel builds |
+| Textures | Every texture of the game, filters, channel preview, who uses it (materials, models) |
+| Viewer | The compiled result as Garry's Mod loads it, with debug layers; also opens a decompiled addon |
+| Sounds | Parallel export (Ogg, FLAC, WAV, MP3) with tags, browser and player |
+| Settings | Quality, collision, parallelism, sounds, paths, storage, maintenance |
 
-Construire : `uv run python -m omni native --build` (WebAssembly + natif) ou `--build --wasm`. Sous Windows avec
-*Smart App Control* actif, un module natif fraîchement compilé est refusé par le système : le précédent reste utilisé
-et le WebAssembly fournit les nouvelles fonctions (aucune action nécessaire). Pour retrouver les performances natives
-complètes, désactiver Smart App Control (Sécurité Windows → Contrôle des applications) puis relancer la construction.
+Everything is available from the command line too: `Omni.exe --help`.
 
-Vérifications : `uv run pytest` ; `uv run python tools/check_audio_native.py 200` compare le moteur Rust à l'ancien
-export (PCM identique) ; `uv run python tools/bench_sounds.py <dossier>` mesure le débit.
+## Development
 
-## Sons
+Requirements: [uv](https://docs.astral.sh/uv/), [Bun](https://bun.sh), a Rust toolchain (rustup, with the `wasm32-unknown-unknown` target) and a token with `read:packages` in your user `.npmrc` for `@wissem-industries/ui`.
 
-- `auto` : le Vorbis du jeu est ré-emballé en `.ogg` **sans réencodage** (audio identique), l'ADPCM décodé en `.flac` sans perte.
-- Noms : chemin du jeu > dialogue (`voices/<langue>/<conversation>/<nom Wwise>`) > événement
-  (`events/<préfixe>/<événement>/…`). La musique et les sons des banques sont nommés par la **hiérarchie Wwise** :
-  `events/mx/MX_Music_SW_Play/Campaign/M01_CLOVER/S04a_CentralCamp/B02a_…/Combat_NL/…` (états de musique retrouvés
-  par hash FNV-1 depuis les ressources WSGB/WSWB) ; noms des banques retrouvés de la même façon.
-- Tags dans chaque fichier : titre (nom Wwise), album (événement / conversation), artiste (locuteur), langue, genre, source.
-- Amorces de musique streamée stockées dans les banques ignorées (la version complète est exportée).
-- ~1 400 sons/s (16 processus) : tout le jeu en quelques minutes ; reprise automatique, annulable.
-
-## Ligne de commande (facultative)
-
-```powershell
-uv run python -m omni ui                       # l'interface (ce que fait Omni.cmd)
-uv run python -m omni index                    # catalogue des props
-uv run python -m omni convert --hash 010034F5BFC0DFF2
-uv run python -m omni batch --match props --limit 500 --workers 8
-uv run python -m omni pm-outfit outfit_clover_grunt_arrowhead_male_reg
-uv run python -m omni sounds [--format flac] [--force --clean]
-uv run python -m omni deploy [--remove] | gma | native [--build [--wasm]]
-uv run pytest
+```bash
+uv sync
+uv run python -m omni native --build      # Rust core: native module + WebAssembly
+cd web && bun install && bun run build    # interface
+uv run python -m omni app                 # window (or `omni ui` for the browser)
+uv run pytest                             # tests (the ones needing game data skip themselves)
+cargo test --manifest-path native/Cargo.toml --no-default-features
 ```
 
-## Où sont les choses
-- `workspace/addons/omni_007fl/` : l'addon généré (lié dans `GarrysMod/garrysmod/addons` par jonction).
-- `workspace/audio/007fl/` : les sons (`index.csv` avec titres, albums, langues).
-- `workspace/textures_007fl.sqlite`, `catalog_007fl.sqlite` : catalogues ; `workspace/cache/` : index de l'archive, liste des sons, personnages.
-- `workspace/preview/` : aperçus 3D et miniatures (vidables depuis Réglages).
-- `third_party/` : StudioMDL-CE x64, Crowbar ; `tools/` : sondes de formats et vérifications.
+Package locally: `uv run --no-sync pyinstaller packaging/omni.spec --noconfirm`, then compile `packaging/omni.iss` with Inno Setup for the installer.
 
-## Notes de format (007 First Light) — vérifiées sur les données
-- `material_id` d'un sous-mesh indexe la liste COMPLÈTE des refs du `.meta` (BORG compris).
-- Textures : TEXT + TEXD, mips LZ4 un par un ; BC1/BC3 copiés tels quels dans le VTF, BC7/BC5 réencodés (Source ne les lit pas).
-- SRM : R = spéculaire, G = rugosité, B = métal. Les rôles des textures viennent du nom (`normal_a`), de l'indice
-  d'usage du jeu (`(ascolormap)`) ou de l'emplacement du matériau.
-- Banques Wwise v150 : `HIRC` ; Sound (2) → média, MusicTrack (11) → médias ; conteneurs → enfants ; arbres de
-  décision des Music Switch / Dialogue Events (nœuds de 12 octets) ; seules les actions Play nomment un son.
+Layout and conventions are in [docs/architecture.md](docs/architecture.md) and [AGENTS.md](AGENTS.md); contributions in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Release
+
+Versions follow Semantic Versioning and are listed in [CHANGELOG.md](CHANGELOG.md).
+
+```bash
+uv run python scripts/release.py 0.4.0    # bumps every version file and the changelog
+```
+
+Merge the release pull request, then push the `v0.4.0` tag: the pipeline builds the installer and publishes the release.
+
+## Legal
+
+omni contains no asset of any game. It reads files you own, locally. *007 First Light*, *Garry's Mod* and the other names are trademarks of their owners; omni is not affiliated with them.

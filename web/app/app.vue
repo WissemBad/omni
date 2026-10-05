@@ -21,8 +21,10 @@ watch(sid, refresh, { immediate: true })
 const current = computed(() => sources.value.find((s) => s.id === sid.value))
 
 // Accueil · Modèles · Textures · Visionneuse · Sons · Réglages (only what the source offers)
+const route = useRoute()
 const items = computed(() => {
   const c = current.value
+  if (route.path === '/setup') return [{ label: 'Installation', icon: 'i-ri-install-line', to: '/setup' }]
   if (!c) return []
   const caps = c.capabilities
   const rows = [{ label: 'Accueil', icon: 'i-ri-home-5-line', to: `/${c.id}` }]
@@ -39,7 +41,7 @@ const items = computed(() => {
   <UApp>
     <WNavbar :items="items" label="Navigation principale">
       <template #trailing>
-        <OSourceMenu v-if="sources.length" />
+        <OSourceMenu v-if="sources.length && route.path !== '/setup'" />
         <UTooltip :text="details?.deployed ? 'Addon lié à GMod : cliquer pour délier' : 'Lier l’addon à GMod'">
           <UButton
             :icon="details?.deployed ? 'i-ri-link' : 'i-ri-link-unlink'"

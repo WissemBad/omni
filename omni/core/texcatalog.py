@@ -45,7 +45,8 @@ class TextureCatalog:
     def ready(self) -> bool:
         with self.lock:
             r = self.db.execute("SELECT v FROM meta WHERE k='version'").fetchone()
-        return bool(r) and int(r[0]) == VERSION
+            n = self.db.execute("SELECT COUNT(*) FROM textures").fetchone()[0]
+        return bool(r) and int(r[0]) == VERSION and n > 0
 
     def count(self) -> int:
         with self.lock:

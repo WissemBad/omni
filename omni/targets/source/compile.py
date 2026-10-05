@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ...core.config import CONFIG
+from ...core.windows import NOWINDOW
 
 
 @dataclass
@@ -50,6 +51,7 @@ def compile_qc(qc: Path, sandbox: Path | None = None, studiomdl: Path | None = N
         p = subprocess.run(
             [str(studiomdl), "-nop4", "-game", str(sandbox), str(qc)],
             capture_output=True, text=True, errors="replace", timeout=timeout, cwd=str(qc.parent),
+            creationflags=NOWINDOW,
         )
     except subprocess.TimeoutExpired:
         return CompileResult(False, "", [], [f"studiomdl timed out after {timeout}s"], [])

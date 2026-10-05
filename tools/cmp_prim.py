@@ -1,5 +1,8 @@
 """Compare the numpy decoder with the legacy add-on decoder (pure-python part, bpy stubbed)."""
-import sys, types, time, pathlib
+import sys
+import types
+import time
+import pathlib
 
 import numpy as np
 

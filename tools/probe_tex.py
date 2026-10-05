@@ -1,5 +1,7 @@
 """Decode some textures of a material to PNG for visual inspection."""
-import sys, pathlib, time
+import sys
+import pathlib
+import time
 
 from PIL import Image
 

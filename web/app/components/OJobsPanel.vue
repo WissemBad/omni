@@ -13,6 +13,7 @@ const KIND: Record<string, { icon: string; label: string }> = {
   sounds: { icon: 'i-ri-music-2-line', label: 'Sons' },
   textures: { icon: 'i-ri-image-2-line', label: 'Textures' },
   maintenance: { icon: 'i-ri-tools-line', label: 'Maintenance' },
+  setup: { icon: 'i-ri-install-line', label: 'Installation' },
 }
 const kindOf = (k: string) => KIND[k] ?? { icon: 'i-ri-list-check-3', label: k }
 

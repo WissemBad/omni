@@ -10,8 +10,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import subprocess
-import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -24,6 +22,7 @@ from glob import escape as glob_escape
 from fastapi.responses import FileResponse, Response
 
 from ..core.config import CONFIG
+from ..core.windows import pick_folder, reveal
 from . import studio
 
 TEXTURE_PARAMS = ("$basetexture", "$basetexture2", "$bumpmap", "$bumpmap2", "$normalmap", "$envmapmask", "$detail",
@@ -388,7 +387,7 @@ def _describe(sid: str, root: str, external: bool, rel: str, mtime: float, sourc
                       "abs": str(p) if p else ""})
 
     # geometry per LOD
-    lods, geo0, extent = [], None, None
+    lods, extent = [], None
     vvd, vtx = present.get(".vvd"), present.get(vtx_ext)
     bp_tris: dict[tuple[int, int], int] = {}
     if vvd and vtx:
@@ -403,7 +402,6 @@ def _describe(sid: str, root: str, external: bool, rel: str, mtime: float, sourc
             lods.append({"lod": lod, "triangles": sum(len(me["idx"]) // 3 for me in g.meshes), "vertices": int(len(used)),
                          "switch": round(switch[lod], 2) if lod < len(switch) else 0})
             if lod == 0:
-                geo0 = g
                 for me in g.meshes:
                     bp_tris[(me["b"], me["m"])] = bp_tris.get((me["b"], me["m"]), 0) + len(me["idx"]) // 3
                 if len(used):
@@ -498,12 +496,7 @@ def build_glb(root: str, rel: str, lod: int, out: Path) -> None:
 
 # ----------------------------------------------------------------------------------------------- routes
 def _pick_folder() -> str:
-    """Native folder dialog (the API runs on the user's machine); done in a child process so Tk owns its thread."""
-    code = ("import tkinter as t, tkinter.filedialog as f\n"
-            "r = t.Tk(); r.withdraw(); r.attributes('-topmost', True)\n"
-            "print(f.askdirectory(title='Choisir un dossier de modèles (addon décompilé…)'))")
-    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=600)
-    return r.stdout.strip()
+    return pick_folder("Choisir un dossier de modèles (addon décompilé…)")
 
 
 def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: None) -> None:
@@ -705,7 +698,5 @@ def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: 
         f = _within(r.path, path)
         if not f.exists():
             raise HTTPException(404)
-        if sys.platform != "win32":
-            raise HTTPException(501, "only available on Windows")
-        subprocess.Popen(["explorer", "/select,", str(f)])
+        reveal(f)
         return {"ok": True}

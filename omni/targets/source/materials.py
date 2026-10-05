@@ -251,7 +251,6 @@ def colour_model(mat: Material, base, is_hair: bool, alpha_cut: bool) -> ColourM
       hair                         BaseColor x 2*BaseColorMult
       skin                         SkinColor (BaseColorMult belongs to the skin shading, not the albedo)
     Returns None when the constants leave the map unchanged (the map is then copied as is)."""
-    p = mat.params
     bc = _rgb3(mat, "BaseColor")
     if is_hair:
         if bc is None:

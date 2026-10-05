@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from pathlib import Path
 
 from ...core.config import CONFIG, Config
 from ...core.ir import Material, Model, SubMesh, TextureData, TextureRef

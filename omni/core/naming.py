@@ -63,6 +63,14 @@ class Names:
         self._db: sqlite3.Connection | None = None
         self._lock = threading.RLock()      # one connection shared by the web server's and the exporters' threads
 
+    def reset(self) -> None:
+        """Forget the database (a new hash list was downloaded): it is rebuilt at the next lookup."""
+        with self._lock:
+            if self._db is not None:
+                self._db.close()
+                self._db = None
+            self.db_path.unlink(missing_ok=True)
+
     def _connect(self) -> sqlite3.Connection:
         with self._lock:
             return self._open()
@@ -71,6 +79,11 @@ class Names:
         if self._db is None:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
             fresh = not self.db_path.exists()
+            if fresh and not self.hash_list.exists():       # not set up yet: no names, nothing written to disk
+                db = sqlite3.connect(":memory:", check_same_thread=False)
+                db.execute("CREATE TABLE names(h INTEGER PRIMARY KEY, t TEXT, n TEXT)")
+                self._db = db
+                return db
             db = sqlite3.connect(self.db_path, check_same_thread=False)
             if fresh or not db.execute("SELECT name FROM sqlite_master WHERE name='names'").fetchone():
                 self._build(db)

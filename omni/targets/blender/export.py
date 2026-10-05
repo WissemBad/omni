@@ -10,15 +10,14 @@ import json
 import subprocess
 from pathlib import Path
 
-import numpy as np
 from PIL import Image
 
 from ...core.config import CONFIG
+from ...core.windows import NOWINDOW
 from ...preview.glb import export_glb
 from ...sources.glacier.texture import Mip, to_rgba
 from ..source.textures import rebuild_normal
 
-BLENDER = Path(r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe")
 
 
 def _dump_texture(source, key: str, role: str, out: Path, size: int) -> bool:
@@ -38,7 +37,11 @@ def _dump_texture(source, key: str, role: str, out: Path, size: int) -> bool:
 
 
 def export_blends(source, keys: list[str], out_dir: Path | None = None, tex_size: int = 2048,
-                  blender: Path = BLENDER) -> list[Path]:
+                  blender: Path | None = None) -> list[Path]:
+    blender = blender or CONFIG.blender_exe()
+    if blender is None:
+        raise RuntimeError("Blender est introuvable : renseigne son chemin dans Réglages (ou installe-le), "
+                           "ou décoche « Produire aussi un .blend ».")
     out_dir = out_dir or CONFIG.workspace / "blend" / source.id
     jobs = []
     for k in keys:
@@ -61,7 +64,7 @@ def export_blends(source, keys: list[str], out_dir: Path | None = None, tex_size
     jf.write_text(json.dumps(jobs), encoding="utf-8")
     script = Path(__file__).with_name("blender_script.py")
     r = subprocess.run([str(blender), "-b", "--factory-startup", "--python", str(script), "--", str(jf)],
-                       capture_output=True, text=True, errors="replace")
+                       capture_output=True, text=True, errors="replace", creationflags=NOWINDOW)
     if r.returncode != 0:
         raise RuntimeError((r.stdout + r.stderr)[-2000:])
     return [Path(j["blend"]) for j in jobs]

@@ -1,0 +1,33 @@
+when:
+  - event: [push, pull_request]
+
+steps:
+  - name: web-install
+    image: oven/bun:alpine
+    environment:
+      GITHUB_PACKAGES_TOKEN:
+        from_secret: github_packages_token
+    commands:
+      - printf '//npm.pkg.github.com/:_authToken=%s\n' "$${GITHUB_PACKAGES_TOKEN}" > /root/.npmrc
+      - cd web
+      - bun install --frozen-lockfile
+
+  - name: web-check
+    image: oven/bun:alpine
+    commands:
+      - cd web
+      - bun run typecheck
+      - bun run build
+    depends_on:
+      - web-install
+
+  - name: rust-test
+    image: rust:1-bookworm
+    commands:
+      - cargo test --manifest-path native/Cargo.toml --no-default-features
+
+  - name: python-lint
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm
+    commands:
+      - uv sync --locked
+      - uv run --no-sync ruff check

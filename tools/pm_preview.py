@@ -1,6 +1,7 @@
 """Preview a retargeted player model as GLB, textured with what the Source export REALLY produced
 (VTFs written by convert_material into a scratch workspace).  usage: pm_preview.py out.glb lod spec..."""
-import sys, re
+import sys
+import re
 from pathlib import Path
 import numpy as np
 from omni.core.config import Config

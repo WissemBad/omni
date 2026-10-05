@@ -4,8 +4,8 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
-build/
-dist/
+/build/
+/dist/
 *.egg-info/
 
 # rust
@@ -26,9 +26,9 @@ web/.data/
 web/dist
 
 # local data (never committed: game assets, exports, caches)
-workspace/
-Assets/
-third_party/
+/workspace/
+/Assets/
+/third_party/
 *.log
 .env
 .DS_Store

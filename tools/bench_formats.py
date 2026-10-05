@@ -1,5 +1,7 @@
 """Export a mixed sample (Vorbis + ADPCM) as ogg and mp3 and print sizes/tags/durations. Usage: bench_formats.py <dir>"""
-import shutil, subprocess, sys
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 

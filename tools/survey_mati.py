@@ -1,5 +1,9 @@
 """Survey of material classes (MATE refs) and texture slot names across all MATI."""
-import sys, pathlib, collections, time
+import sys
+import pathlib
+from pathlib import Path
+import collections
+import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "omni"))

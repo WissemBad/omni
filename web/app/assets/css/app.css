@@ -1,0 +1,10 @@
+/* The workbenches fill the viewport and scroll inside their own panels (UCard). */
+html,
+body,
+#__nuxt {
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+}

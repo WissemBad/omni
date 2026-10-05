@@ -1,6 +1,6 @@
 //! Python bindings of the audio and Source-texture modules (registered by lib.rs).
 
-use crate::{audio, texture, vtf, wwise};
+use crate::{audio, rpkg, texture, vtf, wwise};
 use numpy::{IntoPyArray, PyArray3, PyReadonlyArray3, PyUntypedArrayMethods};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -220,6 +220,59 @@ fn texture_headers(py: Python<'_>, paths: Vec<String>) -> Vec<Option<(u32, u32, 
     })
 }
 
+/// rpkg_info(path) -> {version, chunk, patch, files, unneeded, types: {TYPE: count}}
+#[pyfunction]
+fn rpkg_info<'py>(py: Python<'py>, path: &str) -> PyResult<Bound<'py, PyDict>> {
+    let pkg = py.allow_threads(|| rpkg::open(std::path::Path::new(path))).map_err(err)?;
+    let d = PyDict::new_bound(py);
+    let mut types: std::collections::BTreeMap<String, u64> = Default::default();
+    let mut bytes: std::collections::BTreeMap<String, u64> = Default::default();
+    for e in &pkg.entries {
+        *types.entry(e.type_name()).or_insert(0) += 1;
+        *bytes.entry(e.type_name()).or_insert(0) += e.data_size as u64;
+    }
+    d.set_item("version", pkg.version)?;
+    d.set_item("chunk", pkg.chunk_id)?;
+    d.set_item("patch", pkg.patch_id)?;
+    d.set_item("files", pkg.entries.len())?;
+    d.set_item("unneeded", pkg.unneeded.len())?;
+    d.set_item("types", types)?;
+    d.set_item("type_bytes", bytes)?;
+    Ok(d)
+}
+
+/// rpkg_extract(paths, root, types=[], threads=0) -> {written, skipped, removed, bytes, errors, by_type}
+/// Extracts <root>/chunk<N>/<TYPE>/<HASH>.<TYPE>(+.meta); follow it with rpkg_progress() from another thread.
+#[pyfunction]
+#[pyo3(signature = (paths, root, types=vec![], threads=0))]
+fn rpkg_extract<'py>(py: Python<'py>, paths: Vec<String>, root: &str, types: Vec<String>, threads: usize) -> PyResult<Bound<'py, PyDict>> {
+    let p = pool(threads)?;
+    let paths: Vec<std::path::PathBuf> = paths.into_iter().map(Into::into).collect();
+    let set: std::collections::HashSet<String> = types.into_iter().collect();
+    let root = std::path::PathBuf::from(root);
+    let st = py.allow_threads(|| p.install(|| rpkg::extract(&paths, &root, &set))).map_err(err)?;
+    let d = PyDict::new_bound(py);
+    d.set_item("written", st.written)?;
+    d.set_item("skipped", st.skipped)?;
+    d.set_item("removed", st.removed)?;
+    d.set_item("bytes", st.bytes)?;
+    d.set_item("errors", st.errors)?;
+    d.set_item("by_type", st.by_type)?;
+    Ok(d)
+}
+
+/// rpkg_progress() -> (done, total) of the running extraction
+#[pyfunction]
+fn rpkg_progress() -> (u64, u64) {
+    (rpkg::DONE.load(std::sync::atomic::Ordering::Relaxed), rpkg::TOTAL.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+/// rpkg_cancel(): the running extraction stops at the next resource
+#[pyfunction]
+fn rpkg_cancel() {
+    rpkg::CANCEL.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     for f in [
         wrap_pyfunction!(wem_info, m)?,
@@ -236,6 +289,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         wrap_pyfunction!(texture_png, m)?,
         wrap_pyfunction!(texture_header, m)?,
         wrap_pyfunction!(texture_headers, m)?,
+        wrap_pyfunction!(rpkg_info, m)?,
+        wrap_pyfunction!(rpkg_extract, m)?,
+        wrap_pyfunction!(rpkg_progress, m)?,
+        wrap_pyfunction!(rpkg_cancel, m)?,
     ] {
         m.add_function(f)?;
     }

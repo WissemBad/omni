@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 import time
 from dataclasses import asdict
 
+from . import __version__
 from .core.config import CONFIG
 
 
@@ -71,7 +71,6 @@ def cmd_batch(a):
 
 
 def cmd_preview(a):
-    from pathlib import Path
     from .preview.glb import export_glb
     src = _source(a.source)
     for k in a.hash:
@@ -94,52 +93,41 @@ def cmd_index(a):
     print(Catalog(src).build(force=True), "assets indexed")
 
 
-def _free_port(port: int, tries: int = 20) -> int:
-    """First free local port from ``port`` (an older omni ui may still be running on the default one)."""
-    import socket
-    for p in range(port, port + tries):
-        with socket.socket() as s:
-            if s.connect_ex(("127.0.0.1", p)) != 0:
-                return p
-    raise SystemExit(f"no free port in {port}-{port + tries - 1}")
-
-
 def cmd_ui(a):
-    import threading
-    import webbrowser
-
-    import uvicorn
-
+    """The server alone, for the browser (``omni app`` opens the same interface in its own window)."""
+    from . import app as desktop
     from .core import settings
-    if a.legacy:
-        from .ui.server import create_app
-        app = create_app(_source(a.source))
-    else:
-        from .ui.api import WEB_DIST, create_app
-        app = create_app()
-        if not WEB_DIST.exists():
-            print("interface non construite : cd web && bun install && bun run build  (sinon /legacy)")
-    # an omni of the same version already running: just show it
+    settings.apply()
+    from .ui.api import WEB_DIST
+    if not WEB_DIST.exists():
+        print("interface non construite : cd web && bun install && bun run build")
+    url = desktop.running_url(a.port)
+    if url:
+        print(f"omni tourne deja : {url}")
+        if a.open is not False:
+            import webbrowser
+            webbrowser.open(url)
+        return
+    raise SystemExit(desktop.run(a.port, browser=True) if a.open is not False and (a.open or settings.get("general", "open_browser"))
+                     else _serve_only(a.port))
+
+
+def _serve_only(port: int) -> int:
+
+    from . import app as desktop
+    srv = desktop.Server(desktop.free_port(port)).start()
+    print(f"omni ui: {srv.url}  (Ctrl+C ou le bouton Arreter omni des reglages pour quitter)")
     try:
-        import urllib.request
-        from .ui.api import VERSION
-        with urllib.request.urlopen(f"http://127.0.0.1:{a.port}/api/system", timeout=1.5) as r:
-            if json.loads(r.read()).get("version") == VERSION and not a.legacy:
-                url = f"http://127.0.0.1:{a.port}"
-                print(f"omni tourne deja : {url}")
-                if a.open is not False:
-                    webbrowser.open(url)
-                return
-    except Exception:  # noqa: BLE001 - nothing there (or an older omni): start one
-        pass
-    port = _free_port(a.port)
-    if port != a.port:
-        print(f"port {a.port} occupe, utilisation de {port}")
-    url = f"http://127.0.0.1:{port}"
-    print(f"omni ui: {url}  (Ctrl+C ou le bouton Quitter de l'interface pour arreter)")
-    if a.open or (a.open is None and settings.get("general", "open_browser")):
-        threading.Timer(1.2, lambda: webbrowser.open(url)).start()
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+        while srv.thread.is_alive():
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        srv.stop()
+    return 0
+
+
+def cmd_app(a):
+    from . import app as desktop
+    raise SystemExit(desktop.run(a.port, browser=a.browser))
 
 
 def cmd_pm(a):
@@ -232,7 +220,8 @@ def cmd_gma(a):
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="omni")
     ap.add_argument("--source", default="007fl")
-    sub = ap.add_subparsers(dest="cmd", required=True)
+    ap.add_argument("--version", action="version", version=f"omni {__version__}")
+    sub = ap.add_subparsers(dest="cmd")
     s = sub.add_parser("search"); s.add_argument("match", nargs="?"); s.add_argument("--limit", type=int, default=20); s.set_defaults(fn=cmd_search)
     c = sub.add_parser("convert"); c.add_argument("--hash", nargs="*"); c.add_argument("--match"); c.add_argument("--limit", type=int, default=5)
     for p_ in (c,):
@@ -250,9 +239,15 @@ def main(argv=None):
     v = sub.add_parser("preview"); v.add_argument("hash", nargs="+"); v.set_defaults(fn=cmd_preview)
     bl = sub.add_parser("blend"); bl.add_argument("hash", nargs="+"); bl.set_defaults(fn=cmd_blend)
     ix = sub.add_parser("index"); ix.set_defaults(fn=cmd_index)
-    ui = sub.add_parser("ui"); ui.add_argument("--port", type=int, default=8770)
+    ui = sub.add_parser("ui", help="the interface in the default browser")
+    ui.add_argument("--port", type=int, default=8770)
     ui.add_argument("--open", dest="open", action="store_true", default=None, help="open the browser (default: settings)")
-    ui.add_argument("--no-open", dest="open", action="store_false"); ui.add_argument("--legacy", action="store_true", help="old single-file page"); ui.set_defaults(fn=cmd_ui)
+    ui.add_argument("--no-open", dest="open", action="store_false")
+    ui.set_defaults(fn=cmd_ui)
+    ap_ = sub.add_parser("app", help="the interface in omni's own window (default when launched without arguments)")
+    ap_.add_argument("--port", type=int, default=8770)
+    ap_.add_argument("--browser", action="store_true", help="use the default browser instead of the built-in window")
+    ap_.set_defaults(fn=cmd_app)
     pmp = sub.add_parser("pm", help="build a GMod player model from character parts (hash or path fragment)")
     pmp.add_argument("name"); pmp.add_argument("parts", nargs="+"); pmp.add_argument("--title")
     pmp.add_argument("--template", choices=["male", "female"], default="male")
@@ -284,6 +279,8 @@ def main(argv=None):
     so.add_argument("--clean", action="store_true", help="with --force: remove files of an earlier naming")
     so.set_defaults(fn=cmd_sounds)
     a = ap.parse_args(argv)
+    if not getattr(a, "fn", None):                    # no command: the desktop window
+        a = ap.parse_args(["app"])
     a.fn(a)
 
 

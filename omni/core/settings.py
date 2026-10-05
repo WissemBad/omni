@@ -10,7 +10,6 @@ import copy
 import json
 import os
 import threading
-from pathlib import Path
 
 from .config import CONFIG
 
@@ -21,8 +20,13 @@ DEFAULTS: dict = {
         "open_browser": True,        # `omni ui` / the launcher opens the interface
         "port": 8770,
     },
-    "paths": {
-        "gmod": "",                  # Garry's Mod folder ("" = Steam default)
+    "paths": {                       # "" = automatic
+        "game": "",                  # folder of the game that holds Runtime/*.rpkg (extraction)
+        "assets": "",                # extracted resources (Sorted: chunk0/PRIM/...), default <data>/Assets/Sorted
+        "gmod": "",                  # Garry's Mod folder (Steam default)
+        "studiomdl": "",             # cestudiomdl.exe (default: downloaded into <data>/tools)
+        "ffmpeg": "",                # ffmpeg.exe, MP3 and Vorbis re-encoding only
+        "blender": "",               # blender.exe, optional .blend output
     },
     "textures": {
         "quality": "max",            # max | high | balanced | light (see pipeline.QUALITY)
@@ -121,8 +125,7 @@ def get(section: str, key: str):
 def apply(s: dict | None = None) -> None:
     """Push settings that live in module globals (paths, encoder effort)."""
     s = s or load()
-    if s["paths"]["gmod"]:
-        CONFIG.gmod = Path(s["paths"]["gmod"])
+    CONFIG.refresh(s["paths"])
     try:
         from ..targets.source import textures
         textures.ENCODER_QUALITY = int(s["textures"]["encoder"])

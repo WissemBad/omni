@@ -30,8 +30,7 @@ from ..sources import registry
 from .jobs import Jobs
 
 WEB_DIST = Path(__file__).resolve().parents[2] / "web" / ".output" / "public"
-LEGACY = Path(__file__).with_name("index.html")
-VERSION = "2.0"
+from .. import __version__ as VERSION  # noqa: E402
 
 
 def _dir_size(p: Path, budget: float = 3.0) -> int:
@@ -110,9 +109,39 @@ def create_app(sources: list[str] | None = None) -> FastAPI:
         conv_cache.pop(sid, None)
         sizes.pop(sid, None)
 
+    def reset_runtime(purge: bool = True) -> None:
+        """After a setup step: sources, catalogs and caches are rebuilt from the new data."""
+        registry.reset()
+        for c in catalogs.values():
+            try:
+                c.db.close()
+            except Exception:  # noqa: BLE001
+                pass
+        catalogs.clear()
+        for t in texcats.values():
+            try:
+                t.db.close()
+            except Exception:  # noqa: BLE001
+                pass
+        texcats.clear()
+        conv_cache.clear()
+        sizes.clear()
+        if purge:                                   # everything derived from the old data
+            for pat in ("catalog_*.sqlite", "textures_*.sqlite"):
+                for f in CONFIG.workspace.glob(pat):
+                    f.unlink(missing_ok=True)
+            shutil.rmtree(CONFIG.cache / "archive", ignore_errors=True)
+            for pat in ("characters_*.json", "sounds_*.pkl", "templates_*.sqlite", "property_names_*.json", "wwise_banks_*.json"):
+                for f in CONFIG.cache.glob(pat):
+                    f.unlink(missing_ok=True)
+        warm()
+
     def warm():
         """Slow first requests (outfit index, catalogs) are computed in the background at launch."""
         def run():
+            from ..core import setup
+            if not (setup.assets_ok()["ok"] and setup.names_ok()["ok"]):
+                return                                  # not set up yet: nothing to index
             for sid in ids:
                 try:
                     src = registry.get_source(sid)
@@ -183,7 +212,8 @@ def create_app(sources: list[str] | None = None) -> FastAPI:
         return jobs.cancel(jid)
 
     # ------------------------------------------------------------------------------------------ workbenches
-    from . import output, routes_models, routes_sounds, routes_textures
+    from . import output, routes_models, routes_setup, routes_sounds, routes_textures
+    routes_setup.register(app, jobs=jobs, reset_runtime=reset_runtime)
     routes_models.register(app, jobs=jobs, need=need, catalog_of=catalog_of, texcat_of=texcat_of,
                            converted=converted, conv_reset=conv_reset)
     routes_textures.register(app, jobs=jobs, need=need, texcat_of=texcat_of, catalog_of=catalog_of,
@@ -195,7 +225,7 @@ def create_app(sources: list[str] | None = None) -> FastAPI:
     @app.get("/api/system")
     def system():
         from .. import native
-        st = native.status()
+        core = native.status()
         r = native.R
         gmod = CONFIG.gmod
         tools = [
@@ -210,8 +240,11 @@ def create_app(sources: list[str] | None = None) -> FastAPI:
         ]
         functions = ["convert_wem", "bank_links", "encode_vtf", "texture_png", "decode_vtf", "parse_collision",
                      "encode_dxt", "lbs", "smd_triangles", "template_index"]
+        from ..core import setup
+        ready = setup.status()
         return {"version": VERSION, "workspace": str(CONFIG.workspace), "cpus": os.cpu_count(),
-                "rust": {**{k: v for k, v in st.items() if k != "native_functions"},
+                "setup": {"ready": ready["ready"], "can_convert": ready["can_convert"]},
+                "rust": {**{k: v for k, v in core.items() if k != "native_functions"},
                          "backends": {f: r.backend(f) for f in functions}},
                 "tools": tools}
 
@@ -327,10 +360,6 @@ def create_app(sources: list[str] | None = None) -> FastAPI:
         return {"ok": True}
 
     # ---------------------------------------------------------------------------------------------- pages
-    @app.get("/legacy", response_class=HTMLResponse)
-    def legacy():
-        return LEGACY.read_text(encoding="utf-8")
-
     if WEB_DIST.exists():
         class SPA(StaticFiles):
             """Static files with a fallback to the SPA shell for client-side routes (deep links, reloads)."""
@@ -350,5 +379,5 @@ def create_app(sources: list[str] | None = None) -> FastAPI:
         def root():
             return ("<meta charset=utf-8><body style='font:16px system-ui;padding:2rem'>"
                     "<h2>omni</h2><p>Interface non construite. <code>cd web &amp;&amp; bun install &amp;&amp; bun run build</code>"
-                    " puis relancer omni (ou le lanceur <code>Omni.cmd</code>, qui le fait tout seul).</p>")
+                    " puis relancer omni.</p>")
     return app

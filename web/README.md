@@ -6,11 +6,11 @@ l'API (`omni/ui/`).
 
 ## Lancer
 
-Le plus simple : `Omni.cmd` à la racine du projet (construit l'interface au premier lancement).
+Le plus simple : `omni app` (la fenêtre) ou `omni ui` (le navigateur), après avoir construit l’interface.
 
 ```bash
 cd web && bun install && bun run build      # -> web/.output/public, après une modification de l'interface
-uv run python -m omni ui                    # depuis omni/ : http://127.0.0.1:8770
+uv run python -m omni ui                  # depuis omni/ : http://127.0.0.1:8770
 ```
 
 Mode développement (rechargement à chaud, l'API doit tourner sur le port 8770) :

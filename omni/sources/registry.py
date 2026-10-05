@@ -40,5 +40,10 @@ def get_source(source_id: str):
     return _instances[sid]
 
 
+def reset() -> None:
+    """Forget the instances: a source is rebuilt (new assets folder, new names) at its next use."""
+    _instances.clear()
+
+
 def source_ids() -> list[str]:
     return list(SOURCES)

@@ -1,6 +1,6 @@
 [project]
 name = "omni"
-version = "0.1.0"
+version = "0.3.0"
 description = "Multi-source game asset converter -> Garry's Mod (Source)"
 requires-python = ">=3.12"
 dependencies = [
@@ -11,16 +11,21 @@ dependencies = [
   "pygltflib",
   "fastapi",
   "uvicorn",
-  "etcpak>=0.9.15",
   "scipy>=1.18.1",
-  "quicktex>=0.3.1",
   "coacd>=1.0.14",
   "vpk>=1.4.0",
+  "py7zr>=0.22",
+  "pywebview>=5.3",
   "wasmtime>=49.0.0",
 ]
 
+[project.optional-dependencies]
+fallback = ["quicktex>=0.3.1"]      # pure-Python DXT encoder, only used when the Rust core is unavailable
+
 [dependency-groups]
 dev = [
+    "pyinstaller>=6.10",
+    "ruff>=0.6",
     "httpx2>=2.13.1",
     "pytest",
 ]
@@ -31,3 +36,22 @@ package = false
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 160
+target-version = "py312"
+extend-exclude = ["web", "native", "build", "dist", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B"]
+ignore = [
+  "E501",    # long lines are fine in tables and docstrings
+  "E701", "E702", "E731",
+  "B008", "B905", "B007", "B017", "B904", "B018", "B019", "B023", "E741",
+  "UP007", "UP037", "UP045",
+  "W291", "W293",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tools/*" = ["E402", "F401", "B018", "E741"]
+"tests/*" = ["E402", "E741"]

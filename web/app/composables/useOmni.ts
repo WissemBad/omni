@@ -1,4 +1,4 @@
-import type { Job, Settings, SourceDetails, SourceInfo, SystemInfo } from '~/utils/types'
+import type { Job, Settings, SetupStatus, SourceDetails, SourceInfo, SystemInfo } from '~/utils/types'
 
 /** Sources the API knows (loaded once). */
 export function useSources() {
@@ -168,4 +168,17 @@ export async function startJob(path: string, opts: { body?: unknown; title?: str
     useToast().add({ title: 'Impossible de lancer', description: apiError(e), color: 'error' })
     return null
   }
+}
+
+
+/** First-run setup: what is configured, and the long steps (extraction, names, compiler) as jobs. */
+export function useSetup() {
+  const status = useState<SetupStatus | null>('setup-status', () => null)
+  const jobs = useJobs()
+  const running = computed(() => jobs.jobs.value.find((j) => j.kind === 'setup' && j.phase === 'running'))
+  async function load() {
+    status.value = await api<SetupStatus>('/setup/status').catch(() => status.value)
+    return status.value
+  }
+  return { status, running, load, jobs }
 }

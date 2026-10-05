@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 from pathlib import Path
 
 from ...core.config import CONFIG, Config
+from ...core.windows import NOWINDOW, is_link, make_junction, remove_junction
 
 
 def link_path(cfg: Config, source_id: str) -> Path:
@@ -29,23 +29,17 @@ def deploy(source_id: str, title: str, cfg: Config = CONFIG) -> str:
             return f"already linked: {lp} -> {addon}"
         raise RuntimeError(f"{lp} exists and is not a link; refusing to touch it")
     lp.parent.mkdir(parents=True, exist_ok=True)
-    r = subprocess.run(["cmd", "/c", "mklink", "/J", str(lp), str(addon)], capture_output=True, text=True)
-    if r.returncode != 0:
-        raise RuntimeError(r.stdout + r.stderr)
+    make_junction(lp, addon)
     return f"linked {lp} -> {addon}"
 
 
-def _is_link(p: Path) -> bool:
-    try:
-        return bool(os.readlink(p))
-    except OSError:
-        return False
+_is_link = is_link
 
 
 def undeploy(source_id: str, cfg: Config = CONFIG) -> str:
     lp = link_path(cfg, source_id)
     if lp.exists() and _is_link(lp):
-        os.rmdir(lp)          # removes the junction only, never the target's content
+        remove_junction(lp)
         return f"unlinked {lp}"
     return "nothing to unlink"
 
@@ -56,7 +50,7 @@ def build_gma(source_id: str, cfg: Config = CONFIG) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     gmad = cfg.gmod / "bin" / "gmad.exe"
     target = out / f"omni_{source_id}.gma"
-    r = subprocess.run([str(gmad), "create", "-folder", str(addon), "-out", str(target)], capture_output=True, text=True)
+    r = subprocess.run([str(gmad), "create", "-folder", str(addon), "-out", str(target)], capture_output=True, text=True, creationflags=NOWINDOW)
     if r.returncode != 0:
         raise RuntimeError(r.stdout + r.stderr)
     return target

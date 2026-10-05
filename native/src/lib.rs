@@ -22,6 +22,8 @@ pub mod flac;
 pub mod ww2ogg;
 pub mod wwise;
 pub mod par;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod rpkg;
 
 #[cfg(feature = "python")]
 mod py;

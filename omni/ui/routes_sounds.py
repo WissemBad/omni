@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from ..core import settings
 from ..core.config import CONFIG
+from ..core.windows import reveal
 
 
 class SoundExport(BaseModel):
@@ -155,15 +156,11 @@ def register(app: FastAPI, *, jobs, need) -> None:
     @app.post("/api/{sid}/sounds/reveal")
     def sound_reveal(sid: str, path: str = "", set: str = ""):
         need(sid, "sounds")
-        import subprocess
-        import sys
         root = root_of(sid, set).resolve()
         f = (root / path).resolve() if path else root
         if f != root and root not in f.parents:
             raise HTTPException(404)
-        if sys.platform != "win32":
-            raise HTTPException(501, "only available on Windows")
-        subprocess.Popen(["explorer", "/select,", str(f)] if f.is_file() else ["explorer", str(f)])
+        reveal(f)
         return {"ok": True}
 
     @app.post("/api/{sid}/sounds/relist")
