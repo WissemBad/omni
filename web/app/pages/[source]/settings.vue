@@ -136,12 +136,21 @@ async function clearPreviews() {
   loadStorage()
 }
 async function stop() {
-  if (!confirm('Arrêter omni ? La page ne répondra plus jusqu’au prochain lancement (Omni.cmd).'))
-    return
-  await api('/shutdown', { method: 'POST' }).catch(() => {})
+  if (!confirm('Arrêter omni ? Il ne répondra plus jusqu’au prochain lancement.')) return
+  try {
+    await api('/shutdown', { method: 'POST' })
+  } catch (e) {
+    // a conversion is running: stopping now cuts it short
+    const busy = (e as { statusCode?: number }).statusCode === 409
+    if (!busy || !confirm(`${apiError(e)}. Arrêter quand même ?`)) {
+      if (!busy) toast.add({ title: 'Arrêt impossible', description: apiError(e), color: 'error' })
+      return
+    }
+    await api('/shutdown?force=true', { method: 'POST' }).catch(() => {})
+  }
   toast.add({
     title: 'omni est arrêté',
-    description: 'Relance-le avec Omni.cmd.',
+    description: 'Relance-le pour l’utiliser de nouveau.',
     icon: 'i-ri-shut-down-line',
   })
 }
@@ -239,7 +248,7 @@ const MAINTENANCE = computed(() => [
 
           <UCard :ui="{ body: 'space-y-5 p-4 sm:p-4' }">
             <template #header><h2 class="text-base font-semibold text-highlighted">Général</h2></template>
-            <USwitch v-model="s.general.open_browser" label="Ouvrir le navigateur au lancement" description="Omni.cmd ouvre l’interface tout seul." />
+            <USwitch v-model="s.general.open_browser" label="Ouvrir le navigateur au lancement" description="Pour la commande « omni ui » (l’application a sa propre fenêtre)." />
             <UFormField label="Dossier de Garry’s Mod" description="Vide : le dossier Steam par défaut.">
               <UInput v-model="s.paths.gmod" class="w-full" placeholder="C:\Program Files (x86)\Steam\steamapps\common\GarrysMod" />
             </UFormField>

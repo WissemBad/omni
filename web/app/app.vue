@@ -77,7 +77,7 @@ const items = computed(() => {
         <UEmpty
           icon="i-ri-plug-line"
           title="API omni injoignable"
-          :description="`${apiDown} — lance « uv run python -m omni ui » dans le dossier omni.`"
+          :description="`${apiDown} — relance omni.`"
           :actions="[{ label: 'Réessayer', icon: 'i-ri-refresh-line', onClick: () => reloadNuxtApp() }]"
         />
       </div>

@@ -3,12 +3,15 @@ progress, logs, results, cancellation. Everything runs in background threads of 
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
 import traceback
 import uuid
 
 from fastapi import HTTPException
+
+log = logging.getLogger("omni.jobs")
 
 
 class Jobs:
@@ -58,6 +61,7 @@ class Jobs:
             try:
                 self.finish(job, summary=fn(job))
             except Exception as e:  # noqa: BLE001
+                log.exception("job %s (%s) failed", job["id"], job["label"])
                 self.log(job, traceback.format_exc(limit=4))
                 self.finish(job, f"{type(e).__name__}: {e}")
         threading.Thread(target=wrap, daemon=True).start()
@@ -79,6 +83,12 @@ class Jobs:
         with self.lock:
             return [j for j in self.items.values() if j["phase"] == "running"
                     and (not kind or j["kind"] == kind) and (not source or j["source"] == source)]
+
+    def busy(self) -> dict | None:
+        """The running job that must not share the machine with a new heavy one (batches, exports, setup)."""
+        with self.lock:
+            return next((j for j in self.items.values() if j["phase"] == "running"
+                         and (j["kind"] == "setup" or j["total"] > 1)), None)
 
     def recent(self, limit: int = 40) -> list[dict]:
         with self.lock:

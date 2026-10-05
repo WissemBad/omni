@@ -54,6 +54,7 @@ def _dir_size(p: Path, budget: float = 3.0) -> int:
 
 
 def create_app(sources: list[str] | None = None) -> FastAPI:
+    from . import security
     @asynccontextmanager
     async def lifespan(_app):
         settings.apply()
@@ -61,6 +62,7 @@ def create_app(sources: list[str] | None = None) -> FastAPI:
         yield
 
     app = FastAPI(title="omni", version=VERSION, lifespan=lifespan)
+    security.install(app)
     ids = sources or registry.source_ids()
     jobs = Jobs()
     catalogs: dict[str, Catalog] = {}
@@ -79,20 +81,25 @@ def create_app(sources: list[str] | None = None) -> FastAPI:
             raise HTTPException(404, f"{sid} has no {capability}")
         return src
 
+    instances = threading.Lock()          # two first requests must not each open (and build) a catalog
+
     def catalog_of(sid: str) -> Catalog:
-        if sid not in catalogs:
-            catalogs[sid] = Catalog(source_of(sid))
-            if not catalogs[sid].count():
-                threading.Thread(target=catalogs[sid].build, daemon=True).start()
-        return catalogs[sid]
+        with instances:
+            if sid not in catalogs:
+                cat = Catalog(source_of(sid))
+                if not cat.count():
+                    threading.Thread(target=cat.build, daemon=True, name=f"catalog-{sid}").start()
+                catalogs[sid] = cat
+            return catalogs[sid]
 
     def texcat_of(sid: str) -> TextureCatalog | None:
         src = source_of(sid)
         if "textures" not in src.capabilities:
             return None
-        if sid not in texcats:
-            texcats[sid] = TextureCatalog(src)
-        return texcats[sid]
+        with instances:
+            if sid not in texcats:
+                texcats[sid] = TextureCatalog(src)
+            return texcats[sid]
 
     conv_cache: dict[str, tuple[float, set]] = {}
 
@@ -354,10 +361,36 @@ def create_app(sources: list[str] | None = None) -> FastAPI:
         return {"job": job["id"]}
 
     @app.post("/api/shutdown")
-    def shutdown():
-        """Stop the server (the launcher's window closes with it)."""
+    def shutdown(force: bool = False):
+        """Stop the server (the window closes with it). Running jobs are cut short: asked for confirmation first."""
+        running = jobs.running()
+        if running and not force:
+            raise HTTPException(409, f"{len(running)} travail(aux) en cours : {running[0]['label']}")
         threading.Timer(0.5, lambda: os._exit(0)).start()
         return {"ok": True}
+
+    @app.get("/api/diagnostic")
+    def diagnostic():
+        """Everything a bug report needs: versions, paths, set-up state, the tail of the log."""
+        import platform
+        import sys
+
+        from .. import native
+        from ..core import log as logs
+        from ..core import setup as setup_mod
+        info = [f"omni {VERSION}", f"python {sys.version.split()[0]} on {platform.platform()}",
+                f"frozen: {bool(getattr(sys, 'frozen', False))}", f"workspace: {CONFIG.workspace}",
+                f"assets: {CONFIG.assets_sorted}", f"gmod: {CONFIG.gmod}", f"studiomdl: {CONFIG.studiomdl}"]
+        try:
+            st = setup_mod.status()
+            info.append(f"setup: ready={st['ready']} can_convert={st['can_convert']}")
+        except Exception as e:  # noqa: BLE001
+            info.append(f"setup: {type(e).__name__}: {e}")
+        core = native.status()
+        info.append(f"native: {core['native']} {core['native_version']} {core['native_error']} | wasm: {core['wasm']}")
+        for j in jobs.recent(10):
+            info.append(f"job {j['id']} {j['kind']} {j['phase']} {j.get('error', '')[:120]}")
+        return {"text": "\n".join(info) + "\n\n--- log ---\n" + logs.tail(200)}
 
     # ---------------------------------------------------------------------------------------------- pages
     if WEB_DIST.exists():

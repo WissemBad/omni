@@ -102,13 +102,13 @@ def set_picker(fn) -> None:
 
 
 def pick_folder(title: str = "Choisir un dossier") -> str:
-    """Native folder dialog: the app window's own when running as the desktop app, else Tk in a child process
-    (the API runs on the user's PC)."""
+    """Native folder dialog: the app window's own when running as the desktop app, else the Windows dialog in a
+    child process (the API runs on the user's PC; a fault in the dialog cannot take the server down)."""
     if _picker is not None:
         return _picker(title) or ""
     import sys
-    code = ("import tkinter as t, tkinter.filedialog as f\n"
-            "r = t.Tk(); r.withdraw(); r.attributes('-topmost', True)\n"
-            f"print(f.askdirectory(title={title!r}))")
-    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=600, creationflags=NOWINDOW)
+    cmd = [sys.executable, "pick-folder", title] if getattr(sys, "frozen", False) else [sys.executable, "-m", "omni", "pick-folder", title]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=600, creationflags=NOWINDOW)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or "folder dialog failed").strip())
     return r.stdout.strip()

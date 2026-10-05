@@ -7,6 +7,7 @@ same version is already running, the window simply opens on it. Closing the wind
 from __future__ import annotations
 
 import json
+import logging
 import socket
 import sys
 import threading
@@ -16,6 +17,7 @@ import webbrowser
 from pathlib import Path
 
 PORT = 8770
+log = logging.getLogger("omni.app")
 
 
 def _get(url: str, timeout: float = 1.5):
@@ -35,11 +37,34 @@ def running_url(port: int = PORT) -> str | None:
 
 
 def free_port(preferred: int = PORT, tries: int = 30) -> int:
+    """First port that can really be bound (a port reserved by Hyper-V/WinNAT looks free to a connect test)."""
     for p in range(preferred, preferred + tries):
         with socket.socket() as s:
-            if s.connect_ex(("127.0.0.1", p)) != 0:
-                return p
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            try:
+                s.bind(("127.0.0.1", p))
+            except OSError:
+                continue
+            return p
     raise SystemExit(f"no free port in {preferred}-{preferred + tries - 1}")
+
+
+def _running_jobs(url: str) -> int:
+    try:
+        return sum(1 for j in _get(f"{url}/api/jobs") if j.get("phase") == "running")
+    except Exception:  # noqa: BLE001 - unreachable server: nothing to protect
+        return 0
+
+
+def _confirm(text: str, title: str = "omni") -> bool:
+    """Native yes/no box (Windows); True when the user agrees."""
+    try:
+        import ctypes
+        MB_YESNO, MB_ICONWARNING, MB_TOPMOST = 0x4, 0x30, 0x40000
+        return ctypes.windll.user32.MessageBoxW(0, text, title, MB_YESNO | MB_ICONWARNING | MB_TOPMOST) == 6
+    except Exception:  # noqa: BLE001
+        return True
 
 
 class Server:
@@ -102,7 +127,7 @@ def run(port: int = PORT, browser: bool = False, path: str = "/") -> int:
         try:
             import webview
         except Exception as e:  # noqa: BLE001
-            print(f"fenêtre intégrée indisponible ({e}) : ouverture dans le navigateur", file=sys.stderr)
+            log.error("fenêtre intégrée indisponible: %s", e)
             browser = True
     if browser:
         webbrowser.open(target)
@@ -125,12 +150,19 @@ def run(port: int = PORT, browser: bool = False, path: str = "/") -> int:
         res = window.create_file_dialog(webview.FileDialog.FOLDER, allow_multiple=False)
         return res[0] if res else ""
     windows.set_picker(pick)
+
+    def closing():
+        """Closing the window ends the server, and with it a conversion half way through: ask first."""
+        n = _running_jobs(url)
+        return not n or _confirm(f"{n} travail(aux) en cours seront interrompus.\n\nFermer omni quand même ?")
+    window.events.closing += closing
     storage = CONFIG.workspace / "webview"
     storage.mkdir(parents=True, exist_ok=True)
     try:
         webview.start(private_mode=False, storage_path=str(storage), icon=icon_path())
     except Exception as e:  # noqa: BLE001 - no WebView2 runtime: the browser still works
-        print(f"fenêtre intégrée impossible ({e}) : ouverture dans le navigateur", file=sys.stderr)
+        windows.set_picker(None)                 # the dialog it registered belongs to a window that never opened
+        log.error("fenêtre intégrée impossible: %s", e, exc_info=True)
         webbrowser.open(target)
         if server is not None:
             try:

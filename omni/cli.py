@@ -125,6 +125,11 @@ def _serve_only(port: int) -> int:
     return 0
 
 
+def cmd_pick_folder(a):
+    from .core import folderdialog
+    raise SystemExit(folderdialog.main([a.title]))
+
+
 def cmd_app(a):
     from . import app as desktop
     raise SystemExit(desktop.run(a.port, browser=a.browser))
@@ -270,7 +275,7 @@ def main(argv=None):
     nv.set_defaults(fn=cmd_native)
     so = sub.add_parser("sounds", help="export every sound of the game to a named folder tree")
     so.add_argument("--out", help="output folder (default: workspace/audio/<source>)")
-    so.add_argument("--format", default="auto", choices=["auto", "flac", "wav", "mp3"],
+    so.add_argument("--format", default="auto", choices=["auto", "ogg", "flac", "wav", "mp3"],
                     help="auto = game Vorbis rewrapped as .ogg without re-encoding, other codecs as lossless .flac")
     so.add_argument("--match", default="", help="only sounds whose output path contains this text")
     so.add_argument("--limit", type=int, default=0, help="stop after N unique sounds (0 = all)")
@@ -278,9 +283,15 @@ def main(argv=None):
     so.add_argument("--force", action="store_true", help="rewrite files already exported (new names / tags)")
     so.add_argument("--clean", action="store_true", help="with --force: remove files of an earlier naming")
     so.set_defaults(fn=cmd_sounds)
+    pf = sub.add_parser("pick-folder", help=argparse.SUPPRESS)       # used by the server: the native folder dialog
+    pf.add_argument("title", nargs="?", default="Choisir un dossier")
+    pf.set_defaults(fn=cmd_pick_folder)
     a = ap.parse_args(argv)
     if not getattr(a, "fn", None):                    # no command: the desktop window
         a = ap.parse_args(["app"])
+    if a.fn in (cmd_app, cmd_ui):                     # the packaged app has no console: errors go to logs/omni.log
+        from .core import log
+        log.setup(console=a.fn is cmd_ui)
     a.fn(a)
 
 
