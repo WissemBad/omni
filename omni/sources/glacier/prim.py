@@ -50,10 +50,6 @@ class PrimData:
     def weighted(self) -> bool:
         return bool(self.flags & 0b1000)
 
-    @property
-    def has_bones(self) -> bool:
-        return bool(self.flags & 0b1)
-
 
 def _unit_bytes(raw: np.ndarray) -> np.ndarray:
     """(N,4) uint8 -> (N,4) float32: xyz in [-1,1], w = raw handedness byte."""

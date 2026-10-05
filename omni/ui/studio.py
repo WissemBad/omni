@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import texture2ddecoder as t2d
 from PIL import Image
 
 from ..targets.source.mdlread import read_mdl, world_transforms
@@ -336,13 +335,12 @@ def vtf_info(path: Path) -> dict:
 
 def decode_vtf(path: Path, max_dim: int = 1024) -> np.ndarray:
     """RGBA uint8 of the largest mip not exceeding ``max_dim`` (first frame). Rust core when available."""
-    from ..native import R
+    from ..native import N
     b = path.read_bytes()
-    if R.has("decode_vtf"):
-        try:
-            return R.decode_vtf(b, max_dim)
-        except ValueError:
-            pass                                   # format the core does not read: the Python reader below
+    try:
+        return N.decode_vtf(b, max_dim)
+    except ValueError:
+        pass                                       # an uncommon raw format: the Python reader below
     if b[:4] != b"VTF\0":
         raise ValueError("not a VTF")
     hdr = struct.unpack_from("<I", b, 12)[0]
@@ -364,10 +362,8 @@ def decode_vtf(path: Path, max_dim: int = 1024) -> np.ndarray:
     data = b[start[level]:start[level] + n]
     if len(data) < n:
         raise ValueError("truncated VTF")
-    if fmt in (13, 20):
-        a = np.frombuffer(t2d.decode_bc1(data, mw, mh), np.uint8).reshape(mh, mw, 4)[..., [2, 1, 0, 3]]
-    elif fmt in (14, 15):
-        a = np.frombuffer(t2d.decode_bc3(data, mw, mh), np.uint8).reshape(mh, mw, 4)[..., [2, 1, 0, 3]]
+    if fmt in (13, 14, 15, 20):
+        raise ValueError("unreadable DXT data")
     else:
         raw = np.frombuffer(data, np.uint8)
         if fmt == 12:
@@ -416,12 +412,8 @@ def channel_view(rgba: np.ndarray, channel: str) -> np.ndarray:
 
 
 def png_bytes(rgba: np.ndarray) -> bytes:
-    from ..native import R
-    if R.has("png_rgba"):
-        return R.png_rgba(np.ascontiguousarray(rgba, np.uint8), "rgba", 0)
-    buf = io.BytesIO()
-    Image.fromarray(rgba).save(buf, "PNG", compress_level=3)
-    return buf.getvalue()
+    from ..native import N
+    return N.png_rgba(np.ascontiguousarray(rgba, np.uint8), "rgba", 0)
 
 
 def uv_overlay(geo: Geometry, skinref: int, size: int) -> bytes:

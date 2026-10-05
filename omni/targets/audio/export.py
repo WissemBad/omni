@@ -25,7 +25,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 from pathlib import Path
 
 from ...core.ir import SoundRef
-from ...native import R
+from ...native import N
 from .wwise import FORMATS, VORBIS, wem_info
 
 MAX_REL = 180          # Windows MAX_PATH: keep room for the output root
@@ -124,7 +124,7 @@ def _job_native(ref: SoundRef, base: str, fmt: str, tags, force: bool = False) -
     done = None if force else _existing(t)
     data = ref.read()
     if done is not None:
-        info = R.wem_info(data) or {}
+        info = N.wem_info(data) or {}
         secs = _flac_seconds(done) if done.suffix == ".flac" else (
             info["samples"] / info["rate"] if info.get("samples") and info.get("rate") else None)
         return {"file": str(done), "skipped": True, "codec": f"0x{info.get('codec', 0):04X}" if info else "",
@@ -132,15 +132,15 @@ def _job_native(ref: SoundRef, base: str, fmt: str, tags, force: bool = False) -
                 "seconds": round(secs, 3) if secs else None, "bytes": done.stat().st_size}
     try:
         if fmt == "mp3":
-            ext, wav, info = R.convert_wem(data, "pcm", [])
+            ext, wav, info = N.convert_wem(data, "pcm", [])
             ext, out = ".mp3", _mp3(wav, info["channels"], tags, t)
         elif fmt == "ogg":
-            ext, out, info = R.convert_wem(data, "auto", tags)           # game Vorbis rewrapped, unchanged
+            ext, out, info = N.convert_wem(data, "auto", tags)           # game Vorbis rewrapped, unchanged
             if ext != ".ogg":                                            # ADPCM etc.: decoded and encoded
-                _e, wav, info = R.convert_wem(data, "pcm", [])
+                _e, wav, info = N.convert_wem(data, "pcm", [])
                 ext, out = ".ogg", _vorbis(wav, tags, t)
         else:
-            ext, out, info = R.convert_wem(data, fmt, tags)
+            ext, out, info = N.convert_wem(data, fmt, tags)
     except Exception as e:  # noqa: BLE001
         return {"error": f"{type(e).__name__}: {e}"}
     path = t.with_name(t.name + ext)
@@ -226,8 +226,6 @@ def export_sounds(refs: list[SoundRef], out: Path, fmt: str = "auto", workers: i
         plan = plan[:limit]
 
     # 3 - convert
-    if not R.has("convert_wem"):
-        raise RuntimeError("le cœur Rust est indisponible : reconstruis-le (omni native --build --wasm)")
     # processes, not threads: each has its own core instance and nothing is serialised by the GIL
     progress(f"converting {len(plan)} sounds with {workers} processes (Rust core)")
     rows, errors, done = [], [], 0

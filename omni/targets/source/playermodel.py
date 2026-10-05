@@ -293,19 +293,9 @@ def skin_submesh(sm: SubMesh, rig, sk: Skeleton, P: np.ndarray, S: np.ndarray, t
     w = np.where(tot > 1e-6, w / np.maximum(tot, 1e-6), 0.0)
     w[tot[:, 0] <= 1e-6, 0] = 1.0
     K = P @ np.linalg.inv(sk.bind)                           # bind -> posed, per character bone
-    vh = np.c_[v, np.ones(nv)]
     from ...native import N
-    if N is not None:
-        new_v, new_n = N.lbs(np.ascontiguousarray(v), np.ascontiguousarray(n), np.ascontiguousarray(joints, np.int64),
-                             np.ascontiguousarray(w), np.ascontiguousarray(K, np.float64))
-    else:
-        new_v = np.zeros((nv, 3))
-        new_n = np.zeros((nv, 3))
-        for k in range(w.shape[1]):
-            Kk = K[joints[:, k]]
-            new_v += w[:, k:k + 1] * np.einsum("nij,nj->ni", Kk[:, :3, :], vh)
-            new_n += w[:, k:k + 1] * np.einsum("nij,nj->ni", Kk[:, :3, :3], n)
-        new_n /= np.maximum(np.linalg.norm(new_n, axis=1, keepdims=True), 1e-9)
+    new_v, new_n = N.lbs(np.ascontiguousarray(v), np.ascontiguousarray(n), np.ascontiguousarray(joints, np.int64),
+                         np.ascontiguousarray(w), np.ascontiguousarray(K, np.float64))
 
     # fold the influences onto ValveBiped bones
     tb = targets[joints]                                     # (N,4)
@@ -319,22 +309,8 @@ def skin_submesh(sm: SubMesh, rig, sk: Skeleton, P: np.ndarray, S: np.ndarray, t
     is2 = tb == s2
     tb = np.concatenate([tb, np.where(is2, s4, tb)], 1)
     tw = np.concatenate([np.where(is2, tw * (1 - f), tw), np.where(is2, tw * f, 0.0)], 1)
-    if N is not None:                       # same algorithm in Rust (the Python loop costs ~1 s per 50k vertices)
-        out_b, out_w = N.fold_weights(np.ascontiguousarray(tb, np.int64), np.ascontiguousarray(tw, np.float64),
-                                      MAX_LINKS, pelvis)
-        return PosedPart(new_v, new_n, out_b, out_w, sm.uvs, sm.indices, sm.material_key)
-    out_b = np.zeros((nv, MAX_LINKS), np.int64)
-    out_w = np.zeros((nv, MAX_LINKS))
-    for i in range(nv):
-        acc: dict[int, float] = {}
-        for k in range(tb.shape[1]):
-            if tw[i, k] > 1e-5:
-                acc[int(tb[i, k])] = acc.get(int(tb[i, k]), 0.0) + tw[i, k]
-        top = sorted(acc.items(), key=lambda x: -x[1])[:MAX_LINKS] or [(pelvis, 1.0)]
-        s = sum(x[1] for x in top)
-        for k, (bi, wi) in enumerate(top):
-            out_b[i, k], out_w[i, k] = bi, wi / s
-        out_b[i, len(top):] = top[0][0]
+    out_b, out_w = N.fold_weights(np.ascontiguousarray(tb, np.int64), np.ascontiguousarray(tw, np.float64),
+                                  MAX_LINKS, pelvis)
     return PosedPart(new_v, new_n, out_b, out_w, sm.uvs, sm.indices, sm.material_key)
 
 
@@ -350,12 +326,6 @@ def quat_to_radian_euler(q: np.ndarray) -> tuple[float, float, float]:
         roll = math.atan2(-R[1, 2], R[1, 1])
         yaw = 0.0
     return roll, pitch, yaw
-
-
-def euler_to_quat(r: float, p: float, y: float) -> np.ndarray:
-    sr, cr, sp, cp, sy, cy = math.sin(r / 2), math.cos(r / 2), math.sin(p / 2), math.cos(p / 2), math.sin(y / 2), math.cos(y / 2)
-    return np.array([sr * cp * cy - cr * sp * sy, cr * sp * cy + sr * cp * sy,
-                     cr * cp * sy - sr * sp * cy, cr * cp * cy + sr * sp * sy])
 
 
 def skeleton_block(tpl: Template, world: np.ndarray | None = None) -> str:
@@ -387,31 +357,12 @@ def write_reference(path: Path, tpl: Template, world: np.ndarray, parts: list[Po
         mat = material_names.get(pp.material_key, "default")
         uv = pp.uvs.astype(np.float64)
         uv[:, 1] = 1.0 - uv[:, 1]
-        if N is not None:
-            text, c = N.smd_triangles(
-                mat, np.ascontiguousarray(pp.positions, np.float64), np.ascontiguousarray(pp.normals, np.float64), uv,
-                np.ascontiguousarray(pp.bones, np.int64), np.ascontiguousarray(pp.weights, np.float64),
-                np.asarray(pp.indices).astype(np.uint32).tolist())
-            out.append(text)
-            count += c
-            continue
-        tri = pp.indices.reshape(-1, 3)
-
-        def vline(i):
-            b = pp.bones[i]
-            w = pp.weights[i]
-            links = [(int(b[k]), float(w[k])) for k in range(MAX_LINKS) if w[k] > 1e-4]
-            if not links:
-                links = [(int(b[0]), 1.0)]
-            s = sum(x[1] for x in links)
-            return ("%d %.5f %.5f %.5f %.5f %.5f %.5f %.5f %.5f %d %s" % (
-                links[0][0], *pp.positions[i], *pp.normals[i], uv[i, 0], uv[i, 1], len(links),
-                " ".join("%d %.5f" % (bi, wi / s) for bi, wi in links)))
-
-        for t in tri:
-            out.append(mat + "\n")
-            out.append("\n".join(vline(int(i)) for i in t) + "\n")
-        count += len(tri)
+        text, c = N.smd_triangles(
+            mat, np.ascontiguousarray(pp.positions, np.float64), np.ascontiguousarray(pp.normals, np.float64), uv,
+            np.ascontiguousarray(pp.bones, np.int64), np.ascontiguousarray(pp.weights, np.float64),
+            np.ascontiguousarray(pp.indices, np.uint32))
+        out.append(text)
+        count += c
     out.append("end\n")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(out), encoding="ascii")

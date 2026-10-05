@@ -7,9 +7,9 @@ import struct
 import numpy as np
 import pytest
 
-from omni.native import N, NativeError
+from omni.native import AVAILABLE, N, NativeError
 
-pytestmark = pytest.mark.skipif(N is None, reason="native module not built")
+pytestmark = pytest.mark.skipif(not AVAILABLE, reason="native module not built")
 
 
 def test_panics_become_native_error(monkeypatch):

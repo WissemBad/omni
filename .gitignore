@@ -15,9 +15,6 @@ native/target/
 *.dylib
 *.pyd.bak
 
-# generated core
-omni/omni_core.wasm
-
 # web
 web/node_modules/
 web/.nuxt/

@@ -19,17 +19,6 @@ export const TEX_ROLE_LABEL: Record<string, string> = {
 }
 export const texRoleLabel = (r: string) => TEX_ROLE_LABEL[r] ?? titleCase(r || 'autre')
 
-export const TEX_ROLE_ICON: Record<string, string> = {
-  base: 'i-ri-palette-line',
-  normal: 'i-ri-landscape-line',
-  detail_normal: 'i-ri-landscape-line',
-  srm: 'i-ri-contrast-line',
-  spec: 'i-ri-sparkling-line',
-  emissive: 'i-ri-lightbulb-flash-line',
-  mask: 'i-ri-layout-masonry-line',
-  height: 'i-ri-mountain-line',
-}
-
 /** Normal maps get their blue channel rebuilt (BC5 stores X and Y only). */
 export const isNormalRole = (r?: string) => r === 'normal' || r === 'detail_normal'
 

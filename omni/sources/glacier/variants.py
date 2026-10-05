@@ -72,16 +72,8 @@ class PropVariants:
                 db.execute("CREATE TABLE uses (prim INTEGER, temp INTEGER)")
                 prims = set(self.archive.index("PRIM"))
                 temps = self.archive.index("TEMP")
-                if N is not None:           # .meta files read in parallel
-                    rows = [(_s64(r), _s64(t)) for r, t in
-                            N.template_index([(h, str(p)) for h, p in temps.items()], list(prims), MAX_PRIMS_PER_TEMPLATE)]
-                else:
-                    rows = []
-                    for h, p in temps.items():
-                        meta = self.archive.meta(p)
-                        pr = [r for r, _f in (meta.refs if meta else []) if r in prims]
-                        if 0 < len(pr) <= MAX_PRIMS_PER_TEMPLATE:
-                            rows += [(_s64(r), _s64(h)) for r in pr]
+                rows = [(_s64(r), _s64(t)) for r, t in
+                        N.template_index([(h, str(p)) for h, p in temps.items()], list(prims), MAX_PRIMS_PER_TEMPLATE)]
                 db.executemany("INSERT INTO uses VALUES (?, ?)", rows)
                 db.execute("CREATE INDEX i_prim ON uses (prim)")
                 db.commit()

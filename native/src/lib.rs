@@ -5,10 +5,8 @@
 //! allocated from them (a failed allocation aborts the process, which no exception can catch); a remaining
 //! panic reaches Python as PyO3's ``PanicException``, which ``omni.native`` re-raises as ``NativeError``.
 //!
-//! The crate is built two ways from the same core modules:
-//!   * a CPython extension (features `python` + `parallel`, built by maturin): fastest, multi-threaded;
-//!   * a WebAssembly module (`--target wasm32-unknown-unknown --no-default-features`, see wasm_api.rs) run by
-//!     wasmtime from Python: portable and sandboxed, used when the native module cannot be loaded.
+//! Built by maturin as a CPython extension (features `python` + `parallel`). `cargo test --no-default-features`
+//! tests the core modules without Python (the `par` shim then runs sequentially).
 
 pub mod aloc;
 pub mod audio;
@@ -25,12 +23,9 @@ pub mod wwise;
 pub mod par;
 #[cfg(test)]
 mod fuzz;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod rpkg;
 
 #[cfg(feature = "python")]
 mod py;
 #[cfg(feature = "python")]
 mod py_media;
-#[cfg(target_arch = "wasm32")]
-mod wasm_api;

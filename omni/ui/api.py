@@ -298,7 +298,6 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
     def system():
         from .. import native
         core = native.status()
-        r = native.R
         gmod = CONFIG.gmod
         tools = [
             {"key": "studiomdl", "label": "StudioMDL (compilation des modèles)", "ok": CONFIG.studiomdl.exists(),
@@ -310,14 +309,11 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
              "path": shutil.which(CONFIG.ffmpeg) or CONFIG.ffmpeg},
             {"key": "web", "label": "Interface construite", "ok": WEB_DIST.exists(), "path": str(WEB_DIST)},
         ]
-        functions = ["convert_wem", "bank_links", "encode_vtf", "texture_png", "decode_vtf", "parse_collision",
-                     "encode_dxt", "lbs", "smd_triangles", "template_index"]
         from ..core import setup
         ready = setup.status()
         return {"version": VERSION, "workspace": str(CONFIG.workspace), "cpus": os.cpu_count(),
                 "setup": {"ready": ready["ready"], "can_convert": ready["can_convert"]},
-                "rust": {**{k: v for k, v in core.items() if k != "native_functions"},
-                         "backends": {f: r.backend(f) for f in functions}},
+                "rust": {k: v for k, v in core.items() if k != "native_functions"},
                 "tools": tools}
 
     @app.get("/api/{sid}/overview")
@@ -412,19 +408,6 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         jobs.run(job, run)
         return {"job": job["id"]}
 
-    @app.post("/api/native/build")
-    def native_build():
-        job = jobs.create("maintenance", "Cœur Rust (WebAssembly)", "", cancellable=False)
-
-        def run(job):
-            from .. import native
-            rc = native.build(release=True, wasm_only=True)
-            if rc != 0:
-                raise RuntimeError(f"cargo a échoué ({rc}) : Rust est-il installé ? (rustup.rs)")
-            return {"wasm": str(native.WASM), "note": "redémarrer omni pour charger le nouveau cœur"}
-        jobs.run(job, run)
-        return {"job": job["id"]}
-
     @app.get("/api/update")
     def update_info(force: bool = False):
         """The latest release and whether it is newer (cached six hours; ``force`` asks GitHub again)."""
@@ -501,7 +484,7 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         except Exception as e:  # noqa: BLE001
             info.append(f"setup: {type(e).__name__}: {e}")
         core = native.status()
-        info.append(f"native: {core['native']} {core['native_version']} {core['native_error']} | wasm: {core['wasm']}")
+        info.append(f"native: {core['native']} {core['native_version']} {core['native_error']}")
         for j in jobs.recent(10):
             info.append(f"job {j['id']} {j['kind']} {j['phase']} {j.get('error', '')[:120]}")
         return {"text": "\n".join(info) + "\n\n--- log ---\n" + logs.tail(200)}

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...native import R
+from ...native import N
 
 FORMATS = ("auto", "ogg", "flac", "wav", "mp3")
 VORBIS = 0xFFFF
@@ -29,7 +29,7 @@ class WemInfo:
 
 
 def wem_info(b: bytes) -> WemInfo | None:
-    d = R.wem_info(b)
+    d = N.wem_info(b)
     if not d:
         return None
     return WemInfo(d["codec"], d["channels"], d["rate"], d["samples"], d["label"], d["data_size"])

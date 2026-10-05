@@ -187,12 +187,6 @@ class Template:
     overrides: list[Override]
     refs: list[int]
 
-    def by_id(self, entity_id: int) -> int:
-        for i, s in enumerate(self.subs):
-            if s.entity_id == entity_id:
-                return i
-        return -1
-
 
 _MISSING = object()
 
@@ -263,8 +257,6 @@ class EntityReader:
         try:
             return self._template_py(key, tp, refs)
         except (struct.error, IndexError, ValueError, OverflowError):
-            if N is None:
-                raise
             # malformed/out-of-range data: the Rust parser reads defensively (and is the only one that
             # copes with the multi-MB level-scene templates)
             return self._template_native(key, tp.read_bytes(), refs)
@@ -312,17 +304,16 @@ class EntityReader:
         bp = self.archive.find("TBLU", key)
         if bp is None:
             return
-        if N is not None:
-            try:
-                root, subs = N.parse_tblu(bp.read_bytes())
-            except ValueError:
-                pass
-            else:
-                for s, (eid, name, aliases) in zip(tpl.subs, subs):
-                    s.entity_id, s.name, s.aliases = eid, name, aliases
-                if 0 <= root < len(tpl.subs):
-                    tpl.root = root
-                return
+        try:
+            root, subs = N.parse_tblu(bp.read_bytes())
+        except ValueError:
+            pass                                  # the Python reader below copes with some odd blueprints
+        else:
+            for s, (eid, name, aliases) in zip(tpl.subs, subs):
+                s.entity_id, s.name, s.aliases = eid, name, aliases
+            if 0 <= root < len(tpl.subs):
+                tpl.root = root
+            return
         data, _types = parse_bin1(bp.read_bytes())
         root = struct.unpack_from("<i", data, 4)[0]
         b, e = _array(data, 0x18)

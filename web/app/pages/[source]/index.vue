@@ -218,12 +218,8 @@ const rust = computed(() => system.value?.rust)
 const rustLabel = computed(() => {
   const r = rust.value
   if (!r) return '…'
-  if (r.native && r.wasm) return `natif ${r.native_version} + WebAssembly ${r.wasm_version}`
-  if (r.wasm) return `WebAssembly ${r.wasm_version}`
-  if (r.native) return `natif ${r.native_version}`
-  return 'absent (repli Python)'
+  return r.native ? `natif ${r.native_version}` : 'absent'
 })
-const newFns = computed(() => Object.entries(rust.value?.backends ?? {}))
 </script>
 
 <template>
@@ -242,7 +238,7 @@ const newFns = computed(() => Object.entries(rust.value?.backends ?? {}))
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <UBadge :label="deployed ? 'Addon lié à GMod' : 'Addon non lié'" :color="deployed ? 'success' : 'neutral'" variant="subtle" :icon="deployed ? 'i-ri-link' : 'i-ri-link-unlink'" />
-          <UBadge :label="`Rust : ${rustLabel}`" :color="rust?.wasm || rust?.native ? 'primary' : 'warning'" variant="subtle" icon="i-ri-cpu-line" />
+          <UBadge :label="`Rust : ${rustLabel}`" :color="rust?.native ? 'primary' : 'warning'" variant="subtle" icon="i-ri-cpu-line" />
         </div>
       </UCard>
 
@@ -350,19 +346,14 @@ const newFns = computed(() => Object.entries(rust.value?.backends ?? {}))
           </div>
           <div class="space-y-2">
             <h3 class="text-xs font-semibold uppercase tracking-wide text-muted">Cœur Rust</h3>
-            <ul class="grid grid-cols-2 gap-x-3 gap-y-1">
-              <li v-for="[fn, be] in newFns" :key="fn" class="flex items-center justify-between gap-2 text-xs">
-                <span class="truncate font-mono text-toned">{{ fn }}</span>
-                <UBadge :label="be === 'native' ? 'natif' : be === 'wasm' ? 'wasm' : 'python'" :color="be === 'python' ? 'warning' : be === 'native' ? 'success' : 'primary'" variant="subtle" size="sm" />
-              </li>
-            </ul>
+            <p class="text-sm text-toned">omni_native {{ rust?.native_version || '—' }} : textures, sons, collisions, géométrie, paquets du jeu.</p>
             <UAlert
               v-if="rust && !rust.native"
               color="warning"
               variant="subtle"
               icon="i-ri-shield-line"
               title="Module natif indisponible"
-              :description="rust.native_error || 'Le cœur tourne en WebAssembly : mêmes résultats, un peu moins rapide.'"
+              :description="rust.native_error || 'Reconstruis-le : python -m omni native --build'"
             />
           </div>
         </UCard>

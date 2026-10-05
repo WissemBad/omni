@@ -15,7 +15,7 @@ import numpy as np
 from PIL import Image
 
 from ...core.ir import TextureData
-from ...native import R
+from ...native import N
 from ...sources.glacier.texture import Mip, to_rgba
 from . import vtf
 
@@ -78,50 +78,10 @@ def decode_mips_rgba(tex: TextureData, max_size: int) -> list[np.ndarray]:
     return [decode_top(tex, max_size)]
 
 
-def keep_coverage(mips: list[np.ndarray], ref: float = 0.5) -> list[np.ndarray]:
-    """Python twin of the coverage-preserving mips of the Rust encoder (used by the fallback path only):
-    plain averaging makes thin strands/leaves fall under the alpha-test threshold, so each smaller mip's alpha is
-    rescaled to keep the share of pixels passing the test of the full-size image."""
-    cut = ref * 255.0
-    target = float((mips[0][..., 3] >= cut).mean())
-    if target <= 0.0 or target >= 1.0:
-        return mips
-    out = [mips[0]]
-    for m in mips[1:]:
-        a = m[..., 3].astype(np.float32)
-        t = float(np.quantile(a, 1.0 - target))
-        if t > 1.0:
-            m = m.copy()
-            m[..., 3] = np.clip(a * (cut / t), 0, 255).astype(np.uint8)
-        out.append(m)
-    return out
-
-
 def resize(a: np.ndarray, w: int, h: int) -> np.ndarray:
     if a.shape[1] == w and a.shape[0] == h:
         return a
     return np.asarray(Image.fromarray(a).resize((w, h), Image.BILINEAR))
-
-
-def _py_chain(img: np.ndarray) -> list[np.ndarray]:
-    h, w = img.shape[:2]
-    mips = [img]
-    while w > 1 or h > 1:
-        w, h = max(1, w // 2), max(1, h // 2)
-        mips.append(resize(img, w, h))
-    return mips
-
-
-def _py_dxt(a: np.ndarray, alpha: bool) -> bytes:
-    import quicktex
-    import quicktex.s3tc.bc1 as _bc1
-    import quicktex.s3tc.bc3 as _bc3
-    h, w = a.shape[:2]
-    p = np.pad(a, ((0, (-h) % 4), (0, (-w) % 4), (0, 0)), mode="edge") if (h % 4 or w % 4) else a
-    p = np.ascontiguousarray(p)
-    raw = quicktex.RawTexture.frombytes(p.tobytes(), p.shape[1], p.shape[0])
-    enc = _bc3.BC3Encoder(5) if alpha else _bc1.BC1Encoder(5)
-    return enc.encode(raw).tobytes()
 
 
 def encode(rgba_mips: list[np.ndarray], out: Path, alpha: bool, flags: int = 0, lossless: bool = False,
@@ -132,25 +92,7 @@ def encode(rgba_mips: list[np.ndarray], out: Path, alpha: bool, flags: int = 0, 
     top = np.ascontiguousarray(rgba_mips[0], np.uint8)
     kind = kind or ("normal" if flags & vtf.FLAG_NORMAL else "srgb")
     fmt = "bgra8888" if lossless else ("dxt5" if alpha else "dxt1")
-    if R.has("encode_vtf"):
-        R.encode_vtf(str(out), top, fmt, kind, max_size, flags & ~vtf.FLAG_NORMAL, ENCODER_QUALITY, coverage)
-        return
-    # pure-Python fallback
-    if max_size and max(top.shape[:2]) > max_size:
-        k = max(top.shape[:2]) / max_size
-        top = resize(top, max(1, int(top.shape[1] / k)), max(1, int(top.shape[0] / k)))
-    mips = _py_chain(top)
-    if coverage:
-        mips = keep_coverage(mips, coverage)
-    data = []
-    for a in mips:
-        h, w = a.shape[:2]
-        data.append((w, h, np.ascontiguousarray(a[..., [2, 1, 0, 3]]).tobytes() if lossless else _py_dxt(a, alpha)))
-    if alpha or lossless:
-        flags |= vtf.FLAG_EIGHTBITALPHA
-    if kind == "normal":
-        flags |= vtf.FLAG_NORMAL
-    vtf.write_vtf(out, vtf.BGRA8888 if lossless else (vtf.DXT5 if alpha else vtf.DXT1), data, flags)
+    N.encode_vtf(str(out), top, fmt, kind, max_size, flags & ~vtf.FLAG_NORMAL, ENCODER_QUALITY, coverage)
 
 
 def rebuild_normal(rgba: np.ndarray) -> np.ndarray:

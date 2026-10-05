@@ -188,8 +188,6 @@ def extract_assets(game: Path, say=print, count=None, cancel=None, workers: int 
     import threading
     import time
     from ..native import N
-    if N is None or not hasattr(N, "rpkg_extract"):
-        raise RuntimeError("le module natif d'extraction est indisponible (omni native --build)")
     found = game_packages(game)
     if not found:
         raise RuntimeError(f"aucun package .rpkg dans {game} (le dossier du jeu contient normalement Runtime/chunk0.rpkg)")

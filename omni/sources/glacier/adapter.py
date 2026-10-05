@@ -67,7 +67,7 @@ class GlacierSource(Source):
         if getattr(self, "_characters", None) is None:
             import json
             cache = self.config.cache / f"characters_{self.id}.json"
-            sig = self.archive._signature("TEMP") + [len(self.archive.index("TEMP"))]
+            sig = self.archive._signature("TEMP") + [len(self.archive.index("TEMP")), self._names_sig()]
             try:
                 data = json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else None
                 if data and data.get("sig") == sig and data.get("version") == 1:
@@ -93,6 +93,8 @@ class GlacierSource(Source):
                             "body": body, "variants": sorted(vs, key=lambda x: x["v"])})
             self._characters = {c["id"]: c for c in sorted(out, key=lambda c: (c["mission"], c["role"], c["title"]))}
             try:
+                if not self._characters:
+                    raise OSError("nothing found: not cached, the next call looks again")
                 cache.parent.mkdir(parents=True, exist_ok=True)
                 cache.write_text(json.dumps({"sig": sig, "version": 1, "items": list(self._characters.values())}),
                                  encoding="utf-8")
@@ -110,7 +112,7 @@ class GlacierSource(Source):
         every media header is read) is cached on disk until the audio resources change."""
         import pickle
         from .audio import iter_sounds
-        sig = [len(self.archive.index(k)) for k in ("WWES", "WWEM", "WWEV", "WBNK", "DLGE", "WSGB", "WSWB")]
+        sig = [len(self.archive.index(k)) for k in ("WWES", "WWEM", "WWEV", "WBNK", "DLGE", "WSGB", "WSWB")] + [self._names_sig()]
         cache = self.config.cache / f"sounds_{self.id}.pkl"
         if not fresh and cache.exists():
             try:
@@ -122,6 +124,8 @@ class GlacierSource(Source):
             except Exception:  # noqa: BLE001 - stale or corrupt cache: rebuild
                 pass
         refs = iter_sounds(self, progress)
+        if not refs:
+            return refs                          # an empty list is never cached (names or resources not ready yet)
         try:
             cache.parent.mkdir(parents=True, exist_ok=True)
             with open(cache, "wb") as f:
@@ -139,6 +143,13 @@ class GlacierSource(Source):
         name = self.names.name(h)
         dirs, cont, leaf = parse_ioi(name) if name else ([], "", "")
         return AssetInfo("%016X" % h, name, dirs, cont, leaf, p.stat().st_size if p else 0, kind)
+
+    def _names_sig(self) -> int:
+        """Changes when the names database is rebuilt: lists named from it must be rebuilt too."""
+        try:
+            return self.names.db_path.stat().st_mtime_ns
+        except OSError:
+            return 0
 
     def close(self) -> None:
         self.names.close()
@@ -290,7 +301,7 @@ class GlacierSource(Source):
         return None
 
     def texture_png(self, key: str, channel: str = "rgb", max_dim: int = 1024, normal: bool = False) -> bytes:
-        from ...native import R
+        from ...native import N
         from .texture import parse_text_header
         h = int(key, 16)
         tp = self.archive.find("TEXT", h)
@@ -301,7 +312,7 @@ class GlacierSource(Source):
         # the TEXT holds the small mips: the TEXD (big ones) is only read when the preview needs them
         in_text = max(hd.width >> hd.first_text_mip, hd.height >> hd.first_text_mip)
         texd = None if in_text >= min(max_dim, max(hd.width, hd.height)) else self.texd_of(h)
-        return R.texture_png(text, texd, channel, max_dim, normal)[0]
+        return N.texture_png(text, texd, channel, max_dim, normal)[0]
 
     def texture_index(self, progress=print) -> dict:
         """Catalog rows of every TEXT + which materials use them (with the slot and its role) + which meshes use
@@ -356,10 +367,7 @@ class GlacierSource(Source):
         progress(f"{len(materials)} materials, {len(tex_mat)} texture slots")
 
         paths = list(prim.items())
-        if N is not None and hasattr(N, "meta_refs_many"):
-            refs_all = N.meta_refs_many([str(p) for _h, p in paths])
-        else:
-            refs_all = [[rh for rh, _f in (a.meta(p).refs if a.meta(p) else [])] for _h, p in paths]
+        refs_all = N.meta_refs_many([str(p) for _h, p in paths])
         mat_model = []
         for (h, _p), refs in zip(paths, refs_all):
             for rh in refs or []:
@@ -504,7 +512,7 @@ class GlacierSource(Source):
         from ...native import N
         refs = self.collision_refs(h)
         key = (refs.get("dynamic") or refs.get("static")) if prefer_dynamic else (refs.get("static") or refs.get("dynamic"))
-        if N is None or key is None:
+        if key is None:
             return None
         try:
             c = N.parse_collision(self.archive.find("ALOC", key).read_bytes())

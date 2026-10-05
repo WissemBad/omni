@@ -26,30 +26,14 @@ def _weld(subs) -> tuple[np.ndarray, np.ndarray]:
         tris.append(s.indices.reshape(-1, 3).astype(np.int64) + off)
         off += len(s.positions)
     tris = np.concatenate(tris)
-    if N is not None:
-        return N.weld(np.ascontiguousarray(pos), np.ascontiguousarray(tris))
-    key = np.round(pos / 1e-4).astype(np.int64)
-    uniq, inv = np.unique(key, axis=0, return_inverse=True)
-    inv = inv.ravel()
-    verts = np.zeros((len(uniq), 3))
-    np.add.at(verts, inv, pos)
-    verts /= np.bincount(inv, minlength=len(uniq))[:, None]
-    tris = inv[tris]
-    tris = tris[(tris[:, 0] != tris[:, 1]) & (tris[:, 1] != tris[:, 2]) & (tris[:, 0] != tris[:, 2])]
-    return verts, tris
+    return N.weld(np.ascontiguousarray(pos), np.ascontiguousarray(tris))
 
 
 def mesh_volume(verts: np.ndarray, tris: np.ndarray) -> tuple[float, float]:
     """(|signed volume|, fraction of open edges). The volume is only meaningful when the mesh is closed."""
     if len(tris) == 0:
         return 0.0, 1.0
-    if N is not None:
-        return N.mesh_volume(np.ascontiguousarray(verts, np.float64), np.ascontiguousarray(tris, np.int64))
-    a, b, c = verts[tris[:, 0]], verts[tris[:, 1]], verts[tris[:, 2]]
-    vol = abs(float(np.einsum("ij,ij->i", a, np.cross(b, c)).sum()) / 6.0)
-    e = np.sort(np.concatenate([tris[:, [0, 1]], tris[:, [1, 2]], tris[:, [2, 0]]]), axis=1)
-    _, counts = np.unique(e, axis=0, return_counts=True)
-    return vol, float((counts == 1).sum()) / len(counts)
+    return N.mesh_volume(np.ascontiguousarray(verts, np.float64), np.ascontiguousarray(tris, np.int64))
 
 
 def convex_hull(points: np.ndarray):

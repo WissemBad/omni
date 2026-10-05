@@ -207,7 +207,7 @@ def cmd_deploy(a):
 def cmd_native(a):
     from . import native
     if a.build:
-        rc = native.build(release=True, wasm_only=a.wasm)
+        rc = native.build(release=True)
         print("build", "OK" if rc == 0 else f"FAILED ({rc})")
         if rc:
             raise SystemExit(rc)
@@ -271,7 +271,7 @@ def main(argv=None):
     d = sub.add_parser("deploy"); d.add_argument("--remove", action="store_true"); d.set_defaults(fn=cmd_deploy)
     g = sub.add_parser("gma"); g.set_defaults(fn=cmd_gma)
     nv = sub.add_parser("native", help="status of the Rust core; --build compiles and installs it")
-    nv.add_argument("--build", action="store_true"); nv.add_argument("--wasm", action="store_true", help="only the WebAssembly core")
+    nv.add_argument("--build", action="store_true")
     nv.set_defaults(fn=cmd_native)
     so = sub.add_parser("sounds", help="export every sound of the game to a named folder tree")
     so.add_argument("--out", help="output folder (default: workspace/audio/<source>)")
@@ -289,6 +289,9 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if not getattr(a, "fn", None):                    # no command: the desktop window
         a = ap.parse_args(["app"])
+    if a.fn is not cmd_pick_folder:                   # every command uses the configured paths (assets, GMod...)
+        from .core import settings
+        settings.apply()
     if a.fn in (cmd_app, cmd_ui):                     # the packaged app has no console: errors go to logs/omni.log
         from .core import log
         log.setup(console=a.fn is cmd_ui)

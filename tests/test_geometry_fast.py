@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from omni.core import geom
-from omni.native import N
+from omni.native import AVAILABLE
 from omni.targets.source import smd
 
 
@@ -53,7 +53,7 @@ def mesh(rng, n_vertices=400, n_tris=700, key="m"):
         indices=rng.integers(0, n_vertices, n_tris * 3), material_key=key)
 
 
-@pytest.mark.skipif(N is None or not hasattr(N, "smd_static"), reason="native module without smd_static")
+@pytest.mark.skipif(not AVAILABLE, reason="native module not built")
 def test_rust_smd_writer_is_byte_identical(tmp_path):
     rng = np.random.default_rng(1)
     subs = [mesh(rng, key="a"), mesh(rng, 50, 30, key="b")]

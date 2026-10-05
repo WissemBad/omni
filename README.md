@@ -10,7 +10,7 @@ omni reads the resources of **your own copy** of a game, on your PC, and writes 
 
 The first source is *007 First Light* (Glacier engine). Sources are plugins: Hitman (same engine) and others can be added without touching the interface.
 
-Built with Python, Rust (native and WebAssembly core), Nuxt 4, Nuxt UI 4 and [Wissem UI](https://github.com/Wissem-Industries/ui). The window is the system's Edge WebView2, not a bundled browser.
+Built with Python, Rust (native core), Nuxt 4, Nuxt UI 4 and [Wissem UI](https://github.com/Wissem-Industries/ui). The window is the system's Edge WebView2, not a bundled browser.
 
 ## Install
 
@@ -46,11 +46,11 @@ Everything is available from the command line too: `Omni.exe --help`.
 
 ## Development
 
-Requirements: [uv](https://docs.astral.sh/uv/), [Bun](https://bun.sh), a Rust toolchain (rustup, with the `wasm32-unknown-unknown` target) and a token with `read:packages` in your user `.npmrc` for `@wissem-industries/ui`.
+Requirements: [uv](https://docs.astral.sh/uv/), [Bun](https://bun.sh), a Rust toolchain (rustup) and a token with `read:packages` in your user `.npmrc` for `@wissem-industries/ui`.
 
 ```bash
 uv sync
-uv run python -m omni native --build      # Rust core: native module + WebAssembly
+uv run python -m omni native --build      # Rust core (omni_native)
 cd web && bun install && bun run build    # interface
 uv run python -m omni app                 # window (or `omni ui` for the browser)
 uv run pytest                             # tests (the ones needing game data skip themselves)

@@ -214,7 +214,7 @@ def bank_names(source, bank_ids: dict[int, int], events: list[str], cache) -> di
 
 def iter_sounds(source, progress=print) -> list[SoundRef]:
     from ...core.config import CONFIG
-    from ...native import R
+    from ...native import N
     a, names = source.archive, source.names
     wes, wem = a.index("WWES"), a.index("WWEM")
     refs: list[SoundRef] = []
@@ -272,14 +272,13 @@ def iter_sounds(source, progress=print) -> list[SoundRef]:
     switch = wwise_names(source)
     links: dict[int, list] = {}
     bank_id: dict[int, int] = {}
-    if R.has("bank_links"):
-        try:
-            ids, _media, lk, _sourced, nev = R.bank_links(banks, list(switch))
-            bank_id = dict(ids)
-            links = dict(lk)
-            progress(f"bank hierarchy: {nev} events, {len(links)} media reached")
-        except Exception as e:  # noqa: BLE001 - naming falls back to bank/id
-            progress(f"bank hierarchy unreadable: {e}")
+    try:
+        ids, _media, lk, _sourced, nev = N.bank_links(banks, list(switch))
+        bank_id = dict(ids)
+        links = dict(lk)
+        progress(f"bank hierarchy: {nev} events, {len(links)} media reached")
+    except Exception as e:  # noqa: BLE001 - naming falls back to bank/id
+        progress(f"bank hierarchy unreadable: {e}")
     # 2 - events: embedded media + referenced WWEM (music under switches gets its state path)
     def states_of(mid: int, ev: str) -> list[str]:
         e = fnv1(ev)

@@ -214,11 +214,6 @@ const MAINTENANCE = computed(() => [
     icon: 'i-ri-music-2-line',
     run: () => startJob(`/${sid.value}/sounds/relist`, { open: true }),
   },
-  {
-    label: 'Recompiler le cœur Rust (WebAssembly)',
-    icon: 'i-ri-cpu-line',
-    run: () => startJob('/native/build', { open: true }),
-  },
 ])
 </script>
 

@@ -59,7 +59,7 @@ def test_jobs_listing(client):
 def test_system_reports_rust_and_tools(client):
     s = client.get("/api/system").json()
     assert {"rust", "tools", "workspace"} <= set(s)
-    assert {"native", "wasm", "backends"} <= set(s["rust"])
+    assert {"native", "native_version"} <= set(s["rust"])
 
 
 def test_textures_search_detail_and_image(client):

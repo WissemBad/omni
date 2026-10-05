@@ -1,5 +1,5 @@
 # PyInstaller spec: ``uv run pyinstaller packaging/omni.spec --noconfirm`` -> dist/Omni/Omni.exe
-# Needs the web build (web/.output/public), the WebAssembly core (omni/omni_core.wasm) and the native module installed.
+# Needs the web build (web/.output/public) and the native module (omni_native) installed.
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules
@@ -7,7 +7,7 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 ROOT = Path(SPECPATH).parent
 datas, binaries, hidden = [], [], []
 
-for pkg in ("wasmtime", "webview", "py7zr", "coacd", "scipy", "pygltflib", "vpk", "omni_native"):
+for pkg in ("webview", "py7zr", "coacd", "scipy", "pygltflib", "vpk", "omni_native"):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b
@@ -18,7 +18,6 @@ hidden += collect_submodules("uvicorn") + collect_submodules("omni") + [
 ]
 datas += [
     (str(ROOT / "web" / ".output" / "public"), "web/.output/public"),
-    (str(ROOT / "omni" / "omni_core.wasm"), "omni"),
     (str(ROOT / "omni" / "assets"), "omni/assets"),
 ]
 

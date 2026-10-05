@@ -374,14 +374,9 @@ export interface SystemInfo {
   cpus: number
   setup?: { ready: boolean; can_convert: boolean }
   rust: {
-    enabled: boolean
     native: boolean
     native_version: string
     native_error: string
-    wasm: boolean
-    wasm_version: string
-    wasm_error: string
-    backends: Record<string, 'native' | 'wasm' | 'python'>
   }
   tools: SystemTool[]
 }

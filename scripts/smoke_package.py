@@ -55,8 +55,6 @@ def main() -> int:
                 problems.append(f"version {info['version']} != {expected}")
             if not info["rust"]["native"]:
                 problems.append(f"native module not loaded: {info['rust'].get('native_error')}")
-            if not info["rust"]["wasm"]:
-                problems.append("WebAssembly core not loaded")
             if not next((t["ok"] for t in info["tools"] if t["key"] == "web"), False):
                 problems.append("interface not found in the package")
             status, page = get(base + "/")
@@ -72,7 +70,7 @@ def main() -> int:
             if problems:
                 print("FAIL:\n  " + "\n  ".join(problems))
                 return 1
-            print(f"OK: omni {info['version']}, native {info['rust']['native_version']}, wasm, interface served")
+            print(f"OK: omni {info['version']}, native {info['rust']['native_version']}, interface served")
             return 0
         finally:
             if proc.poll() is None:

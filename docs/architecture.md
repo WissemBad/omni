@@ -13,7 +13,7 @@ omni/ui/jobs.py          persistent job queue (SQLite), one heavy job at a time,
 omni/ui/security.py      Host / Origin checks: the local API answers only omni's own window
 omni/core/log.py         log files, crash capture (the packaged app has no console)
 web/                     Nuxt 4 interface (static build served by the API)
-native/                  Rust core (CPython module and WebAssembly)
+native/                  Rust core (CPython module omni_native)
 packaging/               PyInstaller spec and Inno Setup script
 ```
 
@@ -33,7 +33,7 @@ Everything the user owns or derives lives outside the repository, in the data fo
 
 ## Native core
 
-One crate, two builds. The CPython module (`maturin`, features `python` and `parallel`) is the fastest; the WebAssembly build (`--target wasm32-unknown-unknown --no-default-features`, run by wasmtime) needs no native module and is the fallback. `omni/native.py` exposes `R.<function>`: native when the loaded module has the function, WebAssembly otherwise. File-system code (RPKG extraction) is native only.
+One crate built by maturin as a CPython module (features `python` and `parallel`); it is required (no Python or WebAssembly fallback). `omni/native.py` exposes it as `N`, a Rust panic surfacing as `NativeError`. `cargo test --no-default-features` tests the modules without Python; `native/src/fuzz.rs` feeds every parser random and mutated files.
 
 Modules: textures (TEXT/TEXD, BCn, mips, DXT, VTF, PNG), audio (Wwise Vorbis to Ogg, Platinum ADPCM, FLAC, WAV), Wwise banks (HIRC hierarchy), RPKG reader and extractor, PhysX collision (ALOC), skinning, SMD, entities.
 

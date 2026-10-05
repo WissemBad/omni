@@ -87,32 +87,3 @@ const PARAM_ROLE: Record<string, string> = {
   $selfillummask: 'emissive',
 }
 const texRoleOf = (param: string) => PARAM_ROLE[param] ?? ''
-
-/** Origin game materials of converted materials (viewer "origin" view). */
-export function originMaterials(materials: OutputMaterial[]): SourceMaterial[] {
-  const seen = new Set<string>()
-  const out: SourceMaterial[] = []
-  for (const m of materials) {
-    const o = m.origin
-    if (!o || seen.has(o.key)) continue
-    seen.add(o.key)
-    out.push({
-      key: o.key,
-      name: o.name,
-      source_name: o.source,
-      class: o.cls,
-      params: {},
-      textures: o.textures.map((t) => ({
-        role: t.role,
-        slot: t.slot,
-        key: t.key,
-        width: t.width,
-        height: t.height,
-        format: t.fmt,
-        name: t.name,
-        found: true,
-      })),
-    })
-  }
-  return out
-}

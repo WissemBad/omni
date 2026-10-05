@@ -26,8 +26,6 @@ jobs:
           enable-cache: true
 
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -60,7 +58,6 @@ jobs:
         run: |
           uvx maturin build --release -m native/Cargo.toml -o wheels
           uv pip install --find-links wheels omni_native
-          uv run --no-sync python -m omni native --build --wasm
 
       - name: Tests
         run: uv run --no-sync pytest -q

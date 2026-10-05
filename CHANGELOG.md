@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Removed
+
+- The WebAssembly core and every pure-Python fallback: the Rust module is required (the packaged app ships it), one
+  code path for textures, SMD, collisions, skinning and sounds. `wasmtime` and `texture2ddecoder` are no longer
+  dependencies; obsolete investigation scripts and dead code are gone.
+
+### Fixed
+
+- Command-line commands now apply the saved settings (asset folder, GMod, compiler).
+- The character and sound lists are never cached empty, and are rebuilt when the names change.
+
 ## [0.4.0] - 2026-10-05
 
 ### Added
