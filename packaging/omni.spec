@@ -13,7 +13,7 @@ for pkg in ("wasmtime", "webview", "py7zr", "coacd", "scipy", "pygltflib", "vpk"
     binaries += b
     hidden += h
 hidden += collect_submodules("uvicorn") + collect_submodules("omni") + [
-    "webview.platforms.edgechromium", "clr_loader", "pythonnet", "multiprocessing",
+    "webview.platforms.edgechromium", "clr_loader", "pythonnet", "multiprocessing", "pystray._win32",
     "pyppmd", "pybcj", "brotli", "zstandard", "inflate64", "multivolumefile", "texttable", "Cryptodome",
 ]
 datas += [

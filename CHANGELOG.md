@@ -4,6 +4,39 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- **Job queue.** Heavy jobs (conversions, exports, indexing, setup steps) run one at a time and wait in a visible,
+  reorderable queue; an identical job already queued or running is refused. Jobs, logs and every result are stored in
+  `<workspace>/jobs.sqlite`: the history survives a restart and a job cut short is *interrupted* and can be resumed.
+- Live job list over server-sent events (no polling), results paged from the database, failures grouped by cause
+  with "Réessayer ceux-là", "Réessayer les échecs", "Reprendre", "Relancer tout", copyable report.
+- **Desktop shell.** One instance (a second launch brings the window to the front), instant splash, window size and
+  position remembered, notification-area icon: closing the window while a job runs keeps omni working in the
+  background and a toast tells when it is done. A native confirmation replaces the browser's `confirm()`.
+- **Garry's Mod.** "Ouvrir dans Garry's Mod" starts the game on a map with the model ready to spawn (`omni_spawn`
+  Lua in the addon); a warning in the jobs panel when GMod is open while models are written.
+- **Updates.** The latest GitHub release is checked at launch (read token for a private repository); one click
+  downloads the installer, verifies its SHA-256 and installs.
+- Convert "everything matching a filter" server-side (no more 50,000 keys through the browser).
+- Installer fetches the WebView2 runtime when it is missing.
+- CI: packaged-app smoke test (`scripts/smoke_package.py`) on release and on pull requests touching the packaging;
+  Node 24 action versions; Bun pinned and cached.
+
+### Changed
+
+- A second batch, export or setup step is queued behind the running one instead of competing with it.
+- Messages of the API are in French; the property selection survives a restart; the home page does not refresh a
+  hidden window.
+
+### Fixed
+
+- three.js memory: environment map, checker texture, grid and glTF files dropped while loading are released, and the
+  WebGL context is freed when the viewer closes.
+- Pages no longer fail silently (sound list, preview deletion, selecting all props); a character preview stops
+  polling when the page is left; the setup page no longer polls twice.
+
+
 ## [0.3.1] - 2026-10-05
 
 ### Added

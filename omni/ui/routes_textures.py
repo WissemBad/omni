@@ -17,7 +17,7 @@ def register(app: FastAPI, *, jobs, need, texcat_of, catalog_of, converted) -> N
         need(sid, "textures")
         c = texcat_of(sid)
         if c is None:
-            raise HTTPException(404, "no texture catalog")
+            raise HTTPException(404, "Pas de catalogue de textures")
         return c
 
     @app.get("/api/{sid}/textures/status")
@@ -29,7 +29,7 @@ def register(app: FastAPI, *, jobs, need, texcat_of, catalog_of, converted) -> N
     @app.post("/api/{sid}/textures/rebuild")
     def tex_rebuild(sid: str):
         c = cat(sid)
-        job = jobs.create("textures", "Index des textures", sid)
+        job = jobs.create("textures", "Index des textures", sid, cancellable=False)
 
         def run(job):
             c.build()
@@ -60,7 +60,7 @@ def register(app: FastAPI, *, jobs, need, texcat_of, catalog_of, converted) -> N
         c = cat(sid)
         row = c.get(key)
         if row is None:
-            raise HTTPException(404, "unknown texture")
+            raise HTTPException(404, "Texture inconnue")
         src = need(sid, "textures")
         users = c.users(key)
         # models: the props catalog names them, the addon says whether they are converted
@@ -82,9 +82,9 @@ def register(app: FastAPI, *, jobs, need, texcat_of, catalog_of, converted) -> N
         """PNG of a game texture; ``normal`` -1 = decide from its role (BC5 normals get their blue rebuilt)."""
         src = need(sid, "textures")
         if channel not in CHANNELS:
-            raise HTTPException(400, "bad channel")
+            raise HTTPException(400, "Canal inconnu")
         if not re.fullmatch(r"[0-9A-Fa-f]{16}", key):
-            raise HTTPException(400, "bad key")
+            raise HTTPException(400, "Clé invalide")
         size = max(16, min(size, 8192))
         if normal < 0:
             row = texcat_of(sid).get(key) if texcat_of(sid) is not None else None
@@ -94,7 +94,7 @@ def register(app: FastAPI, *, jobs, need, texcat_of, catalog_of, converted) -> N
             try:
                 png = src.texture_png(key.upper(), channel, size, bool(normal))
             except FileNotFoundError:
-                raise HTTPException(404, "texture not found")
+                raise HTTPException(404, "Texture introuvable")
             except Exception as e:  # noqa: BLE001
                 raise HTTPException(415, f"{type(e).__name__}: {e}")
             out.parent.mkdir(parents=True, exist_ok=True)

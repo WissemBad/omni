@@ -45,8 +45,29 @@ watch(
   { deep: true },
 )
 
+const confirm = useConfirm()
+const updates = useUpdate()
+const updateInfo = updates.info
+const checking = ref(false)
+async function checkNow() {
+  checking.value = true
+  try {
+    await save({ updates: { check: s.value!.updates.check, token: s.value!.updates.token } })
+    await updates.check(true)
+  } finally {
+    checking.value = false
+  }
+}
 async function resetAll() {
-  if (!confirm('Revenir à tous les réglages d’origine ?')) return
+  if (
+    !(await confirm({
+      title: 'Rétablir les réglages d’origine ?',
+      description: 'Tous les réglages reviennent à leur valeur par défaut.',
+      confirmLabel: 'Rétablir',
+      destructive: true,
+    }))
+  )
+    return
   ready = false
   await reset()
   s.value = structuredClone(toRaw(values.value!))
@@ -126,23 +147,46 @@ const sizes = computed(() =>
 )
 async function clearPreviews() {
   if (
-    !confirm(
-      'Supprimer les aperçus 3D et les miniatures en cache ? Ils seront recréés à la demande.',
-    )
+    !(await confirm({
+      title: 'Supprimer les aperçus ?',
+      description: 'Les aperçus 3D et les miniatures en cache seront recréés à la demande.',
+      confirmLabel: 'Supprimer',
+      destructive: true,
+    }))
   )
     return
-  await api(`/${sid.value}/previews/clear`, { method: 'POST' })
-  toast.add({ title: 'Aperçus supprimés', icon: 'i-ri-delete-bin-line' })
-  loadStorage()
+  try {
+    await api(`/${sid.value}/previews/clear`, { method: 'POST' })
+    toast.add({ title: 'Aperçus supprimés', icon: 'i-ri-delete-bin-line' })
+    loadStorage()
+  } catch (e) {
+    toast.add({ title: 'Suppression impossible', description: apiError(e), color: 'error' })
+  }
 }
 async function stop() {
-  if (!confirm('Arrêter omni ? Il ne répondra plus jusqu’au prochain lancement.')) return
+  if (
+    !(await confirm({
+      title: 'Arrêter omni ?',
+      description: 'Il ne répondra plus jusqu’au prochain lancement.',
+      confirmLabel: 'Arrêter',
+      destructive: true,
+    }))
+  )
+    return
   try {
     await api('/shutdown', { method: 'POST' })
   } catch (e) {
-    // a conversion is running: stopping now cuts it short
+    // a conversion is running: stopping now cuts it short (it is recorded as interrupted and can be resumed)
     const busy = (e as { statusCode?: number }).statusCode === 409
-    if (!busy || !confirm(`${apiError(e)}. Arrêter quand même ?`)) {
+    if (
+      !busy ||
+      !(await confirm({
+        title: 'Un travail est en cours',
+        description: `${apiError(e)}. Il sera interrompu ; « Reprendre » le relancera au prochain lancement.`,
+        confirmLabel: 'Arrêter quand même',
+        destructive: true,
+      }))
+    ) {
       if (!busy) toast.add({ title: 'Arrêt impossible', description: apiError(e), color: 'error' })
       return
     }
@@ -248,6 +292,19 @@ const MAINTENANCE = computed(() => [
 
           <UCard :ui="{ body: 'space-y-5 p-4 sm:p-4' }">
             <template #header><h2 class="text-base font-semibold text-highlighted">Général</h2></template>
+            <div class="space-y-3 rounded-md border border-default p-3">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="text-sm font-medium text-highlighted">Mises à jour</h3>
+                <UButton label="Vérifier maintenant" icon="i-ri-refresh-line" size="xs" color="neutral" variant="soft" :loading="checking" @click="checkNow" />
+              </div>
+              <USwitch v-model="s.updates.check" label="Chercher une mise à jour au lancement" />
+              <UFormField label="Jeton GitHub" description="Nécessaire tant que le dépôt est privé (lecture des versions).">
+                <UInput v-model="s.updates.token" type="password" class="w-full" placeholder="ghp_…" autocomplete="off" />
+              </UFormField>
+              <p v-if="updateInfo" class="text-xs" :class="updateInfo.error ? 'text-error' : 'text-muted'">
+                {{ updateInfo.error || (updateInfo.available ? `omni ${updateInfo.latest} est disponible.` : `omni ${updateInfo.current} est à jour.`) }}
+              </p>
+            </div>
             <USwitch v-model="s.general.open_browser" label="Ouvrir le navigateur au lancement" description="Pour la commande « omni ui » (l’application a sa propre fenêtre)." />
             <UFormField label="Dossier de Garry’s Mod" description="Vide : le dossier Steam par défaut.">
               <UInput v-model="s.paths.gmod" class="w-full" placeholder="C:\Program Files (x86)\Steam\steamapps\common\GarrysMod" />

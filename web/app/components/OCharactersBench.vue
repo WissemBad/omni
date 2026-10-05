@@ -148,6 +148,9 @@ const state = reactive({ preset: 0, skin: 0, groups: [] as number[] })
 let mats = new Map<number, Promise<THREE.Material>>()
 let pick = 0
 
+// leaving the page ends the wait for a preview that is still being built
+onBeforeUnmount(() => pick++)
+
 async function select(c: Character) {
   const mine = ++pick
   active.value = c
@@ -308,7 +311,6 @@ async function build() {
     })
     await jobs.track(job)
     jobs.open.value = true
-    jobs.schedule()
   } catch (e) {
     toast.add({ title: 'Création impossible', description: apiError(e), color: 'error' })
   } finally {

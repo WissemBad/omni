@@ -23,6 +23,8 @@ def deploy(source_id: str, title: str, cfg: Config = CONFIG) -> str:
     addon = cfg.addon_dir(source_id)
     addon.mkdir(parents=True, exist_ok=True)
     write_addon_json(addon, source_id, title)
+    from .gmod import ensure_spawn_script
+    ensure_spawn_script(addon)                       # lets "Ouvrir dans GMod" spawn a model when the game starts
     lp = link_path(cfg, source_id)
     if lp.exists() or lp.is_symlink():
         if _is_link(lp):

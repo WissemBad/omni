@@ -171,6 +171,27 @@ watch([q, kind, cat, sort], () => {
 })
 watch(inspectorTab, () => sync())
 
+// ---- Garry's Mod: start it on a map with the selected model ready to spawn
+const gmodBusy = ref(false)
+async function openInGmod() {
+  if (!active.value) return
+  gmodBusy.value = true
+  try {
+    const r = await api<{ hint: string }>(`/${sid.value}/gmod/launch`, {
+      method: 'POST',
+      body: {
+        model: active.value.path,
+        kind: active.value.kind === 'character' ? 'player' : 'prop',
+      },
+    })
+    useToast().add({ title: 'Garry’s Mod', description: r.hint, icon: 'i-ri-gamepad-line' })
+  } catch (e) {
+    useToast().add({ title: 'Ouverture impossible', description: apiError(e), color: 'error' })
+  } finally {
+    gmodBusy.value = false
+  }
+}
+
 // ---- selected model
 const model = ref<OutputModel | null>(null)
 const modelError = ref('')
@@ -435,7 +456,6 @@ async function started(job: string) {
   })
   await jobsState.track(job)
   jobsState.open.value = true
-  jobsState.schedule()
 }
 
 const finished = computed(() =>
@@ -677,6 +697,9 @@ defineShortcuts({
             </UDropdownMenu>
             <UTooltip v-if="compareUrl" text="Comparer avec l’original du jeu" :kbds="['V']" :content="{ side: 'left' }">
               <UButton icon="i-ri-arrow-left-right-line" size="sm" :color="compare ? 'primary' : 'neutral'" :variant="compare ? 'soft' : 'ghost'" aria-label="Comparer avec l’original" @click="compare = !compare" />
+            </UTooltip>
+            <UTooltip v-if="active && !currentRoot?.external" text="Ouvrir dans Garry’s Mod" :content="{ side: 'left' }">
+              <UButton icon="i-ri-gamepad-line" size="sm" color="neutral" variant="ghost" aria-label="Ouvrir dans Garry’s Mod" :loading="gmodBusy" @click="openInGmod" />
             </UTooltip>
             <UTooltip text="Détails du modèle" :content="{ side: 'left' }">
               <UButton class="xl:hidden" icon="i-ri-layout-right-line" size="sm" color="neutral" variant="ghost" aria-label="Ouvrir l’inspecteur" @click="inspectorOpen = true" />

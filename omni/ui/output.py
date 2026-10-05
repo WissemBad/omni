@@ -89,7 +89,7 @@ def _within(root: Path, rel: str) -> Path:
     f = (root / rel).resolve()
     base = root.resolve()
     if base not in f.parents:
-        raise HTTPException(404)
+        raise HTTPException(404, "Introuvable")
     return f
 
 
@@ -456,7 +456,7 @@ def build_glb(root: str, rel: str, lod: int, out: Path) -> None:
     mdl = (addon / rel).read_bytes()
     vvd, vtx = stem.with_suffix(".vvd"), _find_vtx(stem)
     if not (vvd.exists() and vtx):
-        raise HTTPException(404, "vvd/vtx missing")
+        raise HTTPException(404, "Fichiers vvd/vtx manquants")
     d = studio.parse_mdl(mdl)
     geo = studio.read_geometry(mdl, vvd.read_bytes(), vtx.read_bytes(), lod)
     tex_used = sorted({t for row in d["skins"] for t in row}) or list(range(len(d["textures"])))
@@ -481,7 +481,7 @@ def build_glb(root: str, rel: str, lod: int, out: Path) -> None:
                       "positions": geo.pos[uniq] / studio.UNITS_PER_METER, "normals": geo.nrm[uniq],
                       "uvs": geo.uv[uniq], "indices": inv.astype(np.uint32), "material": index_of.get(ti, 0)})
     if not nodes:
-        raise HTTPException(404, "model has no geometry")
+        raise HTTPException(404, "Le modèle n’a pas de géométrie")
 
     def read_texture(path, max_size):
         p = str(path)
@@ -513,7 +513,7 @@ def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: 
         for r in roots_of(sid):
             if r.id == root:
                 return r
-        raise HTTPException(404, "unknown folder")
+        raise HTTPException(404, "Dossier inconnu")
 
     def index_of(sid: str, root: str) -> OutputIndex:
         r = root_of(sid, root)
@@ -522,10 +522,10 @@ def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: 
     def model_file(sid: str, root: str, path: str) -> tuple[Root, Path]:
         r = root_of(sid, root)
         if not path.endswith(".mdl"):
-            raise HTTPException(400, "not a model")
+            raise HTTPException(400, "Ce n’est pas un modèle")
         f = _within(r.path, path)
         if not f.is_file():
-            raise HTTPException(404, "model not found in this folder")
+            raise HTTPException(404, "Modèle introuvable dans ce dossier")
         return r, f
 
     def cache_dir(sid: str) -> Path:
@@ -638,7 +638,7 @@ def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: 
             except HTTPException:
                 raise
             except Exception as e:  # noqa: BLE001
-                raise HTTPException(422, f"cannot render: {type(e).__name__}: {e}")
+                raise HTTPException(422, f"Rendu impossible : {type(e).__name__}: {e}")
         return FileResponse(out, media_type="model/gltf-binary")
 
     @app.get("/api/{sid}/output/collision")
@@ -646,27 +646,27 @@ def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: 
         _r, f = model_file(sid, root, path)
         phy = f.with_suffix(".phy")
         if not phy.exists():
-            raise HTTPException(404, "no collision model")
+            raise HTTPException(404, "Pas de modèle de collision")
         pc = studio.read_phy(phy.read_bytes())
         if not pc or not pc["pieces"]:
-            raise HTTPException(404, "collision model unreadable")
+            raise HTTPException(404, "Modèle de collision illisible")
         pieces = studio.phy_pieces_to_view(f.read_bytes(), pc["pieces"])
         return {"pieces": [p.round(5).reshape(-1).tolist() for p in pieces], "text": pc["text"][:2000]}
 
     def texture_file(sid: str, root: str, path: str) -> tuple[Root, Path]:
         r = root_of(sid, root)
         if not path.endswith(".vtf"):
-            raise HTTPException(400, "not a texture")
+            raise HTTPException(400, "Ce n’est pas une texture")
         f = _within(r.path, path)
         if not f.is_file():
-            raise HTTPException(404, "texture not found in this folder")
+            raise HTTPException(404, "Texture introuvable dans ce dossier")
         return r, f
 
     @app.get("/api/{sid}/output/texture")
     def output_texture(sid: str, path: str, channel: str = "rgb", size: int = 1024, root: str = ""):
         r, f = texture_file(sid, root, path)
         if channel not in ("rgb", "rgba", "r", "g", "b", "a"):
-            raise HTTPException(400, "bad channel")
+            raise HTTPException(400, "Canal inconnu")
         size = max(16, min(size, 4096))
         key = hashlib.sha1(f"{r.id}|{path}|{channel}|{size}".encode()).hexdigest()[:16]
         out = cache_dir(sid) / "tex" / f"{key}_{int(f.stat().st_mtime)}.png"
@@ -687,7 +687,7 @@ def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: 
         stem = f.with_suffix("")
         vtx = _find_vtx(stem)
         if not (stem.with_suffix(".vvd").exists() and vtx):
-            raise HTTPException(404, "vvd/vtx missing")
+            raise HTTPException(404, "Fichiers vvd/vtx manquants")
         geo = studio.read_geometry(f.read_bytes(), stem.with_suffix(".vvd").read_bytes(), vtx.read_bytes(), 0)
         return Response(studio.uv_overlay(geo, skinref, max(64, min(size, 4096))), media_type="image/png")
 
@@ -696,6 +696,6 @@ def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: 
         r = root_of(sid, root)
         f = _within(r.path, path)
         if not f.exists():
-            raise HTTPException(404)
+            raise HTTPException(404, "Introuvable")
         reveal(f)
         return {"ok": True}

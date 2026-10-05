@@ -184,10 +184,15 @@ function tick(p: Prop, index: number, shift: boolean) {
 }
 
 const selectingAll = ref(false)
+const confirm = useConfirm()
 async function selectAllMatching() {
   if (
     total.value > 3000 &&
-    !confirm(`Sélectionner les ${total.value.toLocaleString('fr-FR')} résultats ?`)
+    !(await confirm({
+      title: 'Tout sélectionner ?',
+      description: `${total.value.toLocaleString('fr-FR')} résultats seront sélectionnés.`,
+      confirmLabel: 'Sélectionner',
+    }))
   )
     return
   selectingAll.value = true
@@ -204,6 +209,8 @@ async function selectAllMatching() {
       title: `${keys.length.toLocaleString('fr-FR')} props sélectionnés`,
       icon: 'i-ri-checkbox-multiple-line',
     })
+  } catch (e) {
+    toast.add({ title: 'Sélection impossible', description: apiError(e), color: 'error' })
   } finally {
     selectingAll.value = false
   }
@@ -222,7 +229,6 @@ async function started(job: string) {
   })
   await jobs.track(job)
   jobs.open.value = true
-  jobs.schedule()
   selection.clear()
 }
 

@@ -53,18 +53,32 @@ def _dir_size(p: Path, budget: float = 3.0) -> int:
     return total
 
 
-def create_app(sources: list[str] | None = None) -> FastAPI:
+def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "auto") -> FastAPI:
+    """``jobs_db``: where the job history lives (``None`` = in memory, for tests)."""
     from . import security
+
     @asynccontextmanager
     async def lifespan(_app):
         settings.apply()
         warm()
+        threading.Thread(target=look_for_update, daemon=True, name="update-check").start()
         yield
 
     app = FastAPI(title="omni", version=VERSION, lifespan=lifespan)
     security.install(app)
+    from .shell import Shell
+    app.state.shell = Shell()
     ids = sources or registry.source_ids()
-    jobs = Jobs()
+    jobs = Jobs(CONFIG.workspace / "jobs.sqlite" if jobs_db == "auto" else jobs_db)
+    jobs.on_finish.append(app.state.shell.notify_job)
+
+    def look_for_update():
+        from ..core import update
+        try:
+            if settings.get("updates", "check"):
+                update.check(settings.get("updates", "token"))
+        except Exception:  # noqa: BLE001 - never a reason to fail at launch
+            pass
     catalogs: dict[str, Catalog] = {}
     texcats: dict[str, TextureCatalog] = {}
     sizes: dict[str, tuple[float, dict]] = {}
@@ -73,12 +87,12 @@ def create_app(sources: list[str] | None = None) -> FastAPI:
         try:
             return registry.get_source(sid)
         except KeyError:
-            raise HTTPException(404, f"unknown source {sid}")
+            raise HTTPException(404, f"Source inconnue : {sid}")
 
     def need(sid: str, capability: str):
         src = source_of(sid)
         if capability not in getattr(src, "capabilities", ()):
-            raise HTTPException(404, f"{sid} has no {capability}")
+            raise HTTPException(404, f"{sid} n’a pas d’atelier « {capability} »")
         return src
 
     instances = threading.Lock()          # two first requests must not each open (and build) a catalog
@@ -196,7 +210,7 @@ def create_app(sources: list[str] | None = None) -> FastAPI:
     @app.post("/api/{sid}/gma")
     def gma(sid: str):
         source_of(sid)
-        job = jobs.create("maintenance", "Paquet .gma", sid)
+        job = jobs.create("maintenance", "Paquet .gma", sid, cancellable=False)
 
         def run(job):
             from ..targets.source import deploy
@@ -207,16 +221,64 @@ def create_app(sources: list[str] | None = None) -> FastAPI:
 
     # ---------------------------------------------------------------------------------------------- jobs
     @app.get("/api/jobs")
-    def jobs_():
-        return jobs.recent()
+    def jobs_(limit: int = 40, offset: int = 0):
+        return jobs.recent(min(limit, 200), offset)
+
+    @app.get("/api/jobs/stream")
+    def jobs_stream():
+        """Server-sent events: the job list is pushed whenever something changes (at most four times a second)."""
+        import json as _json
+
+        from fastapi.responses import StreamingResponse
+
+        def events():
+            seen, sent = -1, 0.0
+            while True:
+                version = jobs.wait(seen, 15.0)
+                if version == seen:
+                    yield ": ping\n\n"
+                    continue
+                pause = 0.25 - (time.time() - sent)
+                if pause > 0:
+                    time.sleep(pause)
+                seen, sent = jobs.version, time.time()
+                yield f"event: jobs\ndata: {_json.dumps(jobs.recent(30), default=str)}\n\n"
+        return StreamingResponse(events(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    @app.post("/api/jobs/clear")
+    def jobs_clear():
+        return jobs.clear_finished()
 
     @app.get("/api/jobs/{jid}")
-    def job_(jid: str):
-        return jobs.get(jid)
+    def job_(jid: str, tail: int = 0):
+        return jobs.get(jid, tail=min(tail, 300))
+
+    @app.get("/api/jobs/{jid}/results")
+    def job_results(jid: str, offset: int = 0, limit: int = 100, status: str = "", cause: str = ""):
+        return jobs.results(jid, offset, min(limit, 500), status, cause)
+
+    @app.get("/api/jobs/{jid}/report")
+    def job_report(jid: str, status: str = "FAILED"):
+        """The failed (or ``status``) results grouped by cause, biggest first."""
+        return jobs.report(jid, status)
 
     @app.post("/api/jobs/{jid}/cancel")
     def job_cancel(jid: str):
         return jobs.cancel(jid)
+
+    @app.post("/api/jobs/{jid}/front")
+    def job_front(jid: str):
+        return jobs.move_to_front(jid)
+
+    @app.post("/api/jobs/{jid}/retry")
+    def job_retry(jid: str, scope: str = "failed", cause: str = ""):
+        """New job from this one: ``failed`` items (optionally one ``cause``), ``remaining`` ones, or ``all``."""
+        return jobs.retry(jid, scope, cause)
+
+    @app.delete("/api/jobs/{jid}")
+    def job_remove(jid: str):
+        return jobs.remove(jid)
 
     # ------------------------------------------------------------------------------------------ workbenches
     from . import output, routes_models, routes_setup, routes_sounds, routes_textures
@@ -339,7 +401,7 @@ def create_app(sources: list[str] | None = None) -> FastAPI:
     @app.post("/api/{sid}/catalog/rebuild")
     def catalog_rebuild(sid: str):
         need(sid, "props")
-        job = jobs.create("maintenance", "Catalogue des props", sid)
+        job = jobs.create("maintenance", "Catalogue des props", sid, cancellable=False)
 
         def run(job):
             n = catalog_of(sid).build(force=True)
@@ -349,7 +411,7 @@ def create_app(sources: list[str] | None = None) -> FastAPI:
 
     @app.post("/api/native/build")
     def native_build():
-        job = jobs.create("maintenance", "Cœur Rust (WebAssembly)", "")
+        job = jobs.create("maintenance", "Cœur Rust (WebAssembly)", "", cancellable=False)
 
         def run(job):
             from .. import native
@@ -360,12 +422,61 @@ def create_app(sources: list[str] | None = None) -> FastAPI:
         jobs.run(job, run)
         return {"job": job["id"]}
 
+    @app.get("/api/update")
+    def update_info(force: bool = False):
+        """The latest release and whether it is newer (cached six hours; ``force`` asks GitHub again)."""
+        from ..core import update
+        return update.check(settings.get("updates", "token"), force)
+
+    @app.post("/api/update/install")
+    def update_install():
+        """Download the installer (SHA-256 checked) and run it: it closes omni and starts the new version."""
+        from ..core import update
+        tok = settings.get("updates", "token")
+        info = update.check(tok, force=True)
+        if not info["available"]:
+            raise HTTPException(409, info["error"] or "omni est à jour")
+        if any(j["kind"] != "maintenance" for j in jobs.running()):
+            raise HTTPException(409, "Des travaux sont en cours : mets à jour quand ils sont terminés")
+        job = jobs.create("maintenance", f"Mise à jour {info['latest']}", "", dedupe="update")
+
+        def run(job):
+            path = update.download(info, tok, lambda d, t: jobs.count(job, d, t), jobs.cancel_event(job))
+            jobs.log(job, "Installation : omni va se fermer puis redémarrer")
+            update.install(path)
+            threading.Timer(4.0, lambda: os._exit(0)).start()
+            return {"installateur": path.name}
+        jobs.run(job, run)
+        return {"job": job["id"]}
+
+    @app.get("/api/gmod/status")
+    def gmod_status():
+        """Is Garry's Mod open (its files are locked then) and installed."""
+        from ..targets.source import gmod
+        return {"running": gmod.running(), "installed": (CONFIG.gmod / "garrysmod").is_dir()}
+
+    @app.post("/api/{sid}/gmod/launch")
+    def gmod_launch(sid: str, req: dict):
+        """Open a converted model in Garry's Mod (``{"model": "models/omni/....mdl", "kind": "prop" | "player"}``)."""
+        from ..targets.source import gmod
+        source_of(sid)
+        try:
+            return gmod.launch(sid, str(req.get("model", "")), str(req.get("kind", "prop")))
+        except (FileNotFoundError, ValueError) as e:
+            raise HTTPException(404, str(e))
+
+    @app.post("/api/focus")
+    def focus():
+        """A second launch asks the running window to come to the front."""
+        return {"ok": app.state.shell.request_focus()}
+
     @app.post("/api/shutdown")
     def shutdown(force: bool = False):
         """Stop the server (the window closes with it). Running jobs are cut short: asked for confirmation first."""
         running = jobs.running()
         if running and not force:
-            raise HTTPException(409, f"{len(running)} travail(aux) en cours : {running[0]['label']}")
+            raise HTTPException(409, f"{len(running)} travail(aux) en cours ou en attente : {running[0]['label']}")
+        jobs.shutdown()                      # what is cut short is recorded as interrupted and can be resumed
         threading.Timer(0.5, lambda: os._exit(0)).start()
         return {"ok": True}
 

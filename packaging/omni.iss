@@ -38,6 +38,38 @@ Name: "{autoprograms}\Omni"; Filename: "{app}\Omni.exe"
 Name: "{autodesktop}\Omni"; Filename: "{app}\Omni.exe"; Tasks: desktopicon
 
 [Run]
+; the window is Edge WebView2 (preinstalled on Windows 11): fetch Microsoft's bootstrapper when it is missing
+Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "Installation de Microsoft Edge WebView2…"; Check: NeedsWebView2; Flags: waituntilterminated
 Filename: "{app}\Omni.exe"; Description: "{cm:LaunchProgram,Omni}"; Flags: nowait postinstall skipifsilent
 
 ; The data folder (%LOCALAPPDATA%\omni: extracted resources, exports, settings) is left in place on uninstall.
+
+[Code]
+const
+  WebView2Client = 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+
+function WebView2Installed(): Boolean;
+var
+  Version: String;
+begin
+  Result := (RegQueryStringValue(HKLM, 'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Version) or
+             RegQueryStringValue(HKCU, WebView2Client, 'pv', Version) or
+             RegQueryStringValue(HKLM, WebView2Client, 'pv', Version)) and (Version <> '') and (Version <> '0.0.0.0');
+end;
+
+function NeedsWebView2(): Boolean;
+begin
+  Result := not WebView2Installed();
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if (CurStep = ssInstall) and NeedsWebView2() then
+  begin
+    try
+      DownloadTemporaryFile('https://go.microsoft.com/fwlink/p/?LinkId=2124703', 'MicrosoftEdgeWebview2Setup.exe', '', nil);
+    except
+      Log('WebView2 bootstrapper download failed: ' + GetExceptionMessage);
+    end;
+  end;
+end;

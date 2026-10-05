@@ -12,7 +12,7 @@ pytestmark = pytest.mark.skipif(not CONFIG.assets_sorted.exists(), reason="game 
 
 @pytest.fixture(scope="module")
 def client():
-    return TestClient(create_app(), base_url="http://127.0.0.1:8770")
+    return TestClient(create_app(jobs_db=None), base_url="http://127.0.0.1:8770")
 
 
 def test_sources_declare_capabilities(client):

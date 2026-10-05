@@ -64,88 +64,177 @@ export function useSourceDetails() {
   return { details: current, refresh, toggleDeploy }
 }
 
-let pollTimer: ReturnType<typeof setTimeout> | undefined
+let stream: EventSource | undefined
+let retryTimer: ReturnType<typeof setTimeout> | undefined
+let titleBase = ''
 
-/** Long operations (conversion, playermodel build, sound export): one shared poller. */
+const ACTIVE = ['queued', 'running']
+
+/**
+ * Long operations (conversion, playermodel build, sound export, setup steps): one shared live list.
+ * The server pushes the list over server-sent events whenever something changes; if the stream drops, it reconnects
+ * (and reads the list once so nothing is missed).
+ */
 export function useJobs() {
   const jobs = useState<Job[]>('jobs', () => [])
   const open = useState('jobs-open', () => false)
-  const watched = useState<string[]>('jobs-watched', () => [])
-  const running = computed(() => jobs.value.filter((j) => j.phase === 'running').length)
+  const live = useState('jobs-live', () => false)
+  const running = computed(() => jobs.value.filter((j) => ACTIVE.includes(j.phase)).length)
   const toast = useToast()
+
+  function announce(j: Job) {
+    const ok = j.phase === 'done'
+    const partial = ok && (j.failed ?? 0) > 0
+    toast.add({
+      title: ok
+        ? `${j.label} : terminé${partial ? ` (${j.failed} échec(s))` : ''}`
+        : j.phase === 'cancelled'
+          ? `${j.label} : annulé`
+          : j.phase === 'interrupted'
+            ? `${j.label} : interrompu`
+            : `${j.label} : échec`,
+      description: j.error || j.last || undefined,
+      color:
+        ok && !partial ? 'success' : j.phase === 'cancelled' ? 'neutral' : ok ? 'warning' : 'error',
+      icon: ok
+        ? 'i-ri-checkbox-circle-line'
+        : j.phase === 'cancelled'
+          ? 'i-ri-stop-circle-line'
+          : 'i-ri-error-warning-line',
+      actions: [
+        ...(ok && j.models
+          ? [
+              {
+                label: 'Voir le résultat',
+                onClick: () =>
+                  navigateTo({
+                    path: `/${j.source}/viewer`,
+                    query: j.models === 1 ? { m: j.model } : {},
+                  }),
+              },
+            ]
+          : []),
+        { label: 'Détails', onClick: () => (open.value = true) },
+      ],
+    })
+  }
+
+  function apply(next: Job[]) {
+    const before = new Map(jobs.value.map((j) => [j.id, j.phase]))
+    jobs.value = next
+    for (const j of next) {
+      const was = before.get(j.id)
+      if (was && ACTIVE.includes(was) && !ACTIVE.includes(j.phase)) announce(j)
+    }
+    if (import.meta.client) {
+      titleBase ||= document.title.replace(/^\(.*?\) /, '')
+      const run = next.find((j) => j.phase === 'running')
+      document.title = run
+        ? `(${run.total ? `${Math.round((run.done / run.total) * 100)} %` : 'en cours'}) ${titleBase}`
+        : titleBase
+    }
+  }
 
   async function refresh() {
     try {
-      const before = new Map(jobs.value.map((j) => [j.id, j.phase]))
-      jobs.value = await api<Job[]>('/jobs')
-      for (const j of jobs.value) {
-        if (
-          before.get(j.id) === 'running' &&
-          j.phase !== 'running' &&
-          watched.value.includes(j.id)
-        ) {
-          watched.value = watched.value.filter((id) => id !== j.id)
-          const ok = j.phase === 'done'
-          toast.add({
-            title: ok
-              ? `${j.label} : terminé`
-              : j.phase === 'cancelled'
-                ? `${j.label} : annulé`
-                : `${j.label} : échec`,
-            description: j.error || j.last || undefined,
-            color: ok ? 'success' : j.phase === 'cancelled' ? 'neutral' : 'error',
-            icon: ok
-              ? 'i-ri-checkbox-circle-line'
-              : j.phase === 'cancelled'
-                ? 'i-ri-stop-circle-line'
-                : 'i-ri-error-warning-line',
-            actions: [
-              ...(j.phase === 'done' && j.models
-                ? [
-                    {
-                      label: 'Voir le résultat',
-                      onClick: () =>
-                        navigateTo({
-                          path: `/${j.source}/viewer`,
-                          query: j.models === 1 ? { m: j.model } : {},
-                        }),
-                    },
-                  ]
-                : []),
-              { label: 'Détails', onClick: () => (open.value = true) },
-            ],
-          })
-        }
-      }
+      apply(await api<Job[]>('/jobs'))
     } catch {
       /* API restarting */
     }
-    schedule()
   }
 
-  function schedule() {
-    clearTimeout(pollTimer)
-    pollTimer = undefined
-    if (import.meta.client && (running.value > 0 || open.value))
-      pollTimer = setTimeout(refresh, 1200)
+  function connect() {
+    if (!import.meta.client || stream || typeof EventSource === 'undefined') return
+    stream = new EventSource('/api/jobs/stream')
+    stream.addEventListener('jobs', (e) => {
+      live.value = true
+      apply(JSON.parse((e as MessageEvent).data) as Job[])
+    })
+    stream.onerror = () => {
+      live.value = false
+      stream?.close()
+      stream = undefined
+      clearTimeout(retryTimer)
+      retryTimer = setTimeout(() => {
+        refresh()
+        connect()
+      }, 3000)
+    }
+  }
+  connect()
+
+  /** Kept for the callers that start a job: the stream already carries it. */
+  async function track(_id?: string) {
+    if (!live.value) await refresh()
   }
 
-  /** Follow a job: it appears in the panel and a toast announces its end. */
-  async function track(id: string) {
-    watched.value = [...watched.value, id]
-    await refresh()
+  async function act(path: string, method = 'POST') {
+    try {
+      return await api<Record<string, unknown>>(path, { method })
+    } catch (e) {
+      toast.add({ title: 'Action impossible', description: apiError(e), color: 'error' })
+      throw e
+    }
   }
-
-  async function cancel(id: string) {
-    await api(`/jobs/${id}/cancel`, { method: 'POST' }).catch(() => {})
-    await refresh()
+  const cancel = (id: string) => act(`/jobs/${id}/cancel`).catch(() => {})
+  const front = (id: string) => act(`/jobs/${id}/front`).catch(() => {})
+  const remove = (id: string) => act(`/jobs/${id}`, 'DELETE').catch(() => {})
+  const clear = () => act('/jobs/clear').catch(() => {})
+  /** Replay a job: its failed items (optionally one cause), what it never reached, or everything. */
+  async function retry(id: string, scope: 'failed' | 'remaining' | 'all' = 'failed', cause = '') {
+    const q = new URLSearchParams({ scope })
+    if (cause) q.set('cause', cause)
+    const r = await act(`/jobs/${id}/retry?${q}`).catch(() => null)
+    if (r)
+      toast.add({ title: 'Ajouté à la file', icon: 'i-ri-play-list-add-line', color: 'success' })
+    open.value = true
+    return r
   }
 
   /** The running job of a kind for a source (progress cards). */
-  const live = (source: string, kind: Job['kind']) =>
-    jobs.value.find((j) => j.source === source && j.kind === kind && j.phase === 'running')
+  const liveJob = (source: string, kind: Job['kind']) =>
+    jobs.value.find((j) => j.source === source && j.kind === kind && ACTIVE.includes(j.phase))
 
-  return { jobs, open, running, refresh, track, schedule, cancel, live }
+  return {
+    jobs,
+    open,
+    running,
+    refresh,
+    track,
+    cancel,
+    front,
+    remove,
+    clear,
+    retry,
+    live: liveJob,
+    connected: live,
+  }
+}
+
+/** A newer release of omni (checked by the server at launch, at most every six hours). */
+export function useUpdate() {
+  const info = useState<UpdateInfo | null>('update', () => null)
+  const confirm = useConfirm()
+  async function check(force = false) {
+    try {
+      info.value = await api<UpdateInfo>(`/update${force ? '?force=true' : ''}`)
+    } catch {
+      /* offline */
+    }
+    return info.value
+  }
+  async function install() {
+    const u = info.value
+    if (!u?.available) return
+    const ok = await confirm({
+      title: `Installer omni ${u.latest} ?`,
+      description:
+        'L’installeur est téléchargé et vérifié, puis omni se ferme et redémarre sur la nouvelle version.',
+      confirmLabel: 'Mettre à jour',
+    })
+    if (ok) await startJob('/update/install', { open: true })
+  }
+  return { info, check, install }
 }
 
 /** Server-side settings (workspace/settings.json): what the conversions, exports and previews really use. */
@@ -202,7 +291,6 @@ export async function startJob(
     if (opts.title) useToast().add({ title: opts.title, icon: 'i-ri-play-large-line' })
     await jobs.track(job)
     if (opts.open) jobs.open.value = true
-    jobs.schedule()
     return job
   } catch (e) {
     useToast().add({ title: 'Impossible de lancer', description: apiError(e), color: 'error' })
@@ -215,7 +303,7 @@ export function useSetup() {
   const status = useState<SetupStatus | null>('setup-status', () => null)
   const jobs = useJobs()
   const running = computed(() =>
-    jobs.jobs.value.find((j) => j.kind === 'setup' && j.phase === 'running'),
+    jobs.jobs.value.find((j) => j.kind === 'setup' && ACTIVE.includes(j.phase)),
   )
   async function load() {
     status.value = await api<SetupStatus>('/setup/status').catch(() => status.value)

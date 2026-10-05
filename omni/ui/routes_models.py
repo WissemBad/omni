@@ -20,8 +20,17 @@ from ..core import settings
 from ..core.config import CONFIG, Config
 
 
+class PropFilter(BaseModel):
+    """The catalog filter of the props list: convert "everything that matches" without shipping 50,000 keys."""
+    q: str = ""
+    cat: str = ""
+    skinned: int | None = None
+    named_only: bool = True
+
+
 class ConvertRequest(BaseModel):
-    keys: list[str]
+    keys: list[str] = []
+    filter: PropFilter | None = None      # used when ``keys`` is empty
     physics: bool | None = None
     collision: str | None = None          # game | parts | hull | coacd (see targets/source/build.py)
     tex_quality: str | None = None        # max | high | balanced | light
@@ -189,11 +198,15 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
         """Compatibility: the game textures of a prop, per material (now part of /details)."""
         return prop_details(sid, key)["materials"]
 
-    @app.post("/api/{sid}/props/convert")
-    def prop_convert(sid: str, req: ConvertRequest):
+    def start_props(sid: str, body: dict) -> dict:
+        req = ConvertRequest(**body)
         src = need(sid, "props")
-        if len(req.keys) > 1 and (b := jobs.busy()):
-            raise HTTPException(409, f"Un travail est déjà en cours : {b['label']}")
+        if not req.keys and req.filter is not None:           # resolved here, so a retry replays the exact list
+            f = req.filter
+            req.keys = catalog_of(sid).keys(f.q, f.cat, f.skinned, f.named_only, limit=200000)
+        if not req.keys:
+            raise HTTPException(400, "Aucun prop à convertir")
+        body = {**req.model_dump(), "filter": None}
         st = settings.load()
         opts = dict(physics=req.physics if req.physics is not None else st["props"]["physics"],
                     collision=req.collision or st["props"]["collision"],
@@ -202,7 +215,8 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
         from ..pipeline import clamp_workers
         workers = clamp_workers(req.workers or st["props"]["workers"])
         blend = req.blend if req.blend is not None else st["props"]["blend"]
-        job = jobs.create("props", f"{len(req.keys)} prop(s)", sid, len(req.keys))
+        job = jobs.create("props", f"{len(req.keys)} prop(s)", sid, len(req.keys),
+                          request={"op": "props", "sid": sid, "body": body, "field": "keys"})
 
         def run(job):
             from ..pipeline import run_batch
@@ -222,6 +236,12 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
             return stats
         jobs.run(job, run)
         return {"job": job["id"]}
+    jobs.starters["props"] = start_props
+
+    @app.post("/api/{sid}/props/convert")
+    def prop_convert(sid: str, req: ConvertRequest):
+        """Queue a conversion of ``keys`` (or of everything matching ``filter``); one heavy job runs at a time."""
+        return start_props(sid, req.model_dump())
 
     # -------------------------------------------------------------------------------------- characters
     @app.get("/api/{sid}/characters")
@@ -272,7 +292,7 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
         src = need(sid, "characters")
         c = src.character(cid)
         if c is None:
-            raise HTTPException(404, f"unknown character {cid}")
+            raise HTTPException(404, f"Personnage inconnu : {cid}")
         return src, c
 
     def _preview_dir(sid: str) -> Path:
@@ -335,7 +355,7 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
         _character(sid, cid)
         out = _preview_dir(sid) / f"{cid}.glb"
         if not out.exists():
-            raise HTTPException(404, "preview not built")
+            raise HTTPException(404, "Aperçu pas encore construit")
         return FileResponse(out, media_type="model/gltf-binary")
 
     @app.post("/api/{sid}/characters/{cid}/build")
@@ -345,7 +365,7 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
         order = req.variants if req.variants else [v["v"] for v in c["variants"]]
         missing = [v for v in order if v not in by_v]
         if missing:
-            raise HTTPException(400, f"unknown variation(s) {missing}")
+            raise HTTPException(400, f"Variation(s) inconnue(s) : {missing}")
         st = settings.load()
         job = jobs.create("character", req.title or c["title"], sid, 1)
 
@@ -368,19 +388,20 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
         jobs.run(job, run)
         return {"job": job["id"]}
 
-    @app.post("/api/{sid}/characters/build-all")
-    def character_build_all(sid: str, req: CharacterBatch):
-        """Every playermodel (or a list), one after the other; already built ones are skipped by default."""
+    def start_characters(sid: str, body: dict) -> dict:
+        req = CharacterBatch(**body)
         src = need(sid, "characters")
-        if b := jobs.busy():
-            raise HTTPException(409, f"Un travail est déjà en cours : {b['label']}")
         every = {c["id"]: c for c in src.characters()}
         ids_ = [i for i in (req.ids or list(every)) if i in every]
         if req.skip_built:
             done = _built(sid)
             ids_ = [i for i in ids_ if i not in done]
+        if not ids_:
+            raise HTTPException(409, "Tous les playermodels sont déjà construits")
         st = settings.load()
-        job = jobs.create("character", f"{len(ids_)} playermodel(s)", sid, len(ids_))
+        job = jobs.create("character", f"{len(ids_)} playermodel(s)", sid, len(ids_),
+                          request={"op": "characters", "sid": sid, "field": "ids",
+                                   "body": {**req.model_dump(), "ids": ids_, "skip_built": False}})
 
         def run(job):
             from ..pipeline import apply_quality
@@ -405,3 +426,9 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
             return {"built": ok, "failed": failed, "remaining": len(ids_) - ok - failed}
         jobs.run(job, run)
         return {"job": job["id"]}
+    jobs.starters["characters"] = start_characters
+
+    @app.post("/api/{sid}/characters/build-all")
+    def character_build_all(sid: str, req: CharacterBatch):
+        """Every playermodel (or a list), queued behind the running job; built ones are skipped by default."""
+        return start_characters(sid, req.model_dump())

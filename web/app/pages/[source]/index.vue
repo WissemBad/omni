@@ -26,10 +26,12 @@ async function load() {
 let timer: ReturnType<typeof setInterval> | undefined
 onMounted(async () => {
   await Promise.all([load(), loadSystem(), loadSettings().catch(() => null)])
-  timer = setInterval(load, 6000)
+  timer = setInterval(() => {
+    if (!document.hidden) load() // a minimised window does not need fresh figures
+  }, 6000)
 })
 onBeforeUnmount(() => clearInterval(timer))
-watch(() => jobs.jobs.value.filter((j) => j.phase !== 'running').length, load)
+watch(() => jobs.jobs.value.filter((j) => !['queued', 'running'].includes(j.phase)).length, load)
 
 const pct = (a = 0, b = 0) => (b ? Math.round((a / b) * 100) : 0)
 const n = (v?: number | null) => (v ?? 0).toLocaleString('fr-FR')
@@ -100,8 +102,18 @@ const benches = computed<Bench[]>(() => {
 // ---- global exports
 const forceSounds = ref(false)
 const starting = ref('')
+const confirm = useConfirm()
+const toast = useToast()
 async function run(key: string, path: string, body?: unknown, confirmText?: string) {
-  if (confirmText && !confirm(confirmText)) return
+  if (
+    confirmText &&
+    !(await confirm({
+      title: 'Lancer ce travail ?',
+      description: confirmText,
+      confirmLabel: 'Lancer',
+    }))
+  )
+    return
   starting.value = key
   try {
     await startJob(path, { body, open: true })
@@ -110,12 +122,27 @@ async function run(key: string, path: string, body?: unknown, confirmText?: stri
   }
 }
 async function exportProps() {
-  const keys = await api<string[]>(`/${sid.value}/props/keys?named=1&limit=50000`).catch(() => [])
+  // the server resolves the filter: nothing to download (and nothing to lose when the download fails)
+  let total = 0
+  try {
+    total = (await api<{ total: number }>(`/${sid.value}/props?named=1&limit=1`)).total
+  } catch (e) {
+    toast.add({ title: 'Catalogue indisponible', description: apiError(e), color: 'error' })
+    return
+  }
+  if (!total) {
+    toast.add({
+      title: 'Aucun prop à convertir',
+      description: 'Le catalogue est vide ou en cours de construction.',
+      color: 'warning',
+    })
+    return
+  }
   await run(
     'props',
     `/${sid.value}/props/convert`,
-    { keys },
-    `Convertir ${keys.length.toLocaleString('fr-FR')} props ? Les déjà convertis sont refaits avec les réglages actuels ; cela peut durer plusieurs heures.`,
+    { filter: { named_only: true } },
+    `Convertir ${total.toLocaleString('fr-FR')} props ? Les déjà convertis sont refaits avec les réglages actuels ; cela peut durer plusieurs heures.`,
   )
 }
 const live = (kind: Job['kind']) => jobs.live(sid.value, kind)

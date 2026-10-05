@@ -37,24 +37,15 @@ onMounted(async () => {
 })
 
 // the running step moves the page forward on its own
+// the job list is pushed by the server (see useJobs): a finished setup step refreshes the status, nothing polls
 watch(
   () =>
     jobs.jobs.value
-      .filter((j) => j.kind === 'setup' && j.phase !== 'running')
+      .filter((j) => j.kind === 'setup' && !['queued', 'running'].includes(j.phase))
       .map((j) => j.id + j.phase)
       .join(),
   () => refresh(),
 )
-let timer: ReturnType<typeof setInterval> | undefined
-watch(
-  running,
-  (r) => {
-    clearInterval(timer)
-    if (r) timer = setInterval(() => jobs.refresh(), 1000)
-  },
-  { immediate: true },
-)
-onBeforeUnmount(() => clearInterval(timer))
 
 async function detect(silent = false) {
   busy.value = 'detect'
@@ -123,7 +114,6 @@ async function start(step: 'extract' | 'names' | 'studiomdl') {
   try {
     const { job } = await api<{ job: string }>(`/setup/${step}`, { method: 'POST' })
     await jobs.track(job)
-    jobs.schedule()
   } catch (e) {
     toast.add({ title: 'Impossible de lancer', description: apiError(e), color: 'error' })
   } finally {

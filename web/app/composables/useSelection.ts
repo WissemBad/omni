@@ -1,7 +1,31 @@
-/** Props ticked for conversion, remembered per source while the app is open. */
+const STORAGE = 'omni:prop-selection'
+let persisting = false
+
+/** Props ticked for conversion, remembered per source (and across restarts: hundreds of ticks are not lost). */
 export function useSelection() {
   const sid = useSourceId()
-  const store = useState<Record<string, Record<string, string>>>('prop-selection', () => ({}))
+  const store = useState<Record<string, Record<string, string>>>('prop-selection', () => {
+    if (!import.meta.client) return {}
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE) ?? '{}')
+    } catch {
+      return {}
+    }
+  })
+  if (import.meta.client && !persisting) {
+    persisting = true
+    watch(
+      store,
+      (v) => {
+        try {
+          localStorage.setItem(STORAGE, JSON.stringify(v))
+        } catch {
+          /* storage full or blocked */
+        }
+      },
+      { deep: true },
+    )
+  }
   const current = computed(() => store.value[sid.value] ?? {})
   const keys = computed(() => Object.keys(current.value))
   const count = computed(() => keys.value.length)

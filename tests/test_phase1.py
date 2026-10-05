@@ -181,3 +181,19 @@ def test_concurrent_processes_build_the_names_database_once_each_without_errors(
     errors = [p.communicate()[1] for p in procs]
     assert all(p.returncode == 0 for p in procs), errors
     assert not list(tmp_path.glob("*.building"))
+
+
+def test_gmod_spawn_script_and_launch_checks(tmp_path):
+    from omni.core.config import Config
+    from omni.targets.source import gmod
+
+    cfg = Config()
+    cfg.workspace = tmp_path / "ws"
+    cfg.gmod = tmp_path / "gmod"
+    addon = cfg.addon_dir("t")
+    lua = gmod.ensure_spawn_script(addon)
+    assert lua.read_text(encoding="utf-8") == gmod.SPAWN_LUA and 'concommand.Add("omni_spawn"' in gmod.SPAWN_LUA
+    with pytest.raises(FileNotFoundError):                         # the model is not in the addon
+        gmod.launch("t", "models/omni/t/x.mdl", "prop", cfg)
+    with pytest.raises(ValueError):
+        gmod.launch("t", "models/omni/t/x.mdl", "vehicle", cfg)

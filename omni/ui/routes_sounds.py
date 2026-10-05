@@ -98,14 +98,12 @@ def register(app: FastAPI, *, jobs, need) -> None:
                 "tagged": bool(idx.rows) and "title" in idx.rows[0], "set": root.name if root.name in SETS else "",
                 "sets": [f for f in SETS if (CONFIG.workspace / "audio" / sid / f / "index.csv").exists()]}
 
-    @app.post("/api/{sid}/sounds/export")
-    def sound_export(sid: str, req: SoundExport):
+    def start_sounds(sid: str, body: dict) -> dict:
+        req = SoundExport(**body)
         src = need(sid, "sounds")
-        if b := jobs.busy():
-            raise HTTPException(409, f"Un travail est déjà en cours : {b['label']}")
         st = settings.load()["sounds"]
         fmt = req.format or st["format"]
-        job = jobs.create("sounds", f"Sons ({fmt})", sid)
+        job = jobs.create("sounds", f"Sons ({fmt})", sid, request={"op": "sounds", "sid": sid, "body": body})
 
         def run(job):
             from ..targets.audio.export import export_sounds
@@ -117,6 +115,12 @@ def register(app: FastAPI, *, jobs, need) -> None:
                                  force=req.force, clean=req.clean)
         jobs.run(job, run)
         return {"job": job["id"]}
+    jobs.starters["sounds"] = start_sounds
+
+    @app.post("/api/{sid}/sounds/export")
+    def sound_export(sid: str, req: SoundExport):
+        """Queue the export; an interrupted one resumes where it stopped (existing files are kept)."""
+        return start_sounds(sid, req.model_dump())
 
     @app.get("/api/{sid}/sounds")
     def sounds(sid: str, q: str = "", top: str = "", limit: int = 100, offset: int = 0, named: int = 0,
@@ -150,7 +154,7 @@ def register(app: FastAPI, *, jobs, need) -> None:
         root = root_of(sid, set).resolve()
         f = (root / path).resolve()
         if root not in f.parents or not f.is_file():
-            raise HTTPException(404)
+            raise HTTPException(404, "Introuvable")
         return FileResponse(f)
 
     @app.post("/api/{sid}/sounds/reveal")
@@ -159,7 +163,7 @@ def register(app: FastAPI, *, jobs, need) -> None:
         root = root_of(sid, set).resolve()
         f = (root / path).resolve() if path else root
         if f != root and root not in f.parents:
-            raise HTTPException(404)
+            raise HTTPException(404, "Introuvable")
         reveal(f)
         return {"ok": True}
 
@@ -167,7 +171,7 @@ def register(app: FastAPI, *, jobs, need) -> None:
     def sound_relist(sid: str):
         """Rebuild the list of the game's sounds (names, banks): after an update of the game or of omni."""
         src = need(sid, "sounds")
-        job = jobs.create("maintenance", "Liste des sons", sid)
+        job = jobs.create("maintenance", "Liste des sons", sid, cancellable=False)
 
         def run(job):
             refs = src.list_sounds(progress=lambda m: jobs.log(job, m), fresh=True)

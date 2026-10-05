@@ -47,6 +47,8 @@ let scene: THREE.Scene
 let camera: THREE.PerspectiveCamera
 let controls: OrbitControls
 let gridHelper: THREE.GridHelper
+let checkerTexture: THREE.CanvasTexture | undefined
+let envTarget: THREE.WebGLRenderTarget | undefined
 let observer: ResizeObserver
 let dirty = true
 let token = 0
@@ -65,6 +67,22 @@ function disposeObject(obj: THREE.Object3D | null) {
   scene.remove(obj)
   const textures = new Set<THREE.Texture>()
   obj.traverse((o) => {
+    const mesh = o as THREE.Mesh
+    if (!mesh.isMesh) return
+    mesh.geometry.dispose()
+    for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      for (const value of Object.values(m))
+        if ((value as THREE.Texture)?.isTexture) textures.add(value as THREE.Texture)
+      m.dispose()
+    }
+  })
+  for (const t of textures) t.dispose()
+}
+
+/** Free the GPU memory of a glTF that was loaded but is no longer wanted (a newer model replaced it). */
+function discard(scene3: THREE.Object3D) {
+  const textures = new Set<THREE.Texture>()
+  scene3.traverse((o) => {
     const mesh = o as THREE.Mesh
     if (!mesh.isMesh) return
     mesh.geometry.dispose()
@@ -139,7 +157,10 @@ async function load(url?: string) {
   loading.value = true
   try {
     const gltf = await new GLTFLoader().loadAsync(url)
-    if (mine !== token) return
+    if (mine !== token) {
+      discard(gltf.scene)
+      return
+    }
     disposeRoot()
     root.value = gltf.scene
     parser.value = gltf.parser
@@ -171,7 +192,10 @@ async function loadB(url?: string) {
   }
   try {
     const gltf = await new GLTFLoader().loadAsync(url)
-    if (mine !== tokenB) return
+    if (mine !== tokenB) {
+      discard(gltf.scene)
+      return
+    }
     disposeRootB()
     rootB.value = gltf.scene
     scene.add(gltf.scene)
@@ -209,6 +233,7 @@ function shadingMaterial(kind: Shading): THREE.Material | null {
       g.font = 'bold 20px sans-serif'
       for (let i = 0; i < 8; i++) g.fillText(String(i), i * 32 + 10, 22)
       const t = new THREE.CanvasTexture(c)
+      checkerTexture = t
       t.colorSpace = THREE.SRGBColorSpace
       t.wrapS = t.wrapT = THREE.RepeatWrapping
       t.anisotropy = 8
@@ -294,7 +319,8 @@ onMounted(() => {
 
   scene = new THREE.Scene()
   const pmrem = new THREE.PMREMGenerator(renderer)
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+  envTarget = pmrem.fromScene(new RoomEnvironment(), 0.04)
+  scene.environment = envTarget.texture
   scene.environmentIntensity = 0.75
   pmrem.dispose()
   scene.add(new THREE.HemisphereLight(0xffffff, 0x555566, 0.7))
@@ -340,8 +366,13 @@ onBeforeUnmount(() => {
   disposeRoot()
   disposeRootB()
   for (const m of Object.values(overrides)) m?.dispose()
+  checkerTexture?.dispose()
+  envTarget?.dispose()
+  gridHelper?.geometry.dispose()
+  ;(gridHelper?.material as THREE.Material | undefined)?.dispose()
   controls?.dispose()
   renderer?.dispose()
+  renderer?.forceContextLoss() // WebView2 allows ~16 WebGL contexts: a page revisited often would run out
   renderer?.domElement.remove()
 })
 

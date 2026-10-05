@@ -78,9 +78,7 @@ def register(app: FastAPI, *, jobs, reset_runtime) -> None:
             raise HTTPException(500, f"{type(e).__name__}: {e}")
 
     def _job(kind: str, label: str, fn, purge: bool = True):
-        if jobs.running():
-            raise HTTPException(409, "Un travail est déjà en cours : attends la fin ou annule-le")
-        job = jobs.create("setup", label, "", 0)
+        job = jobs.create("setup", label, "", 0, dedupe=f"setup:{kind}")
 
         def run(job):
             res = fn(job)

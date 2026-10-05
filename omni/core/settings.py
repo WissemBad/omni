@@ -53,6 +53,10 @@ DEFAULTS: dict = {
     "viewer": {
         "texture_size": 1024,        # textures of the 3D previews
     },
+    "updates": {
+        "check": True,               # look for a newer release at launch (GitHub)
+        "token": "",                 # read access to the release when the repository is private
+    },
 }
 
 _FILE = CONFIG.workspace / "settings.json"

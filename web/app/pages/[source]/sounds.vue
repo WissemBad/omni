@@ -76,7 +76,6 @@ async function start() {
     })
     await jobs.track(job)
     jobs.open.value = true
-    jobs.schedule()
   } catch (e) {
     toast.add({ title: 'Export impossible', description: apiError(e), color: 'error' })
   } finally {
@@ -118,6 +117,13 @@ async function fetchPage(reset: boolean) {
     langs.value = r.langs ?? []
     items.value = reset ? r.items : [...items.value, ...r.items]
     if (reset) scroll.value?.$el?.scrollTo({ top: 0 })
+  } catch (e) {
+    if (mine === seq)
+      useToast().add({
+        title: 'Liste des sons indisponible',
+        description: apiError(e),
+        color: 'error',
+      })
   } finally {
     if (mine === seq) {
       loading.value = false

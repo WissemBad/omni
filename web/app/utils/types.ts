@@ -119,13 +119,19 @@ export interface JobResult {
   seconds: number
 }
 
+export type JobPhase = 'queued' | 'running' | 'done' | 'error' | 'cancelled' | 'interrupted'
+
 export interface Job {
   id: string
   kind: 'props' | 'character' | 'sounds' | 'textures' | 'maintenance' | 'setup'
   label: string
   source: string
-  phase: 'running' | 'done' | 'error' | 'cancelled'
+  phase: JobPhase
   cancellable?: boolean
+  cancelling?: boolean
+  heavy?: boolean
+  /** Place in the queue (1 = next) while the job is waiting. */
+  position?: number
   done: number
   total: number
   error: string
@@ -133,11 +139,24 @@ export interface Job {
   ended: number | null
   last?: string
   failed?: number
+  /** Results per status (OK, PARTIAL, FAILED, SKIPPED). */
+  counts?: Record<string, number>
   model?: string
   models?: number
+  /** A retry can replay this job (props, playermodels, sounds). */
+  has_request?: boolean
   results?: JobResult[]
+  results_total?: number
   log?: string[]
   summary?: Record<string, unknown> | null
+}
+
+/** Failed results of a job grouped by cause (GET /jobs/{id}/report). */
+export interface JobCause {
+  cause: string
+  count: number
+  examples: string[]
+  sample: string
 }
 
 export interface PreviewBuilding {
@@ -409,6 +428,17 @@ export interface Settings {
   characters: { max_tris: number; preview_size: number }
   sounds: { format: string; workers: number; tags: boolean; skip_stubs: boolean; languages: string }
   viewer: { texture_size: number }
+  updates: { check: boolean; token: string }
+}
+
+export interface UpdateInfo {
+  current: string
+  latest: string
+  available: boolean
+  notes: string
+  url: string
+  error: string
+  asset: { name: string; size: number } | null
 }
 
 export interface GameTexture {

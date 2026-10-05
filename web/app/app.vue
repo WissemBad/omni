@@ -3,6 +3,8 @@ const { sources, load } = useSources()
 const sid = useSourceId()
 const { details, refresh, toggleDeploy } = useSourceDetails()
 const { running, open, refresh: refreshJobs } = useJobs()
+const update = useUpdate()
+onMounted(() => update.check())
 
 const apiDown = ref('')
 async function boot() {
@@ -58,6 +60,9 @@ const items = computed(() => {
             @click="toggleDeploy"
           />
         </UTooltip>
+        <UTooltip v-if="update.info.value?.available" :text="`omni ${update.info.value.latest} est disponible`">
+          <UButton label="Mise à jour" icon="i-ri-download-cloud-2-line" size="sm" color="primary" variant="soft" @click="update.install()" />
+        </UTooltip>
         <UChip :show="running > 0" :text="running" size="3xl" color="primary" inset>
           <UButton
             icon="i-ri-list-check-3"
@@ -84,5 +89,6 @@ const items = computed(() => {
       <NuxtPage v-else />
     </main>
     <OJobsPanel />
+    <OConfirm />
   </UApp>
 </template>
