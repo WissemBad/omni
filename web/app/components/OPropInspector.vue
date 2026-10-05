@@ -9,7 +9,11 @@ const props = defineProps<{
   gmodPath: string
   selected: boolean
 }>()
-const emit = defineEmits<{ texture: [material: number, texture: number]; convert: []; select: [] }>()
+const emit = defineEmits<{
+  texture: [material: number, texture: number]
+  convert: []
+  select: []
+}>()
 const tab = defineModel<string>('tab', { default: 'summary' })
 const sid = useSourceId()
 
@@ -18,11 +22,16 @@ const ALL = [
   { label: 'Matériaux', value: 'materials', icon: 'i-ri-palette-line' },
   { label: 'Données', value: 'data', icon: 'i-ri-database-2-line' },
 ]
-const TABS = computed(() => ALL.map((t) => (t.value === tab.value ? t : { ...t, label: undefined, 'aria-label': t.label })))
+const TABS = computed(() =>
+  ALL.map((t) => (t.value === tab.value ? t : { ...t, label: undefined, 'aria-label': t.label })),
+)
 const out = computed(() => props.info.output)
 const textures = computed(() => {
   const seen = new Map<string, { key: string; role: string; name: string }>()
-  for (const m of props.info.materials) for (const t of m.textures) if (t.found !== false && !seen.has(t.key)) seen.set(t.key, { key: t.key, role: t.role, name: t.name || t.slot })
+  for (const m of props.info.materials)
+    for (const t of m.textures)
+      if (t.found !== false && !seen.has(t.key))
+        seen.set(t.key, { key: t.key, role: t.role, name: t.name || t.slot })
   return [...seen.values()]
 })
 </script>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { TexEntry } from '~/components/OTextureViewer.vue'
-import type { Category, GameTexture, TextureDetail, TexturePage } from '~/utils/types'
 import type { Channel } from '~/utils/textures'
+import type { Category, GameTexture, TextureDetail, TexturePage } from '~/utils/types'
 
 definePageMeta({ key: (r) => `${r.params.source}/textures` })
 
@@ -38,7 +38,10 @@ const detail = ref<TextureDetail | null>(null)
 const channel = ref<Channel>('rgb')
 const bg = usePersisted('tex-bg', { value: 'checker' as 'checker' | 'dark' | 'light' })
 const search = useTemplateRef<{ inputRef?: HTMLInputElement }>('search')
-const scroll = useTemplateRef<{ $el: HTMLElement; virtualizer?: { scrollToIndex: (i: number, o?: object) => void } }>('scroll')
+const scroll = useTemplateRef<{
+  $el: HTMLElement
+  virtualizer?: { scrollToIndex: (i: number, o?: object) => void }
+}>('scroll')
 
 let seq = 0
 let waitTimer: ReturnType<typeof setTimeout> | undefined
@@ -67,7 +70,8 @@ async function fetchPage(reset: boolean) {
       waitTimer = setTimeout(() => fetchPage(true), 2000)
       return
     }
-    if (!categories.value.length) categories.value = await api<Category[]>(`/${sid.value}/textures/categories`).catch(() => [])
+    if (!categories.value.length)
+      categories.value = await api<Category[]>(`/${sid.value}/textures/categories`).catch(() => [])
     total.value = r.total
     facets.value = r.facets
     items.value = reset ? r.items : [...items.value, ...r.items]
@@ -135,12 +139,18 @@ onMounted(async () => {
   await openKey(String(route.query.k ?? ''))
 })
 // links from the other workbenches (inspectors, viewer) land here with ?k=<texture>
-watch(() => route.query.k, (k) => openKey(String(k ?? '')))
+watch(
+  () => route.query.k,
+  (k) => openKey(String(k ?? '')),
+)
 
 const activeIndex = computed(() => items.value.findIndex((t) => t.key === active.value?.key))
 function step(delta: number) {
   if (!items.value.length) return
-  const i = Math.min(items.value.length - 1, Math.max(0, (activeIndex.value < 0 ? (delta > 0 ? -1 : 1) : activeIndex.value) + delta))
+  const i = Math.min(
+    items.value.length - 1,
+    Math.max(0, (activeIndex.value < 0 ? (delta > 0 ? -1 : 1) : activeIndex.value) + delta),
+  )
   const t = items.value[i]
   if (t) select(t)
   scroll.value?.virtualizer?.scrollToIndex(i, { align: 'auto' })
@@ -159,7 +169,8 @@ const entries = computed<TexEntry[]>(() => {
       name: t.name,
       width: t.width,
       height: t.height,
-      src: (ch: Channel, size: number) => gameTextureUrl(sid.value, t.key, { size, channel: ch, role: t.role }),
+      src: (ch: Channel, size: number) =>
+        gameTextureUrl(sid.value, t.key, { size, channel: ch, role: t.role }),
       info: [
         ['Dimensions', dimsLabel(t.width, t.height)],
         ['Format du jeu', t.fmt],
@@ -175,7 +186,9 @@ const entries = computed<TexEntry[]>(() => {
 async function exportPng() {
   if (!active.value) return
   try {
-    const r = await api<{ path: string }>(`/${sid.value}/textures/${active.value.key}/export`, { method: 'POST' })
+    const r = await api<{ path: string }>(`/${sid.value}/textures/${active.value.key}/export`, {
+      method: 'POST',
+    })
     useToast().add({ title: 'Texture exportée', description: r.path, icon: 'i-ri-download-2-line' })
   } catch (e) {
     useToast().add({ title: 'Export impossible', description: apiError(e), color: 'error' })
@@ -219,8 +232,20 @@ const SIZES = [
   { label: '≥ 2048', value: 2048 },
   { label: '4096 et plus', value: 4096 },
 ]
-const fmtItems = computed(() => [{ label: 'Tous les formats', value: '' }, ...facets.value.fmt.map((f) => ({ label: `${f.value} (${f.n.toLocaleString('fr-FR')})`, value: f.value }))])
-const roleItems = computed(() => [{ label: 'Tous les rôles', value: '' }, ...facets.value.role.map((f) => ({ label: `${texRoleLabel(f.value)} (${f.n.toLocaleString('fr-FR')})`, value: f.value }))])
+const fmtItems = computed(() => [
+  { label: 'Tous les formats', value: '' },
+  ...facets.value.fmt.map((f) => ({
+    label: `${f.value} (${f.n.toLocaleString('fr-FR')})`,
+    value: f.value,
+  })),
+])
+const roleItems = computed(() => [
+  { label: 'Tous les rôles', value: '' },
+  ...facets.value.role.map((f) => ({
+    label: `${texRoleLabel(f.value)} (${f.n.toLocaleString('fr-FR')})`,
+    value: f.value,
+  })),
+])
 
 defineShortcuts({
   '/': () => search.value?.inputRef?.focus(),

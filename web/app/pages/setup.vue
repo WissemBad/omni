@@ -38,7 +38,11 @@ onMounted(async () => {
 
 // the running step moves the page forward on its own
 watch(
-  () => jobs.jobs.value.filter((j) => j.kind === 'setup' && j.phase !== 'running').map((j) => j.id + j.phase).join(),
+  () =>
+    jobs.jobs.value
+      .filter((j) => j.kind === 'setup' && j.phase !== 'running')
+      .map((j) => j.id + j.phase)
+      .join(),
   () => refresh(),
 )
 let timer: ReturnType<typeof setInterval> | undefined
@@ -55,14 +59,19 @@ onBeforeUnmount(() => clearInterval(timer))
 async function detect(silent = false) {
   busy.value = 'detect'
   try {
-    const r = await api<{ found: Record<string, string>; status: typeof status.value }>('/setup/detect', { method: 'POST' })
+    const r = await api<{ found: Record<string, string>; status: typeof status.value }>(
+      '/setup/detect',
+      { method: 'POST' },
+    )
     status.value = r.status
     if (r.found.game) gamePath.value = r.found.game
     if (r.found.gmod) gmodPath.value = r.found.gmod
     if (!silent) {
       toast.add({
         title: Object.keys(r.found).length ? 'Détection terminée' : 'Rien trouvé automatiquement',
-        description: Object.keys(r.found).length ? Object.values(r.found).join('\n') : 'Choisis les dossiers à la main.',
+        description: Object.keys(r.found).length
+          ? Object.values(r.found).join('\n')
+          : 'Choisis les dossiers à la main.',
         icon: 'i-ri-search-eye-line',
       })
     }
@@ -122,7 +131,9 @@ async function start(step: 'extract' | 'names' | 'studiomdl') {
   }
 }
 
-const spaceShort = computed(() => !!estimate.value && !!status.value && status.value.free_bytes < estimate.value.bytes * 1.1)
+const spaceShort = computed(
+  () => !!estimate.value && !!status.value && status.value.free_bytes < estimate.value.bytes * 1.1,
+)
 const step = computed(() => {
   const s = status.value
   if (!s) return 0

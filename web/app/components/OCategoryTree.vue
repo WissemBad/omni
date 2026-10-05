@@ -5,9 +5,12 @@ import type { Category } from '~/utils/types'
  * Folder tree of the props catalog. Clicking a folder filters on it (and everything below);
  * the chevron only opens/closes. Internal folders (`_test`, `_glacier`...) are hidden unless asked for.
  */
-const props = withDefaults(defineProps<{ categories: Category[]; modelValue: string; rootLabel?: string }>(), {
-  rootLabel: 'Tout le catalogue',
-})
+const props = withDefaults(
+  defineProps<{ categories: Category[]; modelValue: string; rootLabel?: string }>(),
+  {
+    rootLabel: 'Tout le catalogue',
+  },
+)
 const emit = defineEmits<{ 'update:modelValue': [path: string] }>()
 
 interface Node {

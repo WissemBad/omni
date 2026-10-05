@@ -56,10 +56,23 @@ async function resetAll() {
 const player = usePersisted('sound-player', { volume: 0.8, loop: false, next: true })
 
 const QUALITIES = [
-  { label: 'Maximum', value: 'max', description: 'Résolution du jeu pour toutes les textures (jusqu’à 8K), normales en 2K. Le plus fidèle, le plus lourd.' },
+  {
+    label: 'Maximum',
+    value: 'max',
+    description:
+      'Résolution du jeu pour toutes les textures (jusqu’à 8K), normales en 2K. Le plus fidèle, le plus lourd.',
+  },
   { label: 'Élevée', value: 'high', description: 'Couleur jusqu’à 4K, normales et masques en 2K.' },
-  { label: 'Équilibrée', value: 'balanced', description: 'Couleur 2K, normales 1K, masques 512. Bon compromis pour un serveur.' },
-  { label: 'Légère', value: 'light', description: 'Couleur 1K, normales 512 : le plus petit addon.' },
+  {
+    label: 'Équilibrée',
+    value: 'balanced',
+    description: 'Couleur 2K, normales 1K, masques 512. Bon compromis pour un serveur.',
+  },
+  {
+    label: 'Légère',
+    value: 'light',
+    description: 'Couleur 1K, normales 512 : le plus petit addon.',
+  },
 ]
 const ENCODERS = ['Rapide', 'Bon', 'Meilleur']
 const COLLISIONS = [
@@ -88,12 +101,23 @@ const TRIS = [
 const SIZES = [256, 512, 1024, 2048].map((v) => ({ label: `${v} px`, value: v }))
 
 // ---- storage & maintenance
-const storage = ref<{ addon: number; previews: number; audio: number; cache: number; path: string } | null>(null)
-const loadStorage = async () => (storage.value = await api<typeof storage.value>(`/${sid.value}/storage`).catch(() => null))
+const storage = ref<{
+  addon: number
+  previews: number
+  audio: number
+  cache: number
+  path: string
+} | null>(null)
+const loadStorage = async () =>
+  (storage.value = await api<typeof storage.value>(`/${sid.value}/storage`).catch(() => null))
 const sizes = computed(() =>
   storage.value
     ? [
-        { label: 'Addon converti', value: fmtBytes(storage.value.addon), icon: 'i-ri-archive-line' },
+        {
+          label: 'Addon converti',
+          value: fmtBytes(storage.value.addon),
+          icon: 'i-ri-archive-line',
+        },
         { label: 'Sons exportés', value: fmtBytes(storage.value.audio), icon: 'i-ri-music-2-line' },
         { label: 'Aperçus 3D', value: fmtBytes(storage.value.previews), icon: 'i-ri-eye-line' },
         { label: 'Caches', value: fmtBytes(storage.value.cache), icon: 'i-ri-database-2-line' },
@@ -101,21 +125,47 @@ const sizes = computed(() =>
     : [],
 )
 async function clearPreviews() {
-  if (!confirm('Supprimer les aperçus 3D et les miniatures en cache ? Ils seront recréés à la demande.')) return
+  if (
+    !confirm(
+      'Supprimer les aperçus 3D et les miniatures en cache ? Ils seront recréés à la demande.',
+    )
+  )
+    return
   await api(`/${sid.value}/previews/clear`, { method: 'POST' })
   toast.add({ title: 'Aperçus supprimés', icon: 'i-ri-delete-bin-line' })
   loadStorage()
 }
 async function stop() {
-  if (!confirm('Arrêter omni ? La page ne répondra plus jusqu’au prochain lancement (Omni.cmd).')) return
+  if (!confirm('Arrêter omni ? La page ne répondra plus jusqu’au prochain lancement (Omni.cmd).'))
+    return
   await api('/shutdown', { method: 'POST' }).catch(() => {})
-  toast.add({ title: 'omni est arrêté', description: 'Relance-le avec Omni.cmd.', icon: 'i-ri-shut-down-line' })
+  toast.add({
+    title: 'omni est arrêté',
+    description: 'Relance-le avec Omni.cmd.',
+    icon: 'i-ri-shut-down-line',
+  })
 }
 const MAINTENANCE = computed(() => [
-  { label: 'Réindexer les props', icon: 'i-ri-box-3-line', run: () => startJob(`/${sid.value}/catalog/rebuild`, { open: true }) },
-  { label: 'Réindexer les textures', icon: 'i-ri-image-2-line', run: () => startJob(`/${sid.value}/textures/rebuild`, { open: true }) },
-  { label: 'Relister les sons', icon: 'i-ri-music-2-line', run: () => startJob(`/${sid.value}/sounds/relist`, { open: true }) },
-  { label: 'Recompiler le cœur Rust (WebAssembly)', icon: 'i-ri-cpu-line', run: () => startJob('/native/build', { open: true }) },
+  {
+    label: 'Réindexer les props',
+    icon: 'i-ri-box-3-line',
+    run: () => startJob(`/${sid.value}/catalog/rebuild`, { open: true }),
+  },
+  {
+    label: 'Réindexer les textures',
+    icon: 'i-ri-image-2-line',
+    run: () => startJob(`/${sid.value}/textures/rebuild`, { open: true }),
+  },
+  {
+    label: 'Relister les sons',
+    icon: 'i-ri-music-2-line',
+    run: () => startJob(`/${sid.value}/sounds/relist`, { open: true }),
+  },
+  {
+    label: 'Recompiler le cœur Rust (WebAssembly)',
+    icon: 'i-ri-cpu-line',
+    run: () => startJob('/native/build', { open: true }),
+  },
 ])
 </script>
 

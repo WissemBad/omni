@@ -1,6 +1,9 @@
 <script setup lang="ts">
 /** Key figures in small cards (inspectors, home page). */
-defineProps<{ stats: { label: string; value: string; icon: string; hint?: string }[]; cols?: number }>()
+defineProps<{
+  stats: { label: string; value: string; icon: string; hint?: string }[]
+  cols?: number
+}>()
 </script>
 
 <template>

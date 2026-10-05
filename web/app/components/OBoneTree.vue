@@ -16,7 +16,11 @@ const q = ref('')
 const expanded = ref<string[]>([])
 
 const roots = computed<Node[]>(() => {
-  const nodes: Node[] = props.bones.map((b, i) => ({ label: b.name.replace(/^ValveBiped\./, ''), value: String(i), index: i }))
+  const nodes: Node[] = props.bones.map((b, i) => ({
+    label: b.name.replace(/^ValveBiped\./, ''),
+    value: String(i),
+    index: i,
+  }))
   const out: Node[] = []
   props.bones.forEach((b, i) => {
     const p = nodes[b.parent]
@@ -28,7 +32,11 @@ const roots = computed<Node[]>(() => {
 
 watch(
   roots,
-  () => (expanded.value = props.bones.length <= 90 ? props.bones.map((_, i) => String(i)) : roots.value.map((n) => n.value)),
+  () =>
+    (expanded.value =
+      props.bones.length <= 90
+        ? props.bones.map((_, i) => String(i))
+        : roots.value.map((n) => n.value)),
   { immediate: true },
 )
 
@@ -40,7 +48,9 @@ const boxesOf = computed(() => {
 
 const matches = computed(() => {
   const w = q.value.trim().toLowerCase()
-  return w ? props.bones.map((b, i) => ({ b, i })).filter(({ b }) => b.name.toLowerCase().includes(w)) : []
+  return w
+    ? props.bones.map((b, i) => ({ b, i })).filter(({ b }) => b.name.toLowerCase().includes(w))
+    : []
 })
 
 const current = computed(() => props.bones[selected.value])

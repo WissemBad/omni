@@ -4,7 +4,8 @@ import type { Prop } from '~/utils/types'
 export function modelPath(sid: string, p: Pick<Prop, 'rel' | 'key'>): string {
   const base = `omni/${sid}/`
   let path = base + p.rel
-  if (path.length > 110) path = `${base}${(p.rel.split('/').pop() ?? '').slice(0, 30)}_${p.key.slice(-6).toLowerCase()}`
+  if (path.length > 110)
+    path = `${base}${(p.rel.split('/').pop() ?? '').slice(0, 30)}_${p.key.slice(-6).toLowerCase()}`
   return `models/${path}.mdl`
 }
 

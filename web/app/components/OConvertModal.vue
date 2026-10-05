@@ -7,25 +7,60 @@ const emit = defineEmits<{ started: [job: string] }>()
 const sid = useSourceId()
 const { load, save } = useSettings()
 const { info: system, load: loadSystem } = useSystem()
-const opts = reactive({ physics: true, collision: 'game', tex_quality: 'max', lossless_normals: false, blend: false, workers: 8 })
+const opts = reactive({
+  physics: true,
+  collision: 'game',
+  tex_quality: 'max',
+  lossless_normals: false,
+  blend: false,
+  workers: 8,
+})
 const busy = ref(false)
 
 watch(open, async (v) => {
   if (!v) return
   const s = await load(true).catch(() => null)
-  if (s) Object.assign(opts, { physics: s.props.physics, collision: s.props.collision, tex_quality: s.textures.quality,
-    lossless_normals: s.textures.lossless_normals, blend: s.props.blend, workers: s.props.workers })
+  if (s)
+    Object.assign(opts, {
+      physics: s.props.physics,
+      collision: s.props.collision,
+      tex_quality: s.textures.quality,
+      lossless_normals: s.textures.lossless_normals,
+      blend: s.props.blend,
+      workers: s.props.workers,
+    })
   if (!system.value) loadSystem()
 })
 
 const collisions = [
-  { label: 'Celle du jeu (recommandé)', value: 'game', description: 'Reprend les formes physiques du jeu quand elles existent, sinon une enveloppe par pièce.' },
-  { label: 'Par pièces', value: 'parts', description: 'Une enveloppe convexe par morceau de l’objet. Rapide et fidèle.' },
-  { label: 'Enveloppe unique', value: 'hull', description: 'Un seul volume convexe. Très léger, mais comble les creux (portes, tables).' },
-  { label: 'Décomposition précise', value: 'coacd', description: 'CoACD : épouse les formes concaves. Très lent (≈ 2 min par objet).' },
+  {
+    label: 'Celle du jeu (recommandé)',
+    value: 'game',
+    description:
+      'Reprend les formes physiques du jeu quand elles existent, sinon une enveloppe par pièce.',
+  },
+  {
+    label: 'Par pièces',
+    value: 'parts',
+    description: 'Une enveloppe convexe par morceau de l’objet. Rapide et fidèle.',
+  },
+  {
+    label: 'Enveloppe unique',
+    value: 'hull',
+    description: 'Un seul volume convexe. Très léger, mais comble les creux (portes, tables).',
+  },
+  {
+    label: 'Décomposition précise',
+    value: 'coacd',
+    description: 'CoACD : épouse les formes concaves. Très lent (≈ 2 min par objet).',
+  },
 ]
 const qualities = [
-  { label: 'Maximum', value: 'max', description: 'Résolution du jeu, normales 2K. Le plus fidèle.' },
+  {
+    label: 'Maximum',
+    value: 'max',
+    description: 'Résolution du jeu, normales 2K. Le plus fidèle.',
+  },
   { label: 'Élevée', value: 'high', description: 'Couleur jusqu’à 4K, normales 2K.' },
   { label: 'Équilibrée', value: 'balanced', description: 'Couleur 2K, normales 1K.' },
   { label: 'Légère', value: 'light', description: 'Couleur 1K, normales 512.' },
@@ -35,9 +70,19 @@ async function start() {
   busy.value = true
   try {
     // the choices made here become the defaults (same as the Réglages page)
-    await save({ props: { physics: opts.physics, collision: opts.collision, blend: opts.blend, workers: opts.workers },
-      textures: { quality: opts.tex_quality, lossless_normals: opts.lossless_normals } }).catch(() => {})
-    const { job } = await api<{ job: string }>(`/${sid.value}/props/convert`, { method: 'POST', body: { keys: props.keys, ...opts } })
+    await save({
+      props: {
+        physics: opts.physics,
+        collision: opts.collision,
+        blend: opts.blend,
+        workers: opts.workers,
+      },
+      textures: { quality: opts.tex_quality, lossless_normals: opts.lossless_normals },
+    }).catch(() => {})
+    const { job } = await api<{ job: string }>(`/${sid.value}/props/convert`, {
+      method: 'POST',
+      body: { keys: props.keys, ...opts },
+    })
     open.value = false
     emit('started', job)
   } catch (e) {

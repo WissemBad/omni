@@ -1,4 +1,11 @@
-import type { Job, Settings, SetupStatus, SourceDetails, SourceInfo, SystemInfo } from '~/utils/types'
+import type {
+  Job,
+  Settings,
+  SetupStatus,
+  SourceDetails,
+  SourceInfo,
+  SystemInfo,
+} from '~/utils/types'
 
 /** Sources the API knows (loaded once). */
 export function useSources() {
@@ -27,7 +34,10 @@ export function useSourceDetails() {
   async function refresh() {
     if (!sid.value) return
     try {
-      details.value = { ...details.value, [sid.value]: await api<SourceDetails>(`/${sid.value}/info`) }
+      details.value = {
+        ...details.value,
+        [sid.value]: await api<SourceDetails>(`/${sid.value}/info`),
+      }
     } catch {
       /* the page shows its own error */
     }
@@ -35,9 +45,12 @@ export function useSourceDetails() {
   async function toggleDeploy() {
     const on = current.value?.deployed
     try {
-      const r = await api<{ message: string }>(`/${sid.value}/deploy?remove=${on ? 'true' : 'false'}`, {
-        method: 'POST',
-      })
+      const r = await api<{ message: string }>(
+        `/${sid.value}/deploy?remove=${on ? 'true' : 'false'}`,
+        {
+          method: 'POST',
+        },
+      )
       useToast().add({
         title: on ? 'Addon délié de GMod' : 'Addon lié à GMod',
         description: r.message,
@@ -66,20 +79,38 @@ export function useJobs() {
       const before = new Map(jobs.value.map((j) => [j.id, j.phase]))
       jobs.value = await api<Job[]>('/jobs')
       for (const j of jobs.value) {
-        if (before.get(j.id) === 'running' && j.phase !== 'running' && watched.value.includes(j.id)) {
+        if (
+          before.get(j.id) === 'running' &&
+          j.phase !== 'running' &&
+          watched.value.includes(j.id)
+        ) {
           watched.value = watched.value.filter((id) => id !== j.id)
           const ok = j.phase === 'done'
           toast.add({
-            title: ok ? `${j.label} : terminé` : j.phase === 'cancelled' ? `${j.label} : annulé` : `${j.label} : échec`,
+            title: ok
+              ? `${j.label} : terminé`
+              : j.phase === 'cancelled'
+                ? `${j.label} : annulé`
+                : `${j.label} : échec`,
             description: j.error || j.last || undefined,
             color: ok ? 'success' : j.phase === 'cancelled' ? 'neutral' : 'error',
-            icon: ok ? 'i-ri-checkbox-circle-line' : j.phase === 'cancelled' ? 'i-ri-stop-circle-line' : 'i-ri-error-warning-line',
+            icon: ok
+              ? 'i-ri-checkbox-circle-line'
+              : j.phase === 'cancelled'
+                ? 'i-ri-stop-circle-line'
+                : 'i-ri-error-warning-line',
             actions: [
               ...(j.phase === 'done' && j.models
-                ? [{
-                    label: 'Voir le résultat',
-                    onClick: () => navigateTo({ path: `/${j.source}/viewer`, query: j.models === 1 ? { m: j.model } : {} }),
-                  }]
+                ? [
+                    {
+                      label: 'Voir le résultat',
+                      onClick: () =>
+                        navigateTo({
+                          path: `/${j.source}/viewer`,
+                          query: j.models === 1 ? { m: j.model } : {},
+                        }),
+                    },
+                  ]
                 : []),
               { label: 'Détails', onClick: () => (open.value = true) },
             ],
@@ -95,7 +126,8 @@ export function useJobs() {
   function schedule() {
     clearTimeout(pollTimer)
     pollTimer = undefined
-    if (import.meta.client && (running.value > 0 || open.value)) pollTimer = setTimeout(refresh, 1200)
+    if (import.meta.client && (running.value > 0 || open.value))
+      pollTimer = setTimeout(refresh, 1200)
   }
 
   /** Follow a job: it appears in the panel and a toast announces its end. */
@@ -131,14 +163,19 @@ export function useSettings() {
   async function save(patch: Partial<Record<keyof Settings, Record<string, unknown>>>) {
     saving.value = true
     try {
-      const r = await api<{ values: Settings; defaults: Settings }>('/settings', { method: 'PUT', body: patch })
+      const r = await api<{ values: Settings; defaults: Settings }>('/settings', {
+        method: 'PUT',
+        body: patch,
+      })
       values.value = r.values
     } finally {
       saving.value = false
     }
   }
   async function reset() {
-    const r = await api<{ values: Settings; defaults: Settings }>('/settings/reset', { method: 'POST' })
+    const r = await api<{ values: Settings; defaults: Settings }>('/settings/reset', {
+      method: 'POST',
+    })
     values.value = r.values
   }
   return { values, defaults, saving, load, save, reset }
@@ -155,7 +192,10 @@ export function useSystem() {
 }
 
 /** Starts a server job (POST returning {job}) and follows it in the jobs panel. */
-export async function startJob(path: string, opts: { body?: unknown; title?: string; open?: boolean } = {}) {
+export async function startJob(
+  path: string,
+  opts: { body?: unknown; title?: string; open?: boolean } = {},
+) {
   const jobs = useJobs()
   try {
     const { job } = await api<{ job: string }>(path, { method: 'POST', body: opts.body })
@@ -170,12 +210,13 @@ export async function startJob(path: string, opts: { body?: unknown; title?: str
   }
 }
 
-
 /** First-run setup: what is configured, and the long steps (extraction, names, compiler) as jobs. */
 export function useSetup() {
   const status = useState<SetupStatus | null>('setup-status', () => null)
   const jobs = useJobs()
-  const running = computed(() => jobs.jobs.value.find((j) => j.kind === 'setup' && j.phase === 'running'))
+  const running = computed(() =>
+    jobs.jobs.value.find((j) => j.kind === 'setup' && j.phase === 'running'),
+  )
   async function load() {
     status.value = await api<SetupStatus>('/setup/status').catch(() => status.value)
     return status.value

@@ -14,13 +14,20 @@ const openItems = ref<string[]>(props.materials.length === 1 ? ['0'] : [])
 const rows = computed(() =>
   props.materials
     .map((m, i) => ({ m, i }))
-    .filter((r) => !q.value || `${r.m.name} ${r.m.source_name}`.toLowerCase().includes(q.value.toLowerCase())),
+    .filter(
+      (r) =>
+        !q.value || `${r.m.name} ${r.m.source_name}`.toLowerCase().includes(q.value.toLowerCase()),
+    ),
 )
-const items = computed(() => rows.value.map((r) => ({ label: r.m.name, value: String(r.i), row: r })))
+const items = computed(() =>
+  rows.value.map((r) => ({ label: r.m.name, value: String(r.i), row: r })),
+)
 type Row = { m: SourceMaterial; i: number }
 const R = (item: unknown) => (item as { row: Row }).row
 const thumb = (m: SourceMaterial) => {
-  const t = m.textures.find((x) => x.role === 'base' && x.found !== false) ?? m.textures.find((x) => x.found !== false)
+  const t =
+    m.textures.find((x) => x.role === 'base' && x.found !== false) ??
+    m.textures.find((x) => x.found !== false)
   return t ? gameTextureUrl(sid.value, t.key, { size: 64, role: t.role }) : ''
 }
 const params = (m: SourceMaterial) => Object.entries(m.params).slice(0, 40)

@@ -4,7 +4,8 @@ export function usePersisted<T>(key: string, fallback: T) {
   if (import.meta.client) {
     try {
       const raw = localStorage.getItem(`omni:${key}`)
-      if (raw) state.value = { ...(typeof fallback === 'object' ? fallback : {}), ...JSON.parse(raw) } as T
+      if (raw)
+        state.value = { ...(typeof fallback === 'object' ? fallback : {}), ...JSON.parse(raw) } as T
     } catch {
       /* private mode, corrupted value: keep the default */
     }

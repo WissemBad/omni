@@ -8,9 +8,18 @@ import type { OutputModel, Vec3 } from '~/utils/types'
 export type LayerName = 'skeleton' | 'hitboxes' | 'attachments' | 'bounds' | 'collision' | 'player'
 
 const BOX_EDGES: [number, number][] = [
-  [0, 1], [2, 3], [4, 5], [6, 7], // along z
-  [0, 2], [1, 3], [4, 6], [5, 7], // along y
-  [0, 4], [1, 5], [2, 6], [3, 7], // along x
+  [0, 1],
+  [2, 3],
+  [4, 5],
+  [6, 7], // along z
+  [0, 2],
+  [1, 3],
+  [4, 6],
+  [5, 7], // along y
+  [0, 4],
+  [1, 5],
+  [2, 6],
+  [3, 7], // along x
 ]
 
 function overlayMaterial<T extends THREE.Material>(m: T): T {
@@ -19,10 +28,17 @@ function overlayMaterial<T extends THREE.Material>(m: T): T {
   return m
 }
 
-function lines(points: number[], color: THREE.ColorRepresentation, opacity = 1): THREE.LineSegments {
+function lines(
+  points: number[],
+  color: THREE.ColorRepresentation,
+  opacity = 1,
+): THREE.LineSegments {
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.Float32BufferAttribute(points, 3))
-  const l = new THREE.LineSegments(g, overlayMaterial(new THREE.LineBasicMaterial({ color, opacity })))
+  const l = new THREE.LineSegments(
+    g,
+    overlayMaterial(new THREE.LineBasicMaterial({ color, opacity })),
+  )
   l.renderOrder = 20
   return l
 }
@@ -43,7 +59,10 @@ function skeleton(m: OutputModel): THREE.Group {
   g.add(lines(seg, 0x8b5cf6))
   const dots = new THREE.BufferGeometry()
   dots.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3))
-  const points = new THREE.Points(dots, overlayMaterial(new THREE.PointsMaterial({ color: 0xc4b5fd, size: 6, sizeAttenuation: false })))
+  const points = new THREE.Points(
+    dots,
+    overlayMaterial(new THREE.PointsMaterial({ color: 0xc4b5fd, size: 6, sizeAttenuation: false })),
+  )
   points.renderOrder = 21
   g.add(points)
   return g
@@ -57,7 +76,8 @@ function hitboxes(m: OutputModel): THREE.Group {
     arr.push(...boxLines(h.corners))
     byGroup.set(h.group, arr)
   }
-  for (const [group, pts] of byGroup) g.add(lines(pts, new THREE.Color().setHSL(((group * 47) % 360) / 360, 0.85, 0.6), 0.9))
+  for (const [group, pts] of byGroup)
+    g.add(lines(pts, new THREE.Color().setHSL(((group * 47) % 360) / 360, 0.85, 0.6), 0.9))
   return g
 }
 
@@ -75,7 +95,31 @@ function bounds(m: OutputModel): THREE.Group {
   g.add(lines(boxLines(m.model.hull_box as Vec3[]), 0xf59e0b, 0.9))
   g.add(lines(boxLines(m.model.view_box as Vec3[]), 0x94a3b8, 0.55))
   const e = m.model.eye
-  g.add(lines([e[0] - 0.04, e[1], e[2], e[0] + 0.04, e[1], e[2], e[0], e[1] - 0.04, e[2], e[0], e[1] + 0.04, e[2], e[0], e[1], e[2] - 0.04, e[0], e[1], e[2] + 0.04], 0x38bdf8))
+  g.add(
+    lines(
+      [
+        e[0] - 0.04,
+        e[1],
+        e[2],
+        e[0] + 0.04,
+        e[1],
+        e[2],
+        e[0],
+        e[1] - 0.04,
+        e[2],
+        e[0],
+        e[1] + 0.04,
+        e[2],
+        e[0],
+        e[1],
+        e[2] - 0.04,
+        e[0],
+        e[1],
+        e[2] + 0.04,
+      ],
+      0x38bdf8,
+    ),
+  )
   return g
 }
 
@@ -85,8 +129,14 @@ export function playerScale(box: THREE.Box3): THREE.Group {
   const w = 32 / 39.37
   const h = 72 / 39.37
   const geo = new THREE.BoxGeometry(w, h, w)
-  const fill = new THREE.Mesh(geo, overlayMaterial(new THREE.MeshBasicMaterial({ color: 0x38bdf8, opacity: 0.12 })))
-  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), overlayMaterial(new THREE.LineBasicMaterial({ color: 0x38bdf8, opacity: 0.9 })))
+  const fill = new THREE.Mesh(
+    geo,
+    overlayMaterial(new THREE.MeshBasicMaterial({ color: 0x38bdf8, opacity: 0.12 })),
+  )
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(geo),
+    overlayMaterial(new THREE.LineBasicMaterial({ color: 0x38bdf8, opacity: 0.9 })),
+  )
   fill.renderOrder = edges.renderOrder = 19
   g.add(fill, edges)
   g.position.set(box.max.x + w * 0.8 + 0.1, box.min.y + h / 2, (box.min.z + box.max.z) / 2)
@@ -100,8 +150,16 @@ export function collisionLayer(pieces: number[][]): THREE.Group {
     const geo = new THREE.BufferGeometry()
     geo.setAttribute('position', new THREE.Float32BufferAttribute(flat, 3))
     const color = palette[i % palette.length]!
-    const fill = new THREE.Mesh(geo, overlayMaterial(new THREE.MeshBasicMaterial({ color, opacity: 0.12, side: THREE.DoubleSide })))
-    const wire = new THREE.LineSegments(new THREE.WireframeGeometry(geo), overlayMaterial(new THREE.LineBasicMaterial({ color, opacity: 0.85 })))
+    const fill = new THREE.Mesh(
+      geo,
+      overlayMaterial(
+        new THREE.MeshBasicMaterial({ color, opacity: 0.12, side: THREE.DoubleSide }),
+      ),
+    )
+    const wire = new THREE.LineSegments(
+      new THREE.WireframeGeometry(geo),
+      overlayMaterial(new THREE.LineBasicMaterial({ color, opacity: 0.85 })),
+    )
     fill.renderOrder = 17
     wire.renderOrder = 18
     g.add(fill, wire)
@@ -131,7 +189,10 @@ export function disposeGroup(g: THREE.Object3D) {
 
 /** A marker that follows the selected bone. */
 export function boneMarker(): THREE.Mesh {
-  const m = new THREE.Mesh(new THREE.SphereGeometry(0.018, 16, 12), overlayMaterial(new THREE.MeshBasicMaterial({ color: 0xfacc15 })))
+  const m = new THREE.Mesh(
+    new THREE.SphereGeometry(0.018, 16, 12),
+    overlayMaterial(new THREE.MeshBasicMaterial({ color: 0xfacc15 })),
+  )
   m.renderOrder = 30
   m.visible = false
   return m

@@ -2,7 +2,12 @@
 import type { OutputMaterial } from '~/utils/types'
 
 /** Materials of a converted model: shader, flags, textures (click for a full-size look) and the VMT itself. */
-const props = defineProps<{ materials: OutputMaterial[]; used: number[]; skin: number; skins: number }>()
+const props = defineProps<{
+  materials: OutputMaterial[]
+  used: number[]
+  skin: number
+  skins: number
+}>()
 const emit = defineEmits<{ texture: [material: number, texture: number] }>()
 const sid = useSourceId()
 
@@ -13,9 +18,15 @@ const openItems = ref<string[]>([])
 const rows = computed(() =>
   props.materials
     .map((m, i) => ({ m, i, inSkin: props.used.includes(i) }))
-    .filter((r) => (!onlySkin.value || r.inSkin) && (!q.value || r.m.name.toLowerCase().includes(q.value.toLowerCase()))),
+    .filter(
+      (r) =>
+        (!onlySkin.value || r.inSkin) &&
+        (!q.value || r.m.name.toLowerCase().includes(q.value.toLowerCase())),
+    ),
 )
-const items = computed(() => rows.value.map((r) => ({ label: r.m.name, value: String(r.i), row: r })))
+const items = computed(() =>
+  rows.value.map((r) => ({ label: r.m.name, value: String(r.i), row: r })),
+)
 
 const thumb = (m: OutputMaterial) => {
   const t = m.textures.find((x) => x.param === '$basetexture' && x.exists)

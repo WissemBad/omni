@@ -16,6 +16,7 @@ steps:
     image: oven/bun:alpine
     commands:
       - cd web
+      - bun run lint
       - bun run typecheck
       - bun run build
     depends_on:

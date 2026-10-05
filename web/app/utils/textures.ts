@@ -17,7 +17,7 @@ export const TEX_ROLE_LABEL: Record<string, string> = {
   translucency: 'Translucidité',
   other: 'Autre',
 }
-export const texRoleLabel = (r: string) => TEX_ROLE_LABEL[r] ?? titleCase(r || "autre")
+export const texRoleLabel = (r: string) => TEX_ROLE_LABEL[r] ?? titleCase(r || 'autre')
 
 export const TEX_ROLE_ICON: Record<string, string> = {
   base: 'i-ri-palette-line',
@@ -34,7 +34,11 @@ export const TEX_ROLE_ICON: Record<string, string> = {
 export const isNormalRole = (r?: string) => r === 'normal' || r === 'detail_normal'
 
 /** PNG of a game texture at a given size and channel (`/api/<source>/textures/<key>/image`). */
-export function gameTextureUrl(sid: string, key: string, opts: { size?: number; channel?: Channel; role?: string } = {}): string {
+export function gameTextureUrl(
+  sid: string,
+  key: string,
+  opts: { size?: number; channel?: Channel; role?: string } = {},
+): string {
   const q = new URLSearchParams({ size: String(opts.size ?? 256), channel: opts.channel ?? 'rgb' })
   if (opts.role !== undefined) q.set('normal', isNormalRole(opts.role) ? '1' : '0')
   return `/api/${sid}/textures/${key}/image?${q}`

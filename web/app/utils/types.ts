@@ -212,7 +212,21 @@ export interface OutputMaterial {
   flags: string[]
   raw: string
   alpha: 'OPAQUE' | 'MASK' | 'BLEND'
-  origin?: { key: string; name: string; cls: string; source: string; textures: { key: string; name: string; fmt: string; width: number; height: number; role: string; slot: string }[] } | null
+  origin?: {
+    key: string
+    name: string
+    cls: string
+    source: string
+    textures: {
+      key: string
+      name: string
+      fmt: string
+      width: number
+      height: number
+      role: string
+      slot: string
+    }[]
+  } | null
 }
 
 export interface OutputCheck {
@@ -360,8 +374,20 @@ export interface Overview {
   capabilities: string[]
   props?: { total: number; named: number; converted: number }
   characters?: { total: number; built: number }
-  textures?: { ready: boolean; building: boolean; textures?: number; bytes?: number; named?: number; used?: number }
-  sounds?: { exported: boolean; count: number; bytes: number; summary: Record<string, unknown> | null }
+  textures?: {
+    ready: boolean
+    building: boolean
+    textures?: number
+    bytes?: number
+    named?: number
+    used?: number
+  }
+  sounds?: {
+    exported: boolean
+    count: number
+    bytes: number
+    summary: Record<string, unknown> | null
+  }
   addon: {
     path: string
     deployed: boolean

@@ -7,7 +7,10 @@ const route = useRoute()
 const router = useRouter()
 const { sources } = useSources()
 const caps = computed(() => sources.value.find((s) => s.id === sid.value)?.capabilities ?? [])
-const has = computed(() => ({ props: caps.value.includes('props'), characters: caps.value.includes('characters') }))
+const has = computed(() => ({
+  props: caps.value.includes('props'),
+  characters: caps.value.includes('characters'),
+}))
 
 const tab = ref<'props' | 'characters'>(route.query.tab === 'characters' ? 'characters' : 'props')
 watch(

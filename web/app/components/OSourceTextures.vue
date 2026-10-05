@@ -1,6 +1,19 @@
 <script setup lang="ts">
-interface SrcTexture { role: string; slot: string; key: string; width: number; height: number; format: string; found: boolean }
-interface SrcMaterial { name: string; source_name: string; flags: string[]; textures: SrcTexture[] }
+interface SrcTexture {
+  role: string
+  slot: string
+  key: string
+  width: number
+  height: number
+  format: string
+  found: boolean
+}
+interface SrcMaterial {
+  name: string
+  source_name: string
+  flags: string[]
+  textures: SrcTexture[]
+}
 
 /** The game's own textures of a prop (colour, normal, SRM...) before conversion, with a full-size look. */
 const props = defineProps<{ propKey: string }>()
@@ -15,8 +28,14 @@ const channel = ref<'rgb' | 'rgba' | 'r' | 'g' | 'b' | 'a'>('rgb')
 const CHANNELS = ['rgb', 'rgba', 'r', 'g', 'b', 'a'] as const
 
 const ROLE: Record<string, string> = {
-  base: 'Couleur', normal: 'Normale', srm: 'SRM (rugosité / métal / AO)', alpha: 'Alpha', emissive: 'Émission',
-  ao: 'Occlusion', detail_normal: 'Normale de détail', other: 'Autre',
+  base: 'Couleur',
+  normal: 'Normale',
+  srm: 'SRM (rugosité / métal / AO)',
+  alpha: 'Alpha',
+  emissive: 'Émission',
+  ao: 'Occlusion',
+  detail_normal: 'Normale de détail',
+  other: 'Autre',
 }
 
 watch([open, () => props.propKey], async () => {

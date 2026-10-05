@@ -2,7 +2,14 @@
 import type * as THREE from 'three'
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js'
 import type { LayerName } from '~/utils/overlays'
-import type { Category, OutputItem, OutputModel, OutputPage, OutputStats, ViewerRoot } from '~/utils/types'
+import type {
+  Category,
+  OutputItem,
+  OutputModel,
+  OutputPage,
+  OutputStats,
+  ViewerRoot,
+} from '~/utils/types'
 
 definePageMeta({ key: (r) => `${r.params.source}/viewer` })
 
@@ -41,7 +48,10 @@ const treeOpen = ref(false)
 const mobilePreview = ref(false)
 const inspectorOpen = ref(false)
 const search = useTemplateRef<{ inputRef?: HTMLInputElement }>('search')
-const scroll = useTemplateRef<{ $el: HTMLElement; virtualizer?: { scrollToIndex: (i: number, o?: object) => void } }>('scroll')
+const scroll = useTemplateRef<{
+  $el: HTMLElement
+  virtualizer?: { scrollToIndex: (i: number, o?: object) => void }
+}>('scroll')
 const viewer = useTemplateRef<{
   root: THREE.Object3D | null
   parser: GLTF['parser'] | null
@@ -117,7 +127,13 @@ const rootMenu = computed(() => [
     checked: r.id === root.value,
     onUpdateChecked: () => (root.value = r.id),
   })),
-  [{ label: 'Ouvrir un dossier…', icon: 'i-ri-folder-add-line', onSelect: () => (folderOpen.value = true) }],
+  [
+    {
+      label: 'Ouvrir un dossier…',
+      icon: 'i-ri-folder-add-line',
+      onSelect: () => (folderOpen.value = true),
+    },
+  ],
 ])
 
 // switching folder starts the browser over
@@ -174,7 +190,9 @@ async function select(item: OutputItem, opts: { keepVariants?: boolean } = {}) {
   modelError.value = ''
   if (!opts.keepVariants) model.value = null
   try {
-    const m = await api<OutputModel>(`/${sid.value}/output/model?path=${encodeURIComponent(item.path)}&root=${root.value}`)
+    const m = await api<OutputModel>(
+      `/${sid.value}/output/model?path=${encodeURIComponent(item.path)}&root=${root.value}`,
+    )
     if (mine !== pick) return
     if (!opts.keepVariants) {
       skin.value = 0
@@ -182,7 +200,10 @@ async function select(item: OutputItem, opts: { keepVariants?: boolean } = {}) {
       bone.value = -1
       compare.value = false
     }
-    groups.value = opts.keepVariants && groups.value.length === m.model.bodyparts.length ? groups.value : m.model.bodyparts.map(() => 0)
+    groups.value =
+      opts.keepVariants && groups.value.length === m.model.bodyparts.length
+        ? groups.value
+        : m.model.bodyparts.map(() => 0)
     model.value = m
   } catch (e) {
     if (mine === pick) modelError.value = apiError(e)
@@ -193,14 +214,23 @@ async function select(item: OutputItem, opts: { keepVariants?: boolean } = {}) {
 
 const gmodPath = computed(() => active.value?.path ?? '')
 const glb = computed(() =>
-  active.value && model.value ? outputUrl(sid.value, 'glb', { path: active.value.path, lod: lod.value, v: Math.round(active.value.mtime) }) : undefined,
+  active.value && model.value
+    ? outputUrl(sid.value, 'glb', {
+        path: active.value.path,
+        lod: lod.value,
+        v: Math.round(active.value.mtime),
+      })
+    : undefined,
 )
 const dims = computed(() => (model.value ? dimsCm(model.value) : null))
 const activeIndex = computed(() => items.value.findIndex((p) => p.path === active.value?.path))
 
 function step(delta: number) {
   if (!items.value.length) return
-  const i = Math.min(items.value.length - 1, Math.max(0, (activeIndex.value < 0 ? (delta > 0 ? -1 : 1) : activeIndex.value) + delta))
+  const i = Math.min(
+    items.value.length - 1,
+    Math.max(0, (activeIndex.value < 0 ? (delta > 0 ? -1 : 1) : activeIndex.value) + delta),
+  )
   select(items.value[i]!)
   scroll.value?.virtualizer?.scrollToIndex(i, { align: 'auto' })
   more()
@@ -223,7 +253,8 @@ function applyVariants() {
     mesh.visible = (groups.value[b] ?? 0) === mi
     const index = row[ref]
     if (index !== undefined && mesh.visible) {
-      if (!mats.has(index)) mats.set(index, parser.getDependency('material', index) as Promise<THREE.Material>)
+      if (!mats.has(index))
+        mats.set(index, parser.getDependency('material', index) as Promise<THREE.Material>)
       mats.get(index)?.then((mat) => {
         mesh.material = mat
         v.sync()
@@ -243,7 +274,14 @@ const LAYERS: { key: LayerName; label: string; icon: string; kbd?: string }[] = 
   { key: 'collision', label: 'Collision physique', icon: 'i-ri-shape-line', kbd: 'C' },
   { key: 'player', label: 'Joueur (échelle)', icon: 'i-ri-user-3-line' },
 ]
-const layers = reactive<Record<LayerName, boolean>>({ skeleton: false, hitboxes: false, attachments: false, bounds: false, collision: false, player: false })
+const layers = reactive<Record<LayerName, boolean>>({
+  skeleton: false,
+  hitboxes: false,
+  attachments: false,
+  bounds: false,
+  collision: false,
+  player: false,
+})
 const objects: Partial<Record<LayerName, THREE.Object3D>> = {}
 let markerObj: THREE.Mesh | null = null
 const shading = ref<'textured' | 'clay' | 'normals' | 'checker'>('textured')
@@ -296,14 +334,20 @@ async function loadCollision() {
   collisionState.loading = true
   collisionState.missing = false
   try {
-    const r = await api<{ pieces: number[][] }>(`/${sid.value}/output/collision?path=${encodeURIComponent(m.path)}&root=${root.value}`)
+    const r = await api<{ pieces: number[][] }>(
+      `/${sid.value}/output/collision?path=${encodeURIComponent(m.path)}&root=${root.value}`,
+    )
     const g = collisionLayer(r.pieces)
     objects.collision = g
     viewer.value?.getScene().add(g)
   } catch {
     collisionState.missing = true
     layers.collision = false
-    toast.add({ title: 'Pas de collision à afficher', description: 'Ce modèle n’a pas de fichier .phy lisible.', icon: 'i-ri-shape-line' })
+    toast.add({
+      title: 'Pas de collision à afficher',
+      description: 'Ce modèle n’a pas de fichier .phy lisible.',
+      icon: 'i-ri-shape-line',
+    })
   } finally {
     collisionState.loading = false
     showLayers()
@@ -331,7 +375,9 @@ watch(model, () => {
 })
 onBeforeUnmount(clearLayers)
 
-const compareUrl = computed(() => (model.value?.source ? `/api/${sid.value}/props/${model.value.source.key}/glb` : undefined))
+const compareUrl = computed(() =>
+  model.value?.source ? `/api/${sid.value}/props/${model.value.source.key}/glb` : undefined,
+)
 watch(compareUrl, (u) => {
   if (!u) compare.value = false
 })
@@ -382,13 +428,22 @@ function reconvert() {
   if (model.value?.source) convertOpen.value = true
 }
 async function started(job: string) {
-  toast.add({ title: 'Conversion lancée', description: 'La sortie se met à jour toute seule à la fin.', icon: 'i-ri-play-large-line' })
+  toast.add({
+    title: 'Conversion lancée',
+    description: 'La sortie se met à jour toute seule à la fin.',
+    icon: 'i-ri-play-large-line',
+  })
   await jobsState.track(job)
   jobsState.open.value = true
   jobsState.schedule()
 }
 
-const finished = computed(() => jobsState.jobs.value.filter((j) => j.phase === 'done').map((j) => j.id).join(','))
+const finished = computed(() =>
+  jobsState.jobs.value
+    .filter((j) => j.phase === 'done')
+    .map((j) => j.id)
+    .join(','),
+)
 watch(finished, async () => {
   if (external.value) return
   await fetchPage(true, true)
@@ -407,18 +462,23 @@ onMounted(async () => {
   await Promise.all([fetchPage(true), loadSide()])
   const m = String(route.query.m ?? '')
   if (m) {
-    const r = await api<OutputPage>(`/${sid.value}/output?q=${encodeURIComponent(leaf(m).replace(/\.mdl$/, ''))}&limit=50&root=${root.value}`).catch(() => null)
+    const r = await api<OutputPage>(
+      `/${sid.value}/output?q=${encodeURIComponent(leaf(m).replace(/\.mdl$/, ''))}&limit=50&root=${root.value}`,
+    ).catch(() => null)
     const found = r?.items.find((i) => i.path === m)
     if (found) select(found)
     else modelError.value = `Ce modèle n’existe pas (encore) dans le dossier : ${m}`
   }
 })
 
-const SEGMENTS = computed(() => [
-  { label: 'Tout', value: '', n: kinds.value.prop + kinds.value.character + kinds.value.model },
-  { label: 'Props', value: 'prop', n: kinds.value.prop },
-  { label: 'Personnages', value: 'character', n: kinds.value.character },
-] as const)
+const SEGMENTS = computed(
+  () =>
+    [
+      { label: 'Tout', value: '', n: kinds.value.prop + kinds.value.character + kinds.value.model },
+      { label: 'Props', value: 'prop', n: kinds.value.prop },
+      { label: 'Personnages', value: 'character', n: kinds.value.character },
+    ] as const,
+)
 const SORTS = [
   { label: 'Plus récents', value: 'recent' },
   { label: 'Nom', value: 'name' },

@@ -24,14 +24,19 @@ const current = computed(() => sources.value.find((s) => s.id === sid.value))
 const route = useRoute()
 const items = computed(() => {
   const c = current.value
-  if (route.path === '/setup') return [{ label: 'Installation', icon: 'i-ri-install-line', to: '/setup' }]
+  if (route.path === '/setup')
+    return [{ label: 'Installation', icon: 'i-ri-install-line', to: '/setup' }]
   if (!c) return []
   const caps = c.capabilities
   const rows = [{ label: 'Accueil', icon: 'i-ri-home-5-line', to: `/${c.id}` }]
-  if (caps.includes('props') || caps.includes('characters')) rows.push({ label: 'Modèles', icon: 'i-ri-box-3-line', to: `/${c.id}/models` })
-  if (caps.includes('textures')) rows.push({ label: 'Textures', icon: 'i-ri-image-2-line', to: `/${c.id}/textures` })
-  if (caps.includes('props') || caps.includes('characters')) rows.push({ label: 'Visionneuse', icon: 'i-ri-eye-line', to: `/${c.id}/viewer` })
-  if (caps.includes('sounds')) rows.push({ label: 'Sons', icon: 'i-ri-music-2-line', to: `/${c.id}/sounds` })
+  if (caps.includes('props') || caps.includes('characters'))
+    rows.push({ label: 'Modèles', icon: 'i-ri-box-3-line', to: `/${c.id}/models` })
+  if (caps.includes('textures'))
+    rows.push({ label: 'Textures', icon: 'i-ri-image-2-line', to: `/${c.id}/textures` })
+  if (caps.includes('props') || caps.includes('characters'))
+    rows.push({ label: 'Visionneuse', icon: 'i-ri-eye-line', to: `/${c.id}/viewer` })
+  if (caps.includes('sounds'))
+    rows.push({ label: 'Sons', icon: 'i-ri-music-2-line', to: `/${c.id}/sounds` })
   rows.push({ label: 'Réglages', icon: 'i-ri-settings-3-line', to: `/${c.id}/settings` })
   return rows
 })

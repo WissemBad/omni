@@ -30,7 +30,10 @@ const convertOpen = ref(false)
 const convertKeys = ref<string[]>([])
 const mobilePreview = ref(false)
 const search = useTemplateRef<{ inputRef?: HTMLInputElement }>('search')
-const scroll = useTemplateRef<{ $el: HTMLElement; virtualizer?: { scrollToIndex: (i: number, o?: object) => void } }>('scroll')
+const scroll = useTemplateRef<{
+  $el: HTMLElement
+  virtualizer?: { scrollToIndex: (i: number, o?: object) => void }
+}>('scroll')
 
 let seq = 0
 async function fetchPage(reset: boolean) {
@@ -92,7 +95,9 @@ onMounted(async () => {
   fetchPage(true)
   const k = String(route.query.k ?? '')
   if (k) {
-    const r = await api<Page<Prop>>(`/${sid.value}/props?q=${encodeURIComponent(k)}&named=0&limit=3`).catch(() => null)
+    const r = await api<Page<Prop>>(
+      `/${sid.value}/props?q=${encodeURIComponent(k)}&named=0&limit=3`,
+    ).catch(() => null)
     const found = r?.items.find((i) => i.key === k)
     if (found) preview(found)
   }
@@ -119,7 +124,9 @@ watch(
 onBeforeUnmount(() => clearInterval(waitTimer))
 
 // ---- preview + inspector
-const glb = computed(() => (active.value ? `/api/${sid.value}/props/${active.value.key}/glb` : undefined))
+const glb = computed(() =>
+  active.value ? `/api/${sid.value}/props/${active.value.key}/glb` : undefined,
+)
 const gmodPath = computed(() => (active.value ? modelPath(sid.value, active.value) : ''))
 const activeIndex = computed(() => items.value.findIndex((p) => p.key === active.value?.key))
 const info = ref<PropDetails | null>(null)
@@ -156,7 +163,10 @@ function preview(p: Prop) {
 
 function step(delta: number) {
   if (!items.value.length) return
-  const i = Math.min(items.value.length - 1, Math.max(0, (activeIndex.value < 0 ? (delta > 0 ? -1 : 1) : activeIndex.value) + delta))
+  const i = Math.min(
+    items.value.length - 1,
+    Math.max(0, (activeIndex.value < 0 ? (delta > 0 ? -1 : 1) : activeIndex.value) + delta),
+  )
   const p = items.value[i]
   if (p) preview(p)
   scroll.value?.virtualizer?.scrollToIndex(i, { align: 'auto' })
@@ -175,13 +185,25 @@ function tick(p: Prop, index: number, shift: boolean) {
 
 const selectingAll = ref(false)
 async function selectAllMatching() {
-  if (total.value > 3000 && !confirm(`Sélectionner les ${total.value.toLocaleString('fr-FR')} résultats ?`)) return
+  if (
+    total.value > 3000 &&
+    !confirm(`Sélectionner les ${total.value.toLocaleString('fr-FR')} résultats ?`)
+  )
+    return
   selectingAll.value = true
   try {
-    const params = new URLSearchParams({ q: q.value, cat: cat.value, statues: statues.value, named: named.value ? '1' : '0' })
+    const params = new URLSearchParams({
+      q: q.value,
+      cat: cat.value,
+      statues: statues.value,
+      named: named.value ? '1' : '0',
+    })
     const keys = await api<string[]>(`/${sid.value}/props/keys?${params}`)
     selection.add(Object.fromEntries(keys.map((k) => [k, k])))
-    toast.add({ title: `${keys.length.toLocaleString('fr-FR')} props sélectionnés`, icon: 'i-ri-checkbox-multiple-line' })
+    toast.add({
+      title: `${keys.length.toLocaleString('fr-FR')} props sélectionnés`,
+      icon: 'i-ri-checkbox-multiple-line',
+    })
   } finally {
     selectingAll.value = false
   }
@@ -193,7 +215,11 @@ function convert(keys: string[]) {
 }
 
 async function started(job: string) {
-  toast.add({ title: 'Conversion lancée', description: 'Suis la progression dans les travaux.', icon: 'i-ri-play-large-line' })
+  toast.add({
+    title: 'Conversion lancée',
+    description: 'Suis la progression dans les travaux.',
+    icon: 'i-ri-play-large-line',
+  })
   await jobs.track(job)
   jobs.open.value = true
   jobs.schedule()
@@ -201,7 +227,9 @@ async function started(job: string) {
 }
 
 // a finished conversion marks the props of the list and the inspector
-const finished = computed(() => jobs.jobs.value.filter((j) => j.phase === 'done' && j.kind === 'props').length)
+const finished = computed(
+  () => jobs.jobs.value.filter((j) => j.phase === 'done' && j.kind === 'props').length,
+)
 watch(finished, () => {
   fetchPage(true)
   if (active.value) loadInfo(active.value)
@@ -217,8 +245,12 @@ function openTexture(mi: number, ti: number) {
   texOpen.value = true
 }
 
-const textureCount = computed(() => new Set(info.value?.materials.flatMap((m) => m.textures.map((t) => t.key)) ?? []).size)
-const dims = computed(() => (info.value?.extent ? info.value.extent.map((v) => Math.round(v * 100)) : null))
+const textureCount = computed(
+  () => new Set(info.value?.materials.flatMap((m) => m.textures.map((t) => t.key)) ?? []).size,
+)
+const dims = computed(() =>
+  info.value?.extent ? info.value.extent.map((v) => Math.round(v * 100)) : null,
+)
 const stats = computed(() => {
   const d = info.value
   if (!d) return []
@@ -227,10 +259,30 @@ const stats = computed(() => {
     { label: 'Sommets', value: d.vertices.toLocaleString('fr-FR'), icon: 'i-ri-focus-line' },
     { label: 'Matériaux', value: String(d.materials.length), icon: 'i-ri-palette-line' },
     { label: 'Textures du jeu', value: String(textureCount.value), icon: 'i-ri-image-line' },
-    { label: 'Dimensions', value: dims.value ? `${dims.value[0]} × ${dims.value[2]} × ${dims.value[1]} cm` : '—', icon: 'i-ri-ruler-line' },
-    { label: 'Niveaux de détail', value: d.lods.length ? d.lods.map((l) => `LOD${l}`).join(' ') : '—', icon: 'i-ri-stack-line' },
-    { label: 'Collision du jeu', value: d.collision ? Object.entries(d.collision.shapes).map(([k, v]) => `${v} ${k}`).join(', ') : 'aucune', icon: 'i-ri-shield-line' },
-    { label: 'Variantes', value: d.variants.length ? `${d.variants.length} skin(s)` : 'aucune', icon: 'i-ri-t-shirt-line' },
+    {
+      label: 'Dimensions',
+      value: dims.value ? `${dims.value[0]} × ${dims.value[2]} × ${dims.value[1]} cm` : '—',
+      icon: 'i-ri-ruler-line',
+    },
+    {
+      label: 'Niveaux de détail',
+      value: d.lods.length ? d.lods.map((l) => `LOD${l}`).join(' ') : '—',
+      icon: 'i-ri-stack-line',
+    },
+    {
+      label: 'Collision du jeu',
+      value: d.collision
+        ? Object.entries(d.collision.shapes)
+            .map(([k, v]) => `${v} ${k}`)
+            .join(', ')
+        : 'aucune',
+      icon: 'i-ri-shield-line',
+    },
+    {
+      label: 'Variantes',
+      value: d.variants.length ? `${d.variants.length} skin(s)` : 'aucune',
+      icon: 'i-ri-t-shirt-line',
+    },
   ]
 })
 

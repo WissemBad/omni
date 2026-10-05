@@ -16,7 +16,11 @@ onMounted(async () => {
   if (st) Object.assign(format, { value: st.sounds.format, languages: st.sounds.languages })
 })
 
-const running = computed(() => jobs.jobs.value.find((j) => j.kind === 'sounds' && j.source === sid.value && j.phase === 'running'))
+const running = computed(() =>
+  jobs.jobs.value.find(
+    (j) => j.kind === 'sounds' && j.source === sid.value && j.phase === 'running',
+  ),
+)
 
 async function loadStatus() {
   status.value = await api<SoundStatus>(`/${sid.value}/sounds/status`).catch(() => null)
@@ -31,11 +35,24 @@ const FORMATS = [
   {
     label: 'Automatique (recommandé)',
     value: 'auto',
-    description: 'Vorbis du jeu en .ogg sans réencodage (qualité identique), le reste en .flac sans perte. ≈ 13 Go pour tout le jeu.',
+    description:
+      'Vorbis du jeu en .ogg sans réencodage (qualité identique), le reste en .flac sans perte. ≈ 13 Go pour tout le jeu.',
   },
-  { label: 'FLAC', value: 'flac', description: 'Tout décodé, sans perte : un seul format, ≈ 80 Go.' },
-  { label: 'WAV', value: 'wav', description: 'Tout décodé, non compressé : pour le montage, ≈ 140 Go.' },
-  { label: 'MP3 (V0)', value: 'mp3', description: 'Réencode avec perte : ≈ 19 Go. Seulement si un outil n’accepte que du MP3.' },
+  {
+    label: 'FLAC',
+    value: 'flac',
+    description: 'Tout décodé, sans perte : un seul format, ≈ 80 Go.',
+  },
+  {
+    label: 'WAV',
+    value: 'wav',
+    description: 'Tout décodé, non compressé : pour le montage, ≈ 140 Go.',
+  },
+  {
+    label: 'MP3 (V0)',
+    value: 'mp3',
+    description: 'Réencode avec perte : ≈ 19 Go. Seulement si un outil n’accepte que du MP3.',
+  },
 ]
 
 async function start() {
@@ -44,9 +61,19 @@ async function start() {
     saveSettings({ sounds: { format: format.value, languages: format.languages } }).catch(() => {})
     const { job } = await api<{ job: string }>(`/${sid.value}/sounds/export`, {
       method: 'POST',
-      body: { format: format.value, match: format.match, languages: format.languages, force: format.force, clean: format.force && !format.match },
+      body: {
+        format: format.value,
+        match: format.match,
+        languages: format.languages,
+        force: format.force,
+        clean: format.force && !format.match,
+      },
     })
-    toast.add({ title: 'Export des sons lancé', description: 'Reprise automatique si interrompu.', icon: 'i-ri-play-large-line' })
+    toast.add({
+      title: 'Export des sons lancé',
+      description: 'Reprise automatique si interrompu.',
+      icon: 'i-ri-play-large-line',
+    })
     await jobs.track(job)
     jobs.open.value = true
     jobs.schedule()
@@ -76,7 +103,14 @@ async function fetchPage(reset: boolean) {
   const mine = ++seq
   loading.value = true
   try {
-    const params = new URLSearchParams({ q: q.value, top: top.value, lang: lang.value, named: onlyNamed.value ? '1' : '0', limit: '200', offset: reset ? '0' : String(items.value.length) })
+    const params = new URLSearchParams({
+      q: q.value,
+      top: top.value,
+      lang: lang.value,
+      named: onlyNamed.value ? '1' : '0',
+      limit: '200',
+      offset: reset ? '0' : String(items.value.length),
+    })
     const r = await api<SoundPage>(`/${sid.value}/sounds?${params}`)
     if (mine !== seq) return
     total.value = r.total
@@ -93,7 +127,13 @@ async function fetchPage(reset: boolean) {
 }
 function more() {
   const el = scroll.value?.$el
-  if (el && !loading.value && items.value.length < total.value && el.scrollTop + el.clientHeight > el.scrollHeight - 900) fetchPage(false)
+  if (
+    el &&
+    !loading.value &&
+    items.value.length < total.value &&
+    el.scrollTop + el.clientHeight > el.scrollHeight - 900
+  )
+    fetchPage(false)
 }
 const reload = debounce(() => fetchPage(true), 220)
 watch([q, top, lang, onlyNamed], reload)
@@ -110,8 +150,14 @@ watch(running, async (now, before) => {
 })
 
 const topTabs = computed(() => [
-  { label: `Tout ${status.value?.count ? `(${status.value.count.toLocaleString('fr-FR')})` : ''}`, value: '' },
-  ...tops.value.map((t) => ({ label: `${titleCase(t.value)} (${t.n.toLocaleString('fr-FR')})`, value: t.value })),
+  {
+    label: `Tout ${status.value?.count ? `(${status.value.count.toLocaleString('fr-FR')})` : ''}`,
+    value: '',
+  },
+  ...tops.value.map((t) => ({
+    label: `${titleCase(t.value)} (${t.n.toLocaleString('fr-FR')})`,
+    value: t.value,
+  })),
 ])
 const topModel = computed({ get: () => top.value, set: (v: string) => (top.value = v ?? '') })
 
@@ -123,13 +169,24 @@ const length = ref(0)
 const volume = usePersisted('sound-player', { volume: 0.8, loop: false, next: true })
 
 /** Best readable name: the file's own, else the first event name that points at it, else the hash. */
-const niceName = (s: Sound) => (s.named ? titleCase(leaf(s.file).replace(/\.[a-z0-9]+$/i, '')) : s.title || titleCase(leaf(s.aliases[0] ?? s.file).replace(/\.[a-z0-9]+$/i, '')))
+const niceName = (s: Sound) =>
+  s.named
+    ? titleCase(leaf(s.file).replace(/\.[a-z0-9]+$/i, ''))
+    : s.title || titleCase(leaf(s.aliases[0] ?? s.file).replace(/\.[a-z0-9]+$/i, ''))
 const describe = (s: Sound) => {
   if (s.album && s.album !== niceName(s)) return [s.album, s.language].filter(Boolean).join(' · ')
   if (s.named) return s.file.split('/').slice(0, -1).join('/')
-  return s.alias_count > 1 ? `${s.alias_count} noms d’événements` : 'Identifiant seul : aucun nom retrouvé'
+  return s.alias_count > 1
+    ? `${s.alias_count} noms d’événements`
+    : 'Identifiant seul : aucun nom retrouvé'
 }
-const langItems = computed(() => [{ label: 'Toutes les langues', value: '' }, ...langs.value.map((l) => ({ label: `${l.value} (${l.n.toLocaleString('fr-FR')})`, value: l.value }))])
+const langItems = computed(() => [
+  { label: 'Toutes les langues', value: '' },
+  ...langs.value.map((l) => ({
+    label: `${l.value} (${l.n.toLocaleString('fr-FR')})`,
+    value: l.value,
+  })),
+])
 const current = computed(() => items.value.find((i) => i.file === playing.value) ?? null)
 
 function play(s: Sound) {
@@ -168,7 +225,10 @@ function ended() {
 const seek = (v: number | undefined) => {
   if (audio.value && v !== undefined) audio.value.currentTime = v
 }
-watch(() => volume.value.volume, (v) => audio.value && (audio.value.volume = v))
+watch(
+  () => volume.value.volume,
+  (v) => audio.value && (audio.value.volume = v),
+)
 const paused = ref(false)
 const summaryRows = computed(() => {
   const s = status.value?.summary as Record<string, number> | null
@@ -177,13 +237,20 @@ const summaryRows = computed(() => {
     ['Sons uniques', Number(s.unique).toLocaleString('fr-FR')],
     ['Poids', fmtBytes(Number(s.bytes))],
     ['Erreurs', String(s.errors)],
-    ...(s.stubs_skipped ? [['Amorces ignorées', Number(s.stubs_skipped).toLocaleString('fr-FR')]] : []),
-    ...(s.engine ? [['Moteur', String(s.engine) === 'rust' ? 'cœur Rust' : 'processus externes']] : []),
+    ...(s.stubs_skipped
+      ? [['Amorces ignorées', Number(s.stubs_skipped).toLocaleString('fr-FR')]]
+      : []),
+    ...(s.engine
+      ? [['Moteur', String(s.engine) === 'rust' ? 'cœur Rust' : 'processus externes']]
+      : []),
     ['Durée de l’export', `${Math.round(Number(s.seconds) / 60)} min`],
   ]
 })
 
-const revealSound = (path: string) => api(`/${sid.value}/sounds/reveal?path=${encodeURIComponent(path)}`, { method: 'POST' }).catch(() => {})
+const revealSound = (path: string) =>
+  api(`/${sid.value}/sounds/reveal?path=${encodeURIComponent(path)}`, { method: 'POST' }).catch(
+    () => {},
+  )
 
 defineShortcuts({
   '/': () => search.value?.inputRef?.focus(),

@@ -66,5 +66,5 @@ jobs:
         working-directory: web
 
       - name: Check
-        run: bun run typecheck && bun run build
+        run: bun run lint && bun run typecheck && bun run build
         working-directory: web

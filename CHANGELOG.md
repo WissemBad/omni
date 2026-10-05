@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- Biome lint and format for the web interface (`bun run lint`, part of CI).
+
 ## [0.3.0] - 2026-10-05
 
 First portable release.

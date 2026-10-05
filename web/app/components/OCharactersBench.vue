@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import type * as THREE from 'three'
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js'
-import type { Character, CharacterPage, CharacterPreview, Facet, PreviewBuilding } from '~/utils/types'
+import type {
+  Character,
+  CharacterPage,
+  CharacterPreview,
+  Facet,
+  PreviewBuilding,
+} from '~/utils/types'
 
 /** Models › Characters: outfit families of the game, their variations (bodygroups, skins) and the playermodel build. */
 
@@ -19,7 +25,11 @@ const mission = ref(String(route.query.mission ?? ''))
 const kind = ref(String(route.query.kind ?? ''))
 const built = ref(String(route.query.built ?? ''))
 
-const page = ref<CharacterPage>({ total: 0, items: [], facets: { mission: [], role: [], body: [], kind: [] } })
+const page = ref<CharacterPage>({
+  total: 0,
+  items: [],
+  facets: { mission: [], role: [], body: [], kind: [] },
+})
 const loading = ref(false)
 const loaded = ref(false)
 const failed = ref('')
@@ -31,7 +41,15 @@ async function fetchList() {
   loading.value = true
   failed.value = ''
   try {
-    const params = new URLSearchParams({ q: q.value, body: body.value, role: role.value, mission: mission.value, kind: kind.value, built: built.value, limit: '2000' })
+    const params = new URLSearchParams({
+      q: q.value,
+      body: body.value,
+      role: role.value,
+      mission: mission.value,
+      kind: kind.value,
+      built: built.value,
+      limit: '2000',
+    })
     const r = await api<CharacterPage>(`/${sid.value}/characters?${params}`)
     if (mine === seq) page.value = r
   } catch (e) {
@@ -47,9 +65,16 @@ const reload = debounce(fetchList, 200)
 const query = () => ({
   tab: 'characters',
   ...Object.fromEntries(
-    Object.entries({ q: q.value, body: body.value, role: role.value, mission: mission.value, kind: kind.value, built: built.value, id: active.value?.id ?? '', t: tab.value !== 'look' ? tab.value : '' }).filter(
-      ([, v]) => v,
-    ),
+    Object.entries({
+      q: q.value,
+      body: body.value,
+      role: role.value,
+      mission: mission.value,
+      kind: kind.value,
+      built: built.value,
+      id: active.value?.id ?? '',
+      t: tab.value !== 'look' ? tab.value : '',
+    }).filter(([, v]) => v),
   ),
 })
 const sync = () => route.path.endsWith('/models') && router.replace({ query: query() })
@@ -62,7 +87,9 @@ onMounted(async () => {
   // a shared link or a reload reopens the same character
   const id = String(route.query.id ?? '')
   if (!id) return
-  const r = await api<CharacterPage>(`/${sid.value}/characters?q=${encodeURIComponent(id)}&limit=5`).catch(() => null)
+  const r = await api<CharacterPage>(
+    `/${sid.value}/characters?q=${encodeURIComponent(id)}&limit=5`,
+  ).catch(() => null)
   const found = r?.items.find((i) => i.id === id)
   if (found) select(found)
 })
@@ -72,8 +99,12 @@ const facetItems = (facets: Facet[], all: string, label: (v: string) => string) 
   ...facets.map((f) => ({ label: `${label(f.value)} (${f.n})`, value: f.value })),
 ]
 const roleItems = computed(() => facetItems(page.value.facets.role, 'Tous les rôles', roleLabel))
-const missionItems = computed(() => facetItems(page.value.facets.mission, 'Tous les lieux', titleCase))
-const kindItems = computed(() => facetItems(page.value.facets.kind, 'Tous les types', (k) => KIND_LABEL[k] ?? titleCase(k)))
+const missionItems = computed(() =>
+  facetItems(page.value.facets.mission, 'Tous les lieux', titleCase),
+)
+const kindItems = computed(() =>
+  facetItems(page.value.facets.kind, 'Tous les types', (k) => KIND_LABEL[k] ?? titleCase(k)),
+)
 const bodyCount = (b: string) => page.value.facets.body.find((f) => f.value === b)?.n
 const BODIES = ['', 'male_reg', 'fem_reg', 'male_large']
 
@@ -88,7 +119,12 @@ const rows = computed<Row[]>(() => {
   for (const c of page.value.items) {
     if (c.mission !== last) {
       last = c.mission
-      out.push({ type: 'head', id: `h:${c.mission}`, label: titleCase(c.mission || 'Divers'), n: count.get(c.mission) ?? 0 })
+      out.push({
+        type: 'head',
+        id: `h:${c.mission}`,
+        label: titleCase(c.mission || 'Divers'),
+        n: count.get(c.mission) ?? 0,
+      })
     }
     out.push({ type: 'item', id: c.id, c })
   }
@@ -96,7 +132,11 @@ const rows = computed<Row[]>(() => {
 })
 
 // ---- preview
-const viewer = useTemplateRef<{ parser: GLTF['parser'] | null; root: THREE.Object3D | null; sync: () => void }>('viewer')
+const viewer = useTemplateRef<{
+  parser: GLTF['parser'] | null
+  root: THREE.Object3D | null
+  sync: () => void
+}>('viewer')
 const active = ref<Character | null>(null)
 const meta = ref<CharacterPreview | null>(null)
 const glb = ref<string>()
@@ -115,7 +155,8 @@ async function select(c: Character) {
   meta.value = null
   glb.value = undefined
   previewError.value = ''
-  busy.value = 'Préparation du personnage (matériaux, pose du squelette)… quelques secondes la première fois.'
+  busy.value =
+    'Préparation du personnage (matériaux, pose du squelette)… quelques secondes la première fois.'
   try {
     const url = `/${sid.value}/characters/${encodeURIComponent(c.id)}/preview`
     const t0 = Date.now()
@@ -146,7 +187,9 @@ watch(
   async () => {
     const c = active.value
     if (!c || !meta.value) return
-    const m = await api<CharacterPreview | PreviewBuilding>(`/${sid.value}/characters/${encodeURIComponent(c.id)}/preview`).catch(() => null)
+    const m = await api<CharacterPreview | PreviewBuilding>(
+      `/${sid.value}/characters/${encodeURIComponent(c.id)}/preview`,
+    ).catch(() => null)
     if (m?.status === 'ready' && meta.value) meta.value.built = m.built
   },
 )
@@ -190,7 +233,8 @@ function apply() {
     mesh.visible = tag === 'base' || (!!g && state.groups[Number(g[1])] === Number(g[2]))
     const index = col ? skin[col] : undefined
     if (index !== undefined && mesh.visible) {
-      if (!mats.has(index)) mats.set(index, parser.getDependency('material', index) as Promise<THREE.Material>)
+      if (!mats.has(index))
+        mats.set(index, parser.getDependency('material', index) as Promise<THREE.Material>)
       mats.get(index)?.then((mat) => {
         mesh.material = mat
         v.sync()
@@ -204,7 +248,9 @@ const presetTip = (i: number) => {
   const m = meta.value
   const p = m?.presets[i]
   if (!m || !p) return ''
-  const parts = m.groups.map((g, gi) => `${g.name} : ${g.options[p.bodygroups[g.name] ?? 0] ?? '—'}`)
+  const parts = m.groups.map(
+    (g, gi) => `${g.name} : ${g.options[p.bodygroups[g.name] ?? 0] ?? '—'}`,
+  )
   return [`Variation ${p.variant} · skin ${p.skin}`, ...parts].join('\n')
 }
 
@@ -221,9 +267,13 @@ onMounted(async () => {
 })
 const building = ref(false)
 
-const allIncluded = computed(() => !!meta.value && included.value.length === meta.value.variants.length)
+const allIncluded = computed(
+  () => !!meta.value && included.value.length === meta.value.variants.length,
+)
 function toggleIncluded(v: number) {
-  included.value = included.value.includes(v) ? included.value.filter((x) => x !== v) : [...included.value, v]
+  included.value = included.value.includes(v)
+    ? included.value.filter((x) => x !== v)
+    : [...included.value, v]
   if (!included.value.includes(defaultVariant.value)) defaultVariant.value = included.value[0] ?? 0
 }
 
@@ -232,13 +282,30 @@ async function build() {
   if (!c || !included.value.length) return
   building.value = true
   try {
-    const order = [defaultVariant.value, ...included.value.filter((v) => v !== defaultVariant.value)]
-    const { job } = await api<{ job: string }>(`/${sid.value}/characters/${encodeURIComponent(c.id)}/build`, {
-      method: 'POST',
-      body: { title: title.value, variants: order, tex_quality: quality.tex, max_tris: quality.tris },
+    const order = [
+      defaultVariant.value,
+      ...included.value.filter((v) => v !== defaultVariant.value),
+    ]
+    const { job } = await api<{ job: string }>(
+      `/${sid.value}/characters/${encodeURIComponent(c.id)}/build`,
+      {
+        method: 'POST',
+        body: {
+          title: title.value,
+          variants: order,
+          tex_quality: quality.tex,
+          max_tris: quality.tris,
+        },
+      },
+    )
+    settingsStore
+      .save({ textures: { quality: quality.tex }, characters: { max_tris: quality.tris } })
+      .catch(() => {})
+    toast.add({
+      title: 'Playermodel en cours de création',
+      description: 'Compilation et textures : une à deux minutes.',
+      icon: 'i-ri-play-large-line',
     })
-    settingsStore.save({ textures: { quality: quality.tex }, characters: { max_tris: quality.tris } }).catch(() => {})
-    toast.add({ title: 'Playermodel en cours de création', description: 'Compilation et textures : une à deux minutes.', icon: 'i-ri-play-large-line' })
     await jobs.track(job)
     jobs.open.value = true
     jobs.schedule()

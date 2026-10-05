@@ -6,7 +6,13 @@ const route = useRoute()
 
 const current = computed(() => sources.value.find((s) => s.id === sid.value))
 const section = computed(() => String(route.path.split('/')[2] ?? ''))
-const NEEDS: Record<string, string[]> = { models: ['props', 'characters'], viewer: ['props', 'characters'], textures: ['textures'], sounds: ['sounds'], settings: [] }
+const NEEDS: Record<string, string[]> = {
+  models: ['props', 'characters'],
+  viewer: ['props', 'characters'],
+  textures: ['textures'],
+  sounds: ['sounds'],
+  settings: [],
+}
 
 /** Same workbench in the other game when it has it, else its home page. */
 function go(id: string) {

@@ -69,7 +69,8 @@ function disposeObject(obj: THREE.Object3D | null) {
     if (!mesh.isMesh) return
     mesh.geometry.dispose()
     for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
-      for (const value of Object.values(m)) if ((value as THREE.Texture)?.isTexture) textures.add(value as THREE.Texture)
+      for (const value of Object.values(m))
+        if ((value as THREE.Texture)?.isTexture) textures.add(value as THREE.Texture)
       m.dispose()
     }
   })
@@ -90,7 +91,8 @@ function view(dir: [number, number, number]) {
   const fov = (camera.fov * Math.PI) / 180
   const big = Math.max(extent.x, extent.y, extent.z) || 1
   const fit = props.mode === 'character' ? Math.max(extent.y, extent.x * 0.9) : big
-  const dist = (fit / (2 * Math.tan(fov / 2))) * (props.mode === 'character' ? 1.25 : 1.45) + big * 0.35
+  const dist =
+    (fit / (2 * Math.tan(fov / 2))) * (props.mode === 'character' ? 1.25 : 1.45) + big * 0.35
   const d = new THREE.Vector3(...dir).normalize()
   controls.target.copy(center)
   camera.position.copy(center).addScaledVector(d, dist)
@@ -103,7 +105,8 @@ function view(dir: [number, number, number]) {
   requestRender()
 }
 
-const DEFAULT_DIR = (): [number, number, number] => (props.mode === 'character' ? [0.35, 0.12, 1] : [1, 0.65, 1.25])
+const DEFAULT_DIR = (): [number, number, number] =>
+  props.mode === 'character' ? [0.35, 0.12, 1] : [1, 0.65, 1.25]
 const frame = () => view(DEFAULT_DIR())
 
 function applyWire() {
@@ -183,8 +186,15 @@ async function loadB(url?: string) {
 function shadingMaterial(kind: Shading): THREE.Material | null {
   if (kind === 'textured') return null
   if (!overrides[kind]) {
-    if (kind === 'clay') overrides.clay = new THREE.MeshStandardMaterial({ color: 0xc8ccd6, roughness: 0.85, metalness: 0, side: THREE.DoubleSide })
-    else if (kind === 'normals') overrides.normals = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide })
+    if (kind === 'clay')
+      overrides.clay = new THREE.MeshStandardMaterial({
+        color: 0xc8ccd6,
+        roughness: 0.85,
+        metalness: 0,
+        side: THREE.DoubleSide,
+      })
+    else if (kind === 'normals')
+      overrides.normals = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide })
     else {
       const c = document.createElement('canvas')
       c.width = c.height = 256
@@ -202,7 +212,12 @@ function shadingMaterial(kind: Shading): THREE.Material | null {
       t.colorSpace = THREE.SRGBColorSpace
       t.wrapS = t.wrapT = THREE.RepeatWrapping
       t.anisotropy = 8
-      overrides.checker = new THREE.MeshStandardMaterial({ map: t, roughness: 0.9, metalness: 0, side: THREE.DoubleSide })
+      overrides.checker = new THREE.MeshStandardMaterial({
+        map: t,
+        roughness: 0.9,
+        metalness: 0,
+        side: THREE.DoubleSide,
+      })
     }
   }
   const m = overrides[kind]!
@@ -268,7 +283,11 @@ function resize() {
 
 onMounted(() => {
   const el = host.value as HTMLElement
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' })
+  renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    alpha: true,
+    powerPreference: 'high-performance',
+  })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.domElement.className = 'size-full block'
   el.appendChild(renderer.domElement)
@@ -334,9 +353,21 @@ watch(grid, (v) => {
   if (gridHelper) gridHelper.visible = v
   requestRender()
 })
-watch(() => props.mode, () => root.value && frame())
+watch(
+  () => props.mode,
+  () => root.value && frame(),
+)
 
-defineExpose({ root, parser, size, sync, frame, view, getScene: () => scene, getBox: () => box.clone() })
+defineExpose({
+  root,
+  parser,
+  size,
+  sync,
+  frame,
+  view,
+  getScene: () => scene,
+  getBox: () => box.clone(),
+})
 
 let dragging = false
 function dragStart(e: PointerEvent) {

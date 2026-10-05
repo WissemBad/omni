@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "nuxt dev --port 3000",
     "build": "nuxt generate",
-    "typecheck": "nuxt typecheck"
+    "typecheck": "nuxt typecheck",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "check": "bun run lint && bun run typecheck && bun run build"
   },
   "dependencies": {
     "@wissem-industries/ui": "^1.0.1",
@@ -15,6 +18,7 @@
     "vue": "^3.5.42"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
     "@types/three": "^0.180.0",
     "typescript": "^6.0.3",
     "vue-tsc": "^3.3.11"

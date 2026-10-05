@@ -1,6 +1,6 @@
 import type { TexEntry } from '~/components/OTextureViewer.vue'
-import type { OutputMaterial, SourceMaterial } from '~/utils/types'
 import type { Channel } from '~/utils/textures'
+import type { OutputMaterial, SourceMaterial } from '~/utils/types'
 
 /** Texture-viewer entries of game materials (props, characters, origin of a converted model). */
 export function gameEntries(sid: string, materials: SourceMaterial[]): TexEntry[] {
@@ -14,7 +14,8 @@ export function gameEntries(sid: string, materials: SourceMaterial[]): TexEntry[
         material: m.name,
         width: t.width,
         height: t.height,
-        src: (channel: Channel, size: number) => gameTextureUrl(sid, t.key, { size, channel, role: t.role }),
+        src: (channel: Channel, size: number) =>
+          gameTextureUrl(sid, t.key, { size, channel, role: t.role }),
         info: [
           ['Dimensions', dimsLabel(t.width, t.height)],
           ['Format du jeu', t.format ?? '—'],
@@ -41,7 +42,12 @@ export function gameEntryIndex(materials: SourceMaterial[], mi: number, ti: numb
 }
 
 /** Texture-viewer entries of converted (VTF) materials, with the UV layout of the model. */
-export function outputEntries(sid: string, model: string, materials: OutputMaterial[], slotOf: (mi: number) => number | null): TexEntry[] {
+export function outputEntries(
+  sid: string,
+  model: string,
+  materials: OutputMaterial[],
+  slotOf: (mi: number) => number | null,
+): TexEntry[] {
   return materials.flatMap((mat, mi) =>
     mat.textures
       .filter((t) => t.exists)
@@ -54,7 +60,8 @@ export function outputEntries(sid: string, model: string, materials: OutputMater
           material: mat.name,
           width: t.width,
           height: t.height,
-          src: (channel: Channel, size: number) => outputUrl(sid, 'texture', { path: t.path, channel, size: Math.min(size, 4096) }),
+          src: (channel: Channel, size: number) =>
+            outputUrl(sid, 'texture', { path: t.path, channel, size: Math.min(size, 4096) }),
           info: [
             ['Dimensions', dimsLabel(t.width, t.height)],
             ['Format', t.format ?? '—'],
@@ -64,7 +71,8 @@ export function outputEntries(sid: string, model: string, materials: OutputMater
             ['Matériau', mat.name],
           ] as [string, string | number][],
           flags: t.flags,
-          uv: slot !== null ? outputUrl(sid, 'uv', { path: model, skinref: slot, size: 2048 }) : null,
+          uv:
+            slot !== null ? outputUrl(sid, 'uv', { path: model, skinref: slot, size: 2048 }) : null,
           path: t.path,
           gameKey: mat.origin?.textures.find((o) => o.role === texRoleOf(t.param))?.key,
         }
@@ -72,7 +80,12 @@ export function outputEntries(sid: string, model: string, materials: OutputMater
   )
 }
 
-const PARAM_ROLE: Record<string, string> = { $basetexture: 'base', $bumpmap: 'normal', $normalmap: 'normal', $selfillummask: 'emissive' }
+const PARAM_ROLE: Record<string, string> = {
+  $basetexture: 'base',
+  $bumpmap: 'normal',
+  $normalmap: 'normal',
+  $selfillummask: 'emissive',
+}
 const texRoleOf = (param: string) => PARAM_ROLE[param] ?? ''
 
 /** Origin game materials of converted materials (viewer "origin" view). */
@@ -89,7 +102,16 @@ export function originMaterials(materials: OutputMaterial[]): SourceMaterial[] {
       source_name: o.source,
       class: o.cls,
       params: {},
-      textures: o.textures.map((t) => ({ role: t.role, slot: t.slot, key: t.key, width: t.width, height: t.height, format: t.fmt, name: t.name, found: true })),
+      textures: o.textures.map((t) => ({
+        role: t.role,
+        slot: t.slot,
+        key: t.key,
+        width: t.width,
+        height: t.height,
+        format: t.fmt,
+        name: t.name,
+        found: true,
+      })),
     })
   }
   return out

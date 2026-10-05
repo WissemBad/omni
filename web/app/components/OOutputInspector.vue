@@ -29,11 +29,16 @@ const ALL_TABS = [
   { label: 'Os', value: 'bones', icon: 'i-ri-node-tree' },
   { label: 'Données', value: 'data', icon: 'i-ri-database-2-line' },
 ]
-const TABS = computed(() => ALL_TABS.map((t) => (t.value === tab.value ? t : { ...t, label: undefined, 'aria-label': t.label })))
-
+const TABS = computed(() =>
+  ALL_TABS.map((t) =>
+    t.value === tab.value ? t : { ...t, label: undefined, 'aria-label': t.label },
+  ),
+)
 
 const verdict = computed(() => VERDICT[m.value.verdict])
-const problems = computed(() => m.value.checks.filter((c) => c.level === 'warn' || c.level === 'error').length)
+const problems = computed(
+  () => m.value.checks.filter((c) => c.level === 'warn' || c.level === 'error').length,
+)
 
 /** Triangles of what is currently shown (the chosen option of every bodygroup, in the chosen LOD). */
 const shownTriangles = computed(() => {
@@ -53,12 +58,28 @@ const shownTriangles = computed(() => {
 const stats = computed(() => {
   const cm = m.value.extent?.map((v) => (v / 39.37) * 100)
   return [
-    { label: 'Triangles', value: shownTriangles.value.toLocaleString('fr-FR'), icon: 'i-ri-shape-line' },
+    {
+      label: 'Triangles',
+      value: shownTriangles.value.toLocaleString('fr-FR'),
+      icon: 'i-ri-shape-line',
+    },
     { label: 'Matériaux', value: String(m.value.materials.length), icon: 'i-ri-palette-line' },
-    { label: 'Textures', value: `${m.value.texture_count} · ${fmtBytes(m.value.texture_bytes)}`, icon: 'i-ri-image-line' },
+    {
+      label: 'Textures',
+      value: `${m.value.texture_count} · ${fmtBytes(m.value.texture_bytes)}`,
+      icon: 'i-ri-image-line',
+    },
     { label: 'Os', value: String(m.value.model.bones.length), icon: 'i-ri-node-tree' },
-    { label: 'Dimensions', value: cm ? cm.map((v) => Math.round(v)).join(' × ') + ' cm' : '—', icon: 'i-ri-ruler-line' },
-    { label: 'Masse', value: m.value.model.mass ? `${m.value.model.mass.toLocaleString('fr-FR')} kg` : '—', icon: 'i-ri-scales-3-line' },
+    {
+      label: 'Dimensions',
+      value: cm ? cm.map((v) => Math.round(v)).join(' × ') + ' cm' : '—',
+      icon: 'i-ri-ruler-line',
+    },
+    {
+      label: 'Masse',
+      value: m.value.model.mass ? `${m.value.model.mass.toLocaleString('fr-FR')} kg` : '—',
+      icon: 'i-ri-scales-3-line',
+    },
     { label: 'Surface', value: m.value.model.surfaceprop || '—', icon: 'i-ri-stack-line' },
     { label: 'Sur le disque', value: fmtBytes(m.value.bytes), icon: 'i-ri-hard-drive-2-line' },
   ]
@@ -80,20 +101,39 @@ const sequenceColumns = [
   { accessorKey: 'name', header: 'Nom' },
   { accessorKey: 'frames', header: 'Images' },
   { accessorKey: 'fps', header: 'i/s' },
-  { accessorKey: 'loop', header: 'Boucle', cell: ({ row }: { row: { original: { loop: boolean } } }) => (row.original.loop ? 'oui' : '—') },
+  {
+    accessorKey: 'loop',
+    header: 'Boucle',
+    cell: ({ row }: { row: { original: { loop: boolean } } }) => (row.original.loop ? 'oui' : '—'),
+  },
 ]
 
 const sourceLink = computed(() => {
   const s = m.value.source
-  if (s) return { to: `/${sid.value}/models?tab=props&k=${s.key}`, label: 'Voir dans Modèles', detail: `${s.cat} · ${s.key}` }
+  if (s)
+    return {
+      to: `/${sid.value}/models?tab=props&k=${s.key}`,
+      label: 'Voir dans Modèles',
+      detail: `${s.cat} · ${s.key}`,
+    }
   if (m.value.kind === 'character' && !m.value.external) {
-    return { to: `/${sid.value}/models?tab=characters&id=outfit_${m.value.stem}`, label: 'Voir dans Modèles', detail: m.value.model.name }
+    return {
+      to: `/${sid.value}/models?tab=characters&id=outfit_${m.value.stem}`,
+      label: 'Voir dans Modèles',
+      detail: m.value.model.name,
+    }
   }
   return null
 })
 
-const spawn = computed(() => (m.value.kind === 'character' ? modelCommand(props.gmodPath) : spawnCommand(props.gmodPath)))
-const spawnLabel = computed(() => (m.value.kind === 'character' ? 'Copier la commande (devenir ce personnage)' : 'Copier la commande de spawn'))
+const spawn = computed(() =>
+  m.value.kind === 'character' ? modelCommand(props.gmodPath) : spawnCommand(props.gmodPath),
+)
+const spawnLabel = computed(() =>
+  m.value.kind === 'character'
+    ? 'Copier la commande (devenir ce personnage)'
+    : 'Copier la commande de spawn',
+)
 </script>
 
 <template>

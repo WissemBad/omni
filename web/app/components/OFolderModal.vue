@@ -19,7 +19,10 @@ async function add(p = path.value) {
   busy.value = true
   error.value = ''
   try {
-    const r = await api<{ id: string }>(`/${sid.value}/output/roots?path=${encodeURIComponent(p.trim())}`, { method: 'POST' })
+    const r = await api<{ id: string }>(
+      `/${sid.value}/output/roots?path=${encodeURIComponent(p.trim())}`,
+      { method: 'POST' },
+    )
     path.value = ''
     emit('added', r.id)
     open.value = false

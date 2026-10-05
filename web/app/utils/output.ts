@@ -4,8 +4,14 @@ import type { OutputCheck, OutputModel } from '~/utils/types'
 export const viewerRoot = ref('')
 
 /** Query string of an `/api/<source>/output/<route>` URL. */
-export function outputUrl(sid: string, route: string, params: Record<string, string | number> = {}): string {
-  const q = new URLSearchParams(Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])))
+export function outputUrl(
+  sid: string,
+  route: string,
+  params: Record<string, string | number> = {},
+): string {
+  const q = new URLSearchParams(
+    Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])),
+  )
   if (viewerRoot.value) q.set('root', viewerRoot.value)
   return `/api/${sid}/output/${route}?${q}`
 }
@@ -13,9 +19,15 @@ export function outputUrl(sid: string, route: string, params: Record<string, str
 /** Opens the file in Windows Explorer (the API runs on the user's machine). */
 export async function reveal(sid: string, path: string) {
   try {
-    await api(`/${sid}/output/reveal?path=${encodeURIComponent(path)}&root=${viewerRoot.value}`, { method: 'POST' })
+    await api(`/${sid}/output/reveal?path=${encodeURIComponent(path)}&root=${viewerRoot.value}`, {
+      method: 'POST',
+    })
   } catch (e) {
-    useToast().add({ title: 'Impossible d’ouvrir le dossier', description: apiError(e), color: 'error' })
+    useToast().add({
+      title: 'Impossible d’ouvrir le dossier',
+      description: apiError(e),
+      color: 'error',
+    })
   }
 }
 
@@ -41,7 +53,17 @@ export const CHECK_STYLE: Record<OutputCheck['level'], { icon: string; color: st
   error: { icon: 'i-ri-close-circle-fill', color: 'text-error' },
 }
 
-export const HITGROUP = ['générique', 'tête', 'torse', 'ventre', 'bras gauche', 'bras droit', 'jambe gauche', 'jambe droite', 'équipement']
+export const HITGROUP = [
+  'générique',
+  'tête',
+  'torse',
+  'ventre',
+  'bras gauche',
+  'bras droit',
+  'jambe gauche',
+  'jambe droite',
+  'équipement',
+]
 
 /** Short human name of an output model (a character's title, else the file name). */
 export function outputTitle(m: { title?: string; name: string; kind?: string }): string {

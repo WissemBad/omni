@@ -49,20 +49,50 @@ const benches = computed<Bench[]>(() => {
   if (!o) return []
   const out: Bench[] = []
   if (o.props) {
-    out.push({ key: 'props', title: 'Props', icon: 'i-ri-box-3-line', to: `/${sid.value}/models?tab=props`, value: n(o.props.named),
-      detail: `objets nommés · ${n(o.props.total)} au total`, progress: pct(o.props.converted, o.props.named), progressLabel: `${n(o.props.converted)} convertis` })
+    out.push({
+      key: 'props',
+      title: 'Props',
+      icon: 'i-ri-box-3-line',
+      to: `/${sid.value}/models?tab=props`,
+      value: n(o.props.named),
+      detail: `objets nommés · ${n(o.props.total)} au total`,
+      progress: pct(o.props.converted, o.props.named),
+      progressLabel: `${n(o.props.converted)} convertis`,
+    })
   }
   if (o.characters) {
-    out.push({ key: 'characters', title: 'Personnages', icon: 'i-ri-user-3-line', to: `/${sid.value}/models?tab=characters`, value: n(o.characters.total),
-      detail: 'familles de tenues', progress: pct(o.characters.built, o.characters.total), progressLabel: `${n(o.characters.built)} playermodels créés` })
+    out.push({
+      key: 'characters',
+      title: 'Personnages',
+      icon: 'i-ri-user-3-line',
+      to: `/${sid.value}/models?tab=characters`,
+      value: n(o.characters.total),
+      detail: 'familles de tenues',
+      progress: pct(o.characters.built, o.characters.total),
+      progressLabel: `${n(o.characters.built)} playermodels créés`,
+    })
   }
   if (o.textures) {
-    out.push({ key: 'textures', title: 'Textures', icon: 'i-ri-image-2-line', to: `/${sid.value}/textures`,
-      value: o.textures.ready ? n(o.textures.textures) : '…', detail: o.textures.ready ? `${fmtBytes(o.textures.bytes ?? 0)} dans le jeu · ${n(o.textures.used)} utilisées` : 'indexation en cours' })
+    out.push({
+      key: 'textures',
+      title: 'Textures',
+      icon: 'i-ri-image-2-line',
+      to: `/${sid.value}/textures`,
+      value: o.textures.ready ? n(o.textures.textures) : '…',
+      detail: o.textures.ready
+        ? `${fmtBytes(o.textures.bytes ?? 0)} dans le jeu · ${n(o.textures.used)} utilisées`
+        : 'indexation en cours',
+    })
   }
   if (o.sounds) {
-    out.push({ key: 'sounds', title: 'Sons', icon: 'i-ri-music-2-line', to: `/${sid.value}/sounds`,
-      value: o.sounds.exported ? n(o.sounds.count) : '0', detail: o.sounds.exported ? `exportés · ${fmtBytes(o.sounds.bytes)}` : 'pas encore exportés' })
+    out.push({
+      key: 'sounds',
+      title: 'Sons',
+      icon: 'i-ri-music-2-line',
+      to: `/${sid.value}/sounds`,
+      value: o.sounds.exported ? n(o.sounds.count) : '0',
+      detail: o.sounds.exported ? `exportés · ${fmtBytes(o.sounds.bytes)}` : 'pas encore exportés',
+    })
   }
   return out
 })
@@ -81,7 +111,12 @@ async function run(key: string, path: string, body?: unknown, confirmText?: stri
 }
 async function exportProps() {
   const keys = await api<string[]>(`/${sid.value}/props/keys?named=1&limit=50000`).catch(() => [])
-  await run('props', `/${sid.value}/props/convert`, { keys }, `Convertir ${keys.length.toLocaleString('fr-FR')} props ? Les déjà convertis sont refaits avec les réglages actuels ; cela peut durer plusieurs heures.`)
+  await run(
+    'props',
+    `/${sid.value}/props/convert`,
+    { keys },
+    `Convertir ${keys.length.toLocaleString('fr-FR')} props ? Les déjà convertis sont refaits avec les réglages actuels ; cela peut durer plusieurs heures.`,
+  )
 }
 const live = (kind: Job['kind']) => jobs.live(sid.value, kind)
 function eta(j: Job): string {
@@ -106,15 +141,47 @@ const exports = computed<ExportCard[]>(() => {
   const out: ExportCard[] = []
   const q = settingsValues.value?.textures.quality ?? 'max'
   if (caps.includes('props')) {
-    out.push({ key: 'props', kind: 'props', icon: 'i-ri-box-3-line', title: 'Tous les props', text: `Le catalogue nommé, qualité « ${q} », collision du jeu.`, label: 'Convertir tout', action: exportProps })
+    out.push({
+      key: 'props',
+      kind: 'props',
+      icon: 'i-ri-box-3-line',
+      title: 'Tous les props',
+      text: `Le catalogue nommé, qualité « ${q} », collision du jeu.`,
+      label: 'Convertir tout',
+      action: exportProps,
+    })
   }
   if (caps.includes('characters')) {
-    out.push({ key: 'characters', kind: 'character', icon: 'i-ri-user-3-line', title: 'Tous les playermodels', text: 'Chaque famille de tenues devient un playermodel (variations en bodygroups et skins). Ceux déjà créés sont sautés.', label: 'Créer tout',
-      action: () => run('characters', `/${sid.value}/characters/build-all`, { skip_built: true }, 'Créer tous les playermodels restants ? Compte une à deux minutes par personnage.') })
+    out.push({
+      key: 'characters',
+      kind: 'character',
+      icon: 'i-ri-user-3-line',
+      title: 'Tous les playermodels',
+      text: 'Chaque famille de tenues devient un playermodel (variations en bodygroups et skins). Ceux déjà créés sont sautés.',
+      label: 'Créer tout',
+      action: () =>
+        run(
+          'characters',
+          `/${sid.value}/characters/build-all`,
+          { skip_built: true },
+          'Créer tous les playermodels restants ? Compte une à deux minutes par personnage.',
+        ),
+    })
   }
   if (caps.includes('sounds')) {
-    out.push({ key: 'sounds', kind: 'sounds', icon: 'i-ri-music-2-line', title: 'Tous les sons', text: 'Conversion par le cœur Rust, sans doublons, avec les noms des événements, de la musique et des dialogues.', label: 'Exporter',
-      action: () => run('sounds', `/${sid.value}/sounds/export`, { force: forceSounds.value, clean: forceSounds.value }) })
+    out.push({
+      key: 'sounds',
+      kind: 'sounds',
+      icon: 'i-ri-music-2-line',
+      title: 'Tous les sons',
+      text: 'Conversion par le cœur Rust, sans doublons, avec les noms des événements, de la musique et des dialogues.',
+      label: 'Exporter',
+      action: () =>
+        run('sounds', `/${sid.value}/sounds/export`, {
+          force: forceSounds.value,
+          clean: forceSounds.value,
+        }),
+    })
   }
   return out
 })
