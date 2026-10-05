@@ -73,6 +73,12 @@ pub fn mip_nbytes(name: &str, w: u32, h: u32) -> usize {
 
 /// All decodable mips, largest first: (width, height, raw bytes in the source format).
 pub fn decode_mips(text: &[u8], texd: Option<&[u8]>) -> Result<(Header, Vec<(u32, u32, Vec<u8>)>), String> {
+    decode_mips_only(text, texd, None)
+}
+
+/// Like `decode_mips`, but with `only = Some(level)` just that mip is decompressed (a preview needs one level, not
+/// the whole chain of a 4K texture).
+pub fn decode_mips_only(text: &[u8], texd: Option<&[u8]>, only: Option<usize>) -> Result<(Header, Vec<(u32, u32, Vec<u8>)>), String> {
     let hd = parse_header(text)?;
     let name = format_name(hd.fmt).ok_or_else(|| format!("unsupported texture format 0x{:02X}", hd.fmt))?;
     let start = 0x98usize + hd.atlas as usize;
@@ -82,6 +88,9 @@ pub fn decode_mips(text: &[u8], texd: Option<&[u8]>) -> Result<(Header, Vec<(u32
     for i in 0..hd.mips as usize {
         let size_c = hd.comp[i].saturating_sub(prev) as usize;
         prev = hd.comp[i];
+        if only.is_some_and(|o| o != i) {
+            continue;
+        }
         let (w, h) = ((hd.width >> i).max(1), (hd.height >> i).max(1));
         let nb = mip_nbytes(name, w, h);
         let chunk: Option<&[u8]> = if i < ftm {
@@ -205,9 +214,16 @@ pub fn encode_dxt(rgba: &[u8], w: usize, h: usize, alpha: bool, quality: u8, nor
 /// The largest mip not larger than `max_dim` (0 = full size) as RGBA8; BC5/BC4/RG8 normals get Z rebuilt when
 /// `normal`.
 pub fn top_rgba(text: &[u8], texd: Option<&[u8]>, max_dim: usize, normal: bool) -> Result<(usize, usize, Vec<u8>), String> {
-    let (hd, mips) = decode_mips(text, texd)?;
-    let name = format_name(hd.fmt).unwrap_or("?");
+    let head = parse_header(text)?;
     let lim = if max_dim == 0 { usize::MAX } else { max_dim };
+    let levels = head.mips.max(1) as usize;
+    // first level that fits, else the smallest: only that one is decompressed
+    let want = (0..levels).find(|&i| ((head.width >> i).max(1).max((head.height >> i).max(1))) as usize <= lim).unwrap_or(levels - 1);
+    let (hd, mips) = match decode_mips_only(text, texd, Some(want)) {
+        Ok(r) if !r.1.is_empty() => r,
+        _ => decode_mips(text, texd)?,                 // that level is not stored: fall back to what is
+    };
+    let name = format_name(hd.fmt).unwrap_or("?");
     let (w, h, raw) = mips.iter().find(|m| m.0.max(m.1) as usize <= lim).unwrap_or(mips.last().unwrap());
     let mut px = to_rgba(name, *w, *h, raw)?;
     if normal && matches!(name, "BC5" | "BC4" | "RG8") {

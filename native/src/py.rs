@@ -10,6 +10,14 @@ fn err(e: impl std::fmt::Display) -> PyErr {
     PyValueError::new_err(e.to_string())
 }
 
+/// A numpy array as a slice: borrowed when it is C-contiguous (no copy under the GIL), copied otherwise.
+fn slice_of<'a, T: numpy::Element + Copy, D: numpy::ndarray::Dimension>(a: &'a numpy::PyReadonlyArray<'_, T, D>) -> std::borrow::Cow<'a, [T]> {
+    match a.as_slice() {
+        Ok(s) => std::borrow::Cow::Borrowed(s),
+        Err(_) => std::borrow::Cow::Owned(a.as_array().iter().copied().collect()),
+    }
+}
+
 #[pyfunction]
 fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
@@ -130,8 +138,8 @@ fn fold_weights<'py>(
     if weights.shape() != [n, k] {
         return Err(err("bones and weights must have the same shape"));
     }
-    let b: Vec<i64> = bones.as_array().iter().copied().collect();
-    let w: Vec<f64> = weights.as_array().iter().copied().collect();
+    let b = slice_of(&bones);
+    let w = slice_of(&weights);
     let (ob, ow) = py.allow_threads(|| skin::fold(&b, &w, n, k, max_links, fallback));
     let ob = numpy::ndarray::Array2::from_shape_vec((n, max_links), ob).map_err(err)?;
     let ow = numpy::ndarray::Array2::from_shape_vec((n, max_links), ow).map_err(err)?;
@@ -226,11 +234,11 @@ fn py_lbs<'py>(
     if v.shape() != [n, 3] || normals.shape() != [n, 3] || joints.shape() != [n, nj] || weights.shape() != [n, nj] || k.shape()[1..] != [4, 4] {
         return Err(err("lbs: inconsistent shapes"));
     }
-    let vv: Vec<f64> = v.as_array().iter().copied().collect();
-    let nn: Vec<f64> = normals.as_array().iter().copied().collect();
-    let jj: Vec<i64> = joints.as_array().iter().copied().collect();
-    let ww: Vec<f64> = weights.as_array().iter().copied().collect();
-    let kk: Vec<f64> = k.as_array().iter().copied().collect();
+    let vv = slice_of(&v);
+    let nn = slice_of(&normals);
+    let jj = slice_of(&joints);
+    let ww = slice_of(&weights);
+    let kk = slice_of(&k);
     let (ov, on) = py.allow_threads(|| lbs::lbs(&vv, &nn, &jj, &ww, nj, &kk));
     let ov = numpy::ndarray::Array2::from_shape_vec((n, 3), ov).map_err(err)?;
     let on = numpy::ndarray::Array2::from_shape_vec((n, 3), on).map_err(err)?;
@@ -251,7 +259,7 @@ fn smd_triangles<'py>(
 ) -> PyResult<(String, usize)> {
     let f = |a: &PyReadonlyArray2<'py, f64>| a.as_array().iter().copied().collect::<Vec<f64>>();
     let (p, n, u, w) = (f(&positions), f(&normals), f(&uvs), f(&weights));
-    let b: Vec<i64> = bones.as_array().iter().copied().collect();
+    let b = slice_of(&bones);
     let links = bones.shape()[1];
     py.allow_threads(|| smd::triangles(material, &smd::Mesh { pos: &p, nrm: &n, uv: &u, bones: &b, weights: &w, links, indices: &indices }))
         .map_err(err)
@@ -280,8 +288,8 @@ fn weld<'py>(
     triangles: PyReadonlyArray2<'py, i64>,
     cell: f64,
 ) -> PyResult<(Bound<'py, PyArray2<f64>>, Bound<'py, PyArray2<i64>>)> {
-    let p: Vec<f64> = positions.as_array().iter().copied().collect();
-    let t: Vec<i64> = triangles.as_array().iter().copied().collect();
+    let p = slice_of(&positions);
+    let t = slice_of(&triangles);
     let (v, tt) = py.allow_threads(|| geom::weld(&p, &t, cell)).map_err(err)?;
     let (nv, nt) = (v.len() / 3, tt.len() / 3);
     Ok((
@@ -293,8 +301,8 @@ fn weld<'py>(
 /// mesh_volume(vertices, triangles) -> (|signed volume|, fraction of open edges)
 #[pyfunction]
 fn mesh_volume<'py>(py: Python<'py>, vertices: PyReadonlyArray2<'py, f64>, triangles: PyReadonlyArray2<'py, i64>) -> PyResult<(f64, f64)> {
-    let v: Vec<f64> = vertices.as_array().iter().copied().collect();
-    let t: Vec<i64> = triangles.as_array().iter().copied().collect();
+    let v = slice_of(&vertices);
+    let t = slice_of(&triangles);
     py.allow_threads(|| geom::mesh_volume(&v, &t)).map_err(err)
 }
 

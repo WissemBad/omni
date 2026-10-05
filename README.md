@@ -25,6 +25,8 @@ The first launch opens the setup:
 
 Requirements: Windows 10 or 11 with the WebView2 runtime (included in Windows 11), a copy of the game, Garry's Mod for model conversion, and roughly 40 GB of free space for the extracted resources. [ffmpeg](https://ffmpeg.org) is only needed for MP3 and for re-encoding non-Vorbis sounds to Ogg.
 
+Closing the window while a job runs keeps omni working in the notification area (toast when it ends); omni checks GitHub for a newer release at launch (a read token is needed while the repository is private).
+
 Data lives in `%LOCALAPPDATA%\omni` (override with `OMNI_HOME`). Uninstalling leaves it in place.
 
 ## Use
@@ -36,7 +38,9 @@ Data lives in `%LOCALAPPDATA%\omni` (override with `OMNI_HOME`). Uninstalling le
 | Textures | Every texture of the game, filters, channel preview, who uses it (materials, models) |
 | Viewer | The compiled result as Garry's Mod loads it, with debug layers; also opens a decompiled addon |
 | Sounds | Parallel export (Ogg, FLAC, WAV, MP3) with tags, browser and player |
-| Settings | Quality, collision, parallelism, sounds, paths, storage, maintenance |
+| Jobs (panel) | The queue: one heavy job at a time, live progress, failures grouped by cause, retry / resume, history |
+| Games | The library: add a game by its folder, omni identifies the engine; games stay separate |
+| Settings | Quality, collision, parallelism, sounds, paths, updates, storage, maintenance |
 
 Everything is available from the command line too: `Omni.exe --help`.
 

@@ -7,7 +7,11 @@ omni/core/               config, settings, setup, catalogs (props, textures), na
 omni/targets/source      VMT/VTF, SMD/QC, collision, StudioMDL, playermodels, deployment
 omni/targets/audio       sound export (Rust core), index, tags
 omni/ui/                 FastAPI: routes_models, routes_textures, routes_sounds, routes_setup, output (viewer), jobs
-omni/app.py              the desktop window (pywebview / WebView2) and the local server
+omni/app.py              the desktop window (pywebview / WebView2): splash, one instance, remembered geometry, tray
+omni/games.py            game library: identify a game from its folder (engine, profile, version)
+omni/ui/jobs.py          persistent job queue (SQLite), one heavy job at a time, SSE, retry
+omni/ui/security.py      Host / Origin checks: the local API answers only omni's own window
+omni/core/log.py         log files, crash capture (the packaged app has no console)
 web/                     Nuxt 4 interface (static build served by the API)
 native/                  Rust core (CPython module and WebAssembly)
 packaging/               PyInstaller spec and Inno Setup script
@@ -49,3 +53,25 @@ A source subclasses `Source`, declares its `capabilities` and is registered in `
 - SRM: R specular, G roughness, B metallic. Slot names depend on the material class.
 - Outfits: BIN1 templates (TEMP/TBLU), property ids are CRC32 of the property names; a family's variations become bodygroups and skins.
 - Audio: WWES (streamed), WWEM (memory), WWEV (events), WBNK (banks: HIRC, DIDX, DATA). Wwise ids are FNV-1 of lower-cased names. Only Play actions name a sound; music switches and dialogue events carry 12-byte decision-tree nodes (key, node or children, weight, probability).
+
+## Jobs
+
+`omni/ui/jobs.py`. Heavy jobs (props, sounds, setup, textures, maintenance) wait in a FIFO queue and run one at a time;
+light ones (one playermodel) start at once. An identical job already queued or running is refused (409). Everything
+(jobs, log tail, every result) is written to `<workspace>/jobs.sqlite` by a flusher thread; at start a job that was
+queued or running becomes *interrupted*. `GET /api/jobs/stream` pushes the list (server-sent events) whenever the
+`version` counter moves; `/api/jobs/{id}/results` pages the results, `/report` groups failures by cause, `/retry`
+replays a job (`failed`, `remaining`, `all`) through the starter registered by the route (`jobs.starters`).
+
+## Shell and security
+
+The window is single-instance (named mutex + `run.json`; a second launch posts `/api/focus`). Closing it while jobs
+run hides it and keeps omni in the notification area; a toast tells when a job ends. The local API refuses any `Host`
+that is not loopback (DNS rebinding) and any write whose `Origin` is another site (`omni/ui/security.py`). Errors,
+tracebacks and native crashes go to `<workspace>/logs` (`GET /api/diagnostic` bundles them for a bug report).
+
+## Output paths
+
+A model's output path comes from its game path (`AssetInfo.rel_path`); paths shared by several resources (truncated
+names, `^…_dynamic` variants, same leaf in two folders) get the end of their hash (`GlacierSource.rel_path`), so two
+assets never write the same file. The catalog (`core/catalog.py`, versioned by `user_version`) stores the final path.

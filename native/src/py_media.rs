@@ -86,9 +86,9 @@ type Links = (Vec<(u64, u32)>, Vec<(u64, Vec<u32>)>, Vec<(u32, Vec<(u32, Vec<u32
 /// bank_links([(resource hash, bank bytes)], known switch/state ids)
 ///   -> ([(hash, bank id)], [(hash, [embedded media])], [(media, [(event id, [switch ids])])], [sourced media], events)
 #[pyfunction]
-fn bank_links(py: Python<'_>, banks: Vec<(u64, Vec<u8>)>, known: Vec<u32>) -> PyResult<Links> {
+fn bank_links(py: Python<'_>, banks: Vec<(u64, pyo3::pybacked::PyBackedBytes)>, known: Vec<u32>) -> PyResult<Links> {
     Ok(py.allow_threads(|| {
-        let parsed: Vec<(u64, wwise::Bank)> = banks.iter().filter_map(|(h, d)| wwise::parse_bank(d).map(|b| (*h, b))).collect();
+        let parsed: Vec<(u64, wwise::Bank)> = banks.iter().filter_map(|(h, d)| wwise::parse_bank(d.as_ref()).map(|b| (*h, b))).collect();
         let known: std::collections::HashSet<u32> = known.into_iter().collect();
         let ids = parsed.iter().map(|(h, b)| (*h, b.bank_id)).collect();
         let media = parsed.iter().map(|(h, b)| (*h, b.media.clone())).collect();
@@ -129,7 +129,9 @@ fn encode_vtf<'py>(py: Python<'py>, path: &str, rgba: PyReadonlyArray3<'py, u8>,
 /// write_vtf(path, format code, [(w, h, bytes)] largest first, flags=0, reflectivity=(.5,.5,.5)): raw blocks
 #[pyfunction]
 #[pyo3(signature = (path, fmt, mips, flags=0, reflectivity=(0.5, 0.5, 0.5)))]
-fn write_vtf(py: Python<'_>, path: &str, fmt: u32, mips: Vec<(usize, usize, Vec<u8>)>, flags: u32, reflectivity: (f32, f32, f32)) -> PyResult<()> {
+fn write_vtf(py: Python<'_>, path: &str, fmt: u32, mips: Vec<(usize, usize, pyo3::pybacked::PyBackedBytes)>, flags: u32, reflectivity: (f32, f32, f32)) -> PyResult<()> {
+    // bytes arrive through the buffer protocol (one memcpy), not as a sequence of Python ints
+    let mips: Vec<(usize, usize, Vec<u8>)> = mips.into_iter().map(|(w, h, b)| (w, h, b.as_ref().to_vec())).collect();
     if mips.is_empty() {
         return Err(err("no mip"));
     }
