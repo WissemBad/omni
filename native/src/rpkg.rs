@@ -27,6 +27,12 @@ pub static DONE: AtomicU64 = AtomicU64::new(0);
 pub static TOTAL: AtomicU64 = AtomicU64::new(0);
 pub static CANCEL: AtomicBool = AtomicBool::new(false);
 
+/// Largest believable package: tables are a few MB in the real games.
+const MAX_FILES: usize = 20_000_000;
+const MAX_TABLE: usize = 1 << 30;
+/// Largest resource read into memory (the stored size is a 31-bit field; real ones stay far below).
+const MAX_RESOURCE: u64 = 1 << 31;
+
 const XOR: [u8; 8] = [0xdc, 0x45, 0xa6, 0x9c, 0xd3, 0x72, 0x4c, 0xab];
 
 #[derive(Clone, Debug)]
@@ -112,7 +118,7 @@ fn parse_headers(d: &[u8], file_count: usize, table: usize, is_patch: bool, star
             unneeded.push(c.u64()?);
         }
     }
-    let mut entries = Vec::with_capacity(file_count);
+    let mut entries = Vec::with_capacity(file_count.min(d.len() / 20));
     for _ in 0..file_count {
         let hash = c.u64()?;
         let offset = c.u64()?;
@@ -191,6 +197,17 @@ pub fn open(path: &Path) -> Result<Package, String> {
     let offset_table = c.u32()? as usize;
     let meta_table = c.u32()? as usize;
     let header_len = c.o;
+    // a corrupt header must be an error, never a multi-gigabyte allocation (which aborts the whole process)
+    let file_len = f.metadata().map_err(|e| e.to_string())?.len();
+    let tables = offset_table as u64 + meta_table as u64 + header_len as u64;
+    if file_count.checked_mul(20).map_or(true, |n| n > offset_table)
+        || file_count > MAX_FILES
+        || offset_table > MAX_TABLE
+        || meta_table > MAX_TABLE
+        || tables > file_len
+    {
+        return Err(format!("{}: corrupt package header", path.display()));
+    }
     let is_patch = name_ids(path).map(|(_, p)| p > 0).unwrap_or(false) || patch_id > 0;
     // read exactly the header: unneeded list + offset table + metadata table
     let mut rest = Vec::new();
@@ -205,6 +222,9 @@ pub fn open(path: &Path) -> Result<Package, String> {
     };
     loop {
         if let Some(w) = want(&rest) {
+            if w as u64 + header_len as u64 > file_len || w > MAX_TABLE {
+                return Err(format!("{}: corrupt patch table", path.display()));
+            }
             if rest.len() >= w {
                 break;
             }
@@ -242,7 +262,19 @@ fn read_at(f: &File, buf: &mut [u8], off: u64) -> std::io::Result<()> {
 
 /// Decoded bytes of one resource.
 pub fn read_resource(f: &File, e: &Entry) -> Result<Vec<u8>, String> {
-    let mut buf = vec![0u8; e.stored_size() as usize];
+    let stored = e.stored_size();
+    let bad = |why: &str| format!("resource {:016X}: {why}", e.hash);
+    // LZ4 cannot expand more than 255 times; anything beyond is a corrupt header, not data worth allocating for
+    if stored > MAX_RESOURCE || (e.compressed != 0 && e.data_size as u64 > stored * 255 + 64) {
+        return Err(bad("implausible size"));
+    }
+    if stored > (64 << 20) {
+        let len = f.metadata().map_err(|err| bad(&err.to_string()))?.len();
+        if e.offset.saturating_add(stored) > len {
+            return Err(bad("extends past the end of the package"));
+        }
+    }
+    let mut buf = vec![0u8; stored as usize];
     read_at(f, &mut buf, e.offset).map_err(|err| format!("resource {:016X}: {err}", e.hash))?;
     if e.scrambled {
         for (i, b) in buf.iter_mut().enumerate() {
@@ -304,13 +336,17 @@ pub struct Stats {
 /// Packages are applied in order (chunk, patch): a later one overwrites earlier resources and removes the ones its
 /// patch lists as unneeded.
 pub fn extract(paths: &[PathBuf], root: &Path, types: &HashSet<String>) -> Result<Stats, String> {
+    DONE.store(0, Ordering::SeqCst);
+    TOTAL.store(0, Ordering::SeqCst);
+    CANCEL.store(false, Ordering::SeqCst);
     let mut pkgs: Vec<Package> = Vec::new();
     for p in paths {
+        if CANCEL.load(Ordering::Relaxed) {
+            return Err("cancelled".into());
+        }
         pkgs.push(open(p)?);
     }
     pkgs.sort_by_key(|p| name_ids(&p.path).unwrap_or((p.chunk_id as u32, p.patch_id as u32)));
-    DONE.store(0, Ordering::SeqCst);
-    CANCEL.store(false, Ordering::SeqCst);
     let wanted = |e: &Entry| types.is_empty() || types.contains(&e.type_name());
     TOTAL.store(pkgs.iter().map(|p| p.entries.iter().filter(|e| wanted(e)).count() as u64).sum(), Ordering::SeqCst);
     let mut st = Stats::default();
@@ -337,7 +373,7 @@ pub fn extract(paths: &[PathBuf], root: &Path, types: &HashSet<String>) -> Resul
             }
         }
         let file = File::open(&pkg.path).map_err(|e| e.to_string())?;
-        let is_patch = name_ids(&pkg.path).map(|(_, p)| p > 0).unwrap_or(false);
+        let is_patch = name_ids(&pkg.path).map(|(_, p)| p > 0).unwrap_or(false) || pkg.patch_id > 0;
         let results: Vec<Result<(String, u64, bool), String>> = pkg
             .entries
             .par_iter()
@@ -535,5 +571,45 @@ mod tests {
         assert!(open(&f).is_err());
         assert_eq!(name_ids(Path::new("x/chunk12patch3.rpkg")), Some((12, 3)));
         assert_eq!(name_ids(Path::new("chunk0.rpkg")), Some((0, 0)));
+    }
+
+    /// A valid magic with absurd counts must be an error: the allocation it asks for would abort the process.
+    #[test]
+    fn rejects_absurd_header_sizes() {
+        let dir = tmp("absurd");
+        let header = |file_count: u32, offset_table: u32, meta_table: u32| {
+            let mut h = b"2KPR".to_vec();
+            h.extend(0u32.to_le_bytes());
+            h.extend([0u8, 0, 0, 0, 0]);
+            h.extend(0u16.to_le_bytes());
+            h.extend(file_count.to_le_bytes());
+            h.extend(offset_table.to_le_bytes());
+            h.extend(meta_table.to_le_bytes());
+            h.extend(vec![0u8; 256]);
+            h
+        };
+        for (i, (fc, ot, mt)) in [(u32::MAX, u32::MAX, 0), (1 << 20, 100, 100), (10, 200, u32::MAX), (5, 100, 1 << 30)]
+            .into_iter()
+            .enumerate()
+        {
+            let f = dir.join(format!("chunk{i}.rpkg"));
+            fs::write(&f, header(fc, ot, mt)).unwrap();
+            assert!(open(&f).is_err(), "case {i} accepted");
+        }
+    }
+
+    #[test]
+    fn rejects_implausible_resource_sizes() {
+        let dir = tmp("size");
+        let f = dir.join("data.bin");
+        fs::write(&f, vec![0u8; 64]).unwrap();
+        let file = File::open(&f).unwrap();
+        let mut e = Entry { hash: 1, offset: 0, compressed: 16, scrambled: false, ty: *b"MIRP", data_size: u32::MAX,
+            sys_mem: 0, vid_mem: 0, refs: Vec::new() };
+        assert!(read_resource(&file, &e).is_err());      // 16 bytes cannot hold 4 GB of LZ4 output
+        e.compressed = 0;
+        e.data_size = 1 << 31;
+        e.offset = 1 << 40;
+        assert!(read_resource(&file, &e).is_err());
     }
 }

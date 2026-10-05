@@ -27,11 +27,46 @@ from pathlib import Path
 import numpy as np
 
 ENABLED = os.environ.get("OMNI_NATIVE", "1") != "0"
+
+
+class NativeError(RuntimeError):
+    """The Rust core panicked on a file it could not handle (PyO3 raises that as a ``BaseException``, which the
+    ``except Exception`` handlers around conversions would let through and end the whole batch)."""
+
+
+class _Guarded:
+    """The extension module, with every function turned into one that reports a Rust panic as ``NativeError``."""
+
+    def __init__(self, module):
+        object.__setattr__(self, "_module", module)
+
+    def __dir__(self):
+        return dir(self._module)
+
+    def __getattr__(self, name):
+        attr = getattr(self._module, name)
+        if not callable(attr):
+            return attr
+
+        def call(*args, **kwargs):
+            try:
+                return attr(*args, **kwargs)
+            except BaseException as e:  # noqa: BLE001 - only the PyO3 panic type is converted
+                if type(e).__name__ == "PanicException":
+                    raise NativeError(f"{name}: {e}") from None
+                raise
+        call.__name__ = name
+        call.__doc__ = getattr(attr, "__doc__", None)
+        object.__setattr__(self, name, call)          # resolved once
+        return call
+
+
 N = None
 NATIVE_ERROR = ""
 if ENABLED:
     try:
-        import omni_native as N  # noqa: N812
+        import omni_native as _raw
+        N = _Guarded(_raw)
     except ImportError as e:  # pragma: no cover - depends on the local build
         N = None
         NATIVE_ERROR = str(e)

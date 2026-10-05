@@ -6,6 +6,9 @@ use crate::par::*;
 /// `bones`/`weights`: n x k row-major. Returns (n x max_links bones, n x max_links weights). Unused links
 /// repeat the strongest bone with a zero weight; a vertex with no weight goes 100% to `fallback`.
 pub fn fold(bones: &[i64], weights: &[f64], n: usize, k: usize, max_links: usize, fallback: i64) -> (Vec<i64>, Vec<f64>) {
+    if max_links == 0 || n == 0 || k == 0 {
+        return (Vec::new(), Vec::new());
+    }
     let mut ob = vec![0i64; n * max_links];
     let mut ow = vec![0f64; n * max_links];
     ob.par_chunks_mut(max_links)
@@ -45,6 +48,12 @@ pub fn fold(bones: &[i64], weights: &[f64], n: usize, k: usize, max_links: usize
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn degenerate_arguments_do_not_panic() {
+        assert_eq!(super::fold(&[], &[], 0, 4, 3, 0), (Vec::new(), Vec::new()));
+        assert_eq!(super::fold(&[1], &[1.0], 1, 1, 0, 0), (Vec::new(), Vec::new()));
+    }
+
     #[test]
     fn merges_and_keeps_top() {
         let bones = [5i64, 5, 7, 9, 1, 2];

@@ -153,6 +153,9 @@ pub fn to_rgba(name: &str, w: u32, h: u32, data: &[u8]) -> Result<Vec<u8>, Strin
         "BC7" => (texture2ddecoder::decode_bc7, 16),
         _ => return Err(format!("unsupported format {name}")),
     };
+    if w == 0 || h == 0 || w.checked_mul(h).map_or(true, |n| n > 1 << 29) {
+        return Err(format!("invalid texture size {w}x{h}"));
+    }
     let bw = w.div_ceil(4);
     let row_bytes = bw * blk;
     let rows = h.div_ceil(4);

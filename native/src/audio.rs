@@ -48,7 +48,7 @@ pub fn wem_info(b: &[u8]) -> Option<WemInfo> {
     while o + 8 <= b.len() {
         let id = &b[o..o + 4];
         let size = u32le(b, o + 4)? as usize;
-        let body_end = (o + 8 + size).min(b.len());
+        let body_end = o.saturating_add(8).saturating_add(size).min(b.len());   // a 32-bit usize must not wrap
         let body = &b[o + 8..body_end];
         match id {
             b"fmt " if body.len() >= 16 => {

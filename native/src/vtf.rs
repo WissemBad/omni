@@ -57,8 +57,24 @@ fn to_srgb8(l: f32) -> u8 {
     (c * 255.0 + 0.5) as u8
 }
 
+/// Byte length of a `w` x `h` RGBA8 image, or an error when the size is empty, absurd or does not fit `have` bytes.
+pub fn rgba_len(w: usize, h: usize, have: usize) -> Result<usize, String> {
+    let n = w
+        .checked_mul(h)
+        .and_then(|px| px.checked_mul(4))
+        .filter(|&n| w > 0 && h > 0 && n <= 1 << 31)
+        .ok_or_else(|| format!("invalid image size {w}x{h}"))?;
+    if have < n {
+        return Err("image buffer too small".into());
+    }
+    Ok(n)
+}
+
 /// Next mip level (each output pixel = the 1, 2 or 4 source pixels it covers).
 pub fn half(src: &[u8], w: usize, h: usize, kind: Kind) -> (Vec<u8>, usize, usize) {
+    if rgba_len(w, h, src.len()).is_err() {
+        return (vec![0, 0, 0, 255], 1, 1);                 // callers validate; this only keeps a bad one from panicking
+    }
     let (nw, nh) = ((w / 2).max(1), (h / 2).max(1));
     let lin = to_lin_table();
     let mut out = vec![0u8; nw * nh * 4];
@@ -258,10 +274,8 @@ pub fn encode_vtf_bytes(
     quality: u8,
     coverage: f32,
 ) -> Result<(Vec<u8>, usize, usize), String> {
-    if rgba.len() < w * h * 4 {
-        return Err("image buffer too small".into());
-    }
-    let chain = mip_chain(&rgba[..w * h * 4], w, h, kind, max_size, coverage);
+    let n = rgba_len(w, h, rgba.len())?;
+    let chain = mip_chain(&rgba[..n], w, h, kind, max_size, coverage);
     let refl = reflectivity(&chain[chain.len().saturating_sub(4).min(chain.len() - 1)].2, kind);
     let (fmt, mut flags) = match format {
         "dxt1" => (DXT1, flags),
@@ -376,7 +390,8 @@ pub fn decode_vtf(b: &[u8], max_dim: usize) -> Result<(usize, usize, Vec<u8>), S
 
 /// RGBA8 -> PNG. `channel`: rgb (opaque), rgba, or one of r g b a shown as grey. `max_dim` downsizes (box).
 pub fn png(rgba: &[u8], w: usize, h: usize, channel: &str, max_dim: usize) -> Result<Vec<u8>, String> {
-    let mut cur = (rgba[..w * h * 4].to_vec(), w, h);
+    let n = rgba_len(w, h, rgba.len())?;
+    let mut cur = (rgba[..n].to_vec(), w, h);
     while max_dim > 0 && cur.1.max(cur.2) > max_dim {
         cur = half(&cur.0, cur.1, cur.2, Kind::Linear);
     }
@@ -445,6 +460,22 @@ pub fn encode_png(px: &[u8], w: usize, h: usize) -> Vec<u8> {
     chunk(b"IDAT", &z);
     chunk(b"IEND", &[]);
     out
+}
+
+#[cfg(test)]
+mod guard_tests {
+    use super::*;
+
+    #[test]
+    fn empty_and_oversized_images_are_errors() {
+        assert!(rgba_len(0, 4, 100).is_err());
+        assert!(rgba_len(4, 0, 100).is_err());
+        assert!(rgba_len(usize::MAX, 2, 100).is_err());
+        assert!(rgba_len(4, 4, 10).is_err());
+        assert_eq!(rgba_len(2, 2, 16), Ok(16));
+        assert!(png(&[], 0, 4, "rgba", 0).is_err());
+        assert_eq!(half(&[], 0, 0, Kind::Linear).1, 1);
+    }
 }
 
 #[cfg(test)]

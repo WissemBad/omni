@@ -872,7 +872,12 @@ impl<R: Read + Seek> WwiseRiffVorbis<R> {
                 // IN: remaining bits of first byte
                 let remainder = bit_reader.read_bits((8 - mode_bits) as u8)?;
 
-                if mbf[mode_number as usize] {
+                // a corrupt packet can name a mode the setup does not define: an error, not an out-of-range index
+                let this_flag = *mbf
+                    .get(mode_number as usize)
+                    .ok_or_else(|| WemError::parse("packet uses an undefined mode"))?;
+
+                if this_flag {
                     // Long window, peek at next frame
                     let next_blockflag = if next_offset + packet_header_size <= data_end {
                         let next_packet = Packet::read(
@@ -885,7 +890,9 @@ impl<R: Read + Seek> WwiseRiffVorbis<R> {
                             self.input.seek(SeekFrom::Start(next_packet.offset))?;
                             let mut next_bit_reader = BitReader::new(&mut self.input);
                             let next_mode_number = next_bit_reader.read_bits(mode_bits as u8)?;
-                            mbf[next_mode_number as usize]
+                            *mbf
+                                .get(next_mode_number as usize)
+                                .ok_or_else(|| WemError::parse("packet uses an undefined mode"))?
                         } else {
                             false
                         }
@@ -900,7 +907,7 @@ impl<R: Read + Seek> WwiseRiffVorbis<R> {
                     self.input.seek(SeekFrom::Start(offset + 1))?;
                 }
 
-                prev_blockflag = mbf[mode_number as usize];
+                prev_blockflag = this_flag;
                 ogg.write_bits(remainder, (8 - mode_bits) as u8)?;
             } else {
                 let v = self.read_byte()?;

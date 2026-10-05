@@ -1,8 +1,9 @@
 //! omni_native: the parts of omni that need native speed or a hardened binary parser.
 //!
 //! Every entry point releases the GIL while it works (callers run several conversions in threads/processes)
-//! and reports bad input as a Python exception (Rust panics are turned into exceptions by PyO3), so a
-//! corrupt game file can never take the converter down.
+//! and reports bad input as a Python exception. Headers are checked against the file before anything is
+//! allocated from them (a failed allocation aborts the process, which no exception can catch); a remaining
+//! panic reaches Python as PyO3's ``PanicException``, which ``omni.native`` re-raises as ``NativeError``.
 //!
 //! The crate is built two ways from the same core modules:
 //!   * a CPython extension (features `python` + `parallel`, built by maturin): fastest, multi-threaded;

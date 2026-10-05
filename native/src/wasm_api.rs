@@ -255,10 +255,8 @@ fn dispatch(op: u32, a: &mut Args, o: &mut Out) -> Result<(), String> {
             let (w, h) = (a.int()? as usize, a.int()? as usize);
             let kind = vtf::Kind::parse(&a.str()?)?;
             let (max_size, coverage) = (a.int()? as usize, a.float()? as f32);
-            if rgba.len() < w * h * 4 {
-                return Err("image buffer too small".into());
-            }
-            let chain = vtf::mip_chain(&rgba[..w * h * 4], w, h, kind, max_size, coverage);
+            let n = vtf::rgba_len(w, h, rgba.len())?;
+            let chain = vtf::mip_chain(&rgba[..n], w, h, kind, max_size, coverage);
             let refl = vtf::reflectivity(&chain[chain.len().saturating_sub(4).min(chain.len() - 1)].2, kind);
             o.f(refl[0] as f64).f(refl[1] as f64).f(refl[2] as f64);
             for (mw, mh, px) in &chain {
