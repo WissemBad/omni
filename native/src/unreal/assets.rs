@@ -180,7 +180,10 @@ pub fn convert_mip(pf: &str, w: u32, h: u32, data: &[u8]) -> Result<Vec<u8>> {
             let bw = (w as usize).div_ceil(4);
             let bh = (h as usize).div_ceil(4);
             let mut px = vec![0u32; bw * 4 * bh * 4];
-            texture2ddecoder::decode_bc6(data, bw * 4, bh * 4, &mut px, false).map_err(|e| Error(format!("BC6H: {e}")))?;
+            // the third-party decoder can overflow on corrupt blocks (a panic with overflow checks): an error instead
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| texture2ddecoder::decode_bc6(data, bw * 4, bh * 4, &mut px, false)))
+                .map_err(|_| Error("BC6H: corrupt blocks".into()))?
+                .map_err(|e| Error(format!("BC6H: {e}")))?;
             let mut out = Vec::with_capacity(n * 4);
             for y in 0..h as usize {
                 for x in 0..w as usize {

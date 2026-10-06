@@ -184,7 +184,10 @@ const exports = computed<ExportCard[]>(() => {
       kind: 'character',
       icon: 'i-ri-user-3-line',
       title: 'Tous les playermodels',
-      text: sid.value === '007fl' ? 'Chaque famille de tenues devient un playermodel (variations en bodygroups et skins). Ceux déjà créés sont sautés.' : 'Chaque personnage devient un playermodel sur le squelette de GMod. Ceux déjà créés sont sautés.',
+      text:
+        sid.value === '007fl'
+          ? 'Chaque famille de tenues devient un playermodel (variations en bodygroups et skins). Ceux déjà créés sont sautés.'
+          : 'Chaque personnage devient un playermodel sur le squelette de GMod. Ceux déjà créés sont sautés.',
       label: 'Créer tout',
       action: () =>
         run(
@@ -201,7 +204,10 @@ const exports = computed<ExportCard[]>(() => {
       kind: 'sounds',
       icon: 'i-ri-music-2-line',
       title: 'Tous les sons',
-      text: sid.value === '007fl' || sid.value === 'hitman3' ? 'Conversion par le cœur Rust, sans doublons, avec les noms des événements, de la musique et des dialogues.' : 'Conversion par le cœur Rust (Bink Audio, Ogg…), sans doublons, rangés comme dans le jeu.',
+      text:
+        sid.value === '007fl' || sid.value === 'hitman3'
+          ? 'Conversion par le cœur Rust, sans doublons, avec les noms des événements, de la musique et des dialogues.'
+          : 'Conversion par le cœur Rust (Bink Audio, Ogg…), sans doublons, rangés comme dans le jeu.',
       label: 'Exporter',
       action: () =>
         run('sounds', `/${sid.value}/sounds/export`, {
