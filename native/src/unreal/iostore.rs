@@ -346,7 +346,7 @@ pub fn decompress(method: &str, src: &[u8], dst: &mut [u8]) -> Result<()> {
     }
 }
 
-fn parse_directory_index(data: &[u8]) -> Result<(String, Vec<(String, u32)>)> {
+pub(crate) fn parse_directory_index(data: &[u8]) -> Result<(String, Vec<(String, u32)>)> {
     let mut r = Reader::new(data);
     let mount = r.fstring()?;
     let dirs = r.array(16, |r| Ok([r.u32()?, r.u32()?, r.u32()?, r.u32()?]))?;

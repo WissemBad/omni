@@ -165,7 +165,7 @@ impl Schema {
                     }
                 }
                 Some("E") => {
-                    let rest: Vec<&str> = line[2..].split(' ').collect();
+                    let rest: Vec<&str> = line.get(2..).unwrap_or("").split(' ').collect();
                     let name = rest[0].to_string();
                     let vals = rest[1..]
                         .iter()
@@ -219,7 +219,8 @@ fn split_args(s: &str) -> Vec<&str> {
 pub fn parse_ty(s: &str) -> Ty {
     if let Some(open) = s.find('<') {
         let head = &s[..open];
-        let inner = &s[open + 1..s.len().saturating_sub(1)];
+        // "Head<inner>": the closing '>' is dropped (text read from a cache file: never slice inside a character)
+        let inner = s[open + 1..].strip_suffix('>').unwrap_or(&s[open + 1..]);
         let a = split_args(inner);
         return match head {
             "Byte" => Ty::Byte(Some(inner.to_string())),
