@@ -92,6 +92,14 @@ def material_entry(src, m, texcat=None) -> dict:
             "textures": textures, "unknown_slots": m.unknown_slots}
 
 
+def registry_source(sid: str):
+    try:
+        from ..sources import registry
+        return registry.get_source(sid)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv_reset) -> None:
     # ------------------------------------------------------------------------------------------- props
     @app.get("/api/{sid}/props/categories")
@@ -284,10 +292,18 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
         except (OSError, ValueError):
             rows = {}
         out = set()
+        stems = set()
         for path in rows:
             stem = path.rsplit("/", 1)[-1].removesuffix(".mdl")
             if (CONFIG.addon_dir(sid) / path).exists():
                 out.add(f"outfit_{stem}")
+                stems.add(stem)
+        src = registry_source(sid)
+        if src is not None and hasattr(src, "build_character"):
+            from ..core.naming import slug
+            for c in src.characters():
+                if slug(c["variants"][0]["name"], 40) in stems:
+                    out.add(c["id"])
         return out
 
     def _character(sid: str, cid: str):
@@ -314,11 +330,15 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
                 o = PMOptions()
                 apply_quality(o.mat, "light")            # the preview shows 512 px textures: no need for more
                 cfg = PreviewConfig(workspace=CONFIG.workspace)
-                plan = prepare(src, [int(v["key"], 16) for v in c["variants"]], o, cfg, cid.replace("outfit_", ""))
-                state["stage"] = "aperçu 3D"
                 out = _preview_dir(sid) / f"{cid}.glb"
                 out.parent.mkdir(parents=True, exist_ok=True)
-                export_preview(plan, out, tex_size=settings.get("characters", "preview_size"))
+                if hasattr(src, "preview_character"):           # sources with their own character builder
+                    state["stage"] = "pose du squelette et aperçu 3D"
+                    src.preview_character(cid, out, o, cfg, settings.get("characters", "preview_size"))
+                else:
+                    plan = prepare(src, [int(v["key"], 16) for v in c["variants"]], o, cfg, cid.replace("outfit_", ""))
+                    state["stage"] = "aperçu 3D"
+                    export_preview(plan, out, tex_size=settings.get("characters", "preview_size"))
             state["status"] = "ready"
         except Exception as e:  # noqa: BLE001
             state.update(status="error", error=f"{type(e).__name__}: {e}")
@@ -379,8 +399,11 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
             o = PMOptions(max_tris=req.max_tris or st["characters"]["max_tris"])
             apply_quality(o.mat, req.tex_quality or st["textures"]["quality"])
             o.mat.lossless_normals = st["textures"]["lossless_normals"]
-            r = build_outfit_pm(src, [int(by_v[v]["key"], 16) for v in order], o, CONFIG,
-                                cid.replace("outfit_", ""), req.title)
+            if hasattr(src, "build_character"):
+                r = src.build_character(cid, o, CONFIG, req.title)
+            else:
+                r = build_outfit_pm(src, [int(by_v[v]["key"], 16) for v in order], o, CONFIG,
+                                    cid.replace("outfit_", ""), req.title)
             jobs.result(job, {"key": cid, "status": r.status, "model": r.model, "errors": r.errors[:2],
                               "notes": r.notes, "seconds": r.seconds})
             if r.status != "OK":

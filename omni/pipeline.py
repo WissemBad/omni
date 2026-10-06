@@ -41,6 +41,10 @@ def warm_up(source) -> None:
     """Build the shared on-disk caches once, in the parent, before workers start: N processes racing to
     create the same cache files is what broke a first batch (BrokenProcessPool)."""
     try:
+        if not hasattr(source, "names"):                # sources without Glacier name/entity caches
+            if hasattr(source, "warm_up"):
+                source.warm_up()
+            return
         from .sources.glacier.entity import EntityReader
         source.names.name(0)                            # names database (built once here, not by every worker)
         EntityReader(source).names                      # property-name dictionary
@@ -98,7 +102,10 @@ def _work_pm(cid: str, kw: dict):
     o = PMOptions(max_tris=kw["max_tris"])
     apply_quality(o.mat, kw["tex_quality"])
     o.mat.lossless_normals = kw.get("lossless_normals", False)
-    r = build_outfit_pm(_src, [int(v["key"], 16) for v in c["variants"]], o, CONFIG, cid.replace("outfit_", ""), "")
+    if hasattr(_src, "build_character"):                # sources with their own character builder (Unreal)
+        r = _src.build_character(cid, o, CONFIG)
+    else:
+        r = build_outfit_pm(_src, [int(v["key"], 16) for v in c["variants"]], o, CONFIG, cid.replace("outfit_", ""), "")
     return {"key": cid, "status": r.status, "model": r.model, "errors": r.errors, "notes": r.notes,
             "seconds": r.seconds}
 
@@ -141,7 +148,12 @@ def biggest_first(source_name: str, keys: list[str]) -> list[str]:
     while the others had nothing left to do (half the CPU idle at the end of a batch)."""
     try:
         from .cli import _source
-        archive = _source(source_name).archive
+        src = _source(source_name)
+        if not hasattr(src, "archive"):                 # sources without extracted files: catalog sizes
+            from .core.catalog import Catalog
+            sizes = {r["key"]: r["size"] for r in Catalog(src).search(limit=10 ** 6, named_only=False)}
+            return sorted(keys, key=lambda k: -sizes.get(k, 0))
+        archive = src.archive
         size = {}
         for k in keys:
             p = archive.find("PRIM", int(k, 16))

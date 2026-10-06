@@ -33,6 +33,8 @@ STUDIOMDL_FILES = {
     "cetr0.dll": "ee91fca6f31005f25aee80fd74a3b9586a603634a8d7adf5d505dcdf40a5b10b",
     "cevphysics.dll": "d5ed5ccc0622e0a544dc22ea3c81246142f5ca88c9f5dc7034f0fa36456fc7a4",
     "cevstdlib.dll": "a001652e249475af802b0777be6f3aec2a541060ac3d37ee8402cf1097671c74",
+    # FBX SDK the compiler is linked against: without it cestudiomdl.exe exits at once, without any output
+    "celfbxsdk.dll": "f270b20231b27212ba5321adf5f4eade8aecb74c77dea5ab95fd42cff7af8d1c",
 }
 GAME_NAMES = ("007 first light", "first light")
 
@@ -82,7 +84,12 @@ def names_ok() -> dict:
 
 
 def studiomdl_ok() -> dict:
-    return {"path": str(CONFIG.studiomdl), "ok": CONFIG.studiomdl.is_file()}
+    """The compiler and, when it is the copy omni downloads, every file it needs next to it."""
+    exe = CONFIG.studiomdl
+    ok = exe.is_file()
+    if ok and exe.parent == CONFIG.tools / "studiomdl-ce":
+        ok = all((exe.parent / name).is_file() for name in STUDIOMDL_FILES)
+    return {"path": str(exe), "ok": ok}
 
 
 def gmod_ok() -> dict:

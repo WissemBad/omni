@@ -62,6 +62,13 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         settings.apply()
         from .. import games
         games.ensure_defaults()
+        # a game updated since it was prepared is indexed again in the background (its new assets appear)
+        for g in games.load():
+            try:
+                if games.status(g["id"]).get("updated") and hasattr(app.state, "prepare_game"):
+                    app.state.prepare_game(g["id"])
+            except Exception:  # noqa: BLE001
+                pass
         warm()
         threading.Thread(target=look_for_update, daemon=True, name="update-check").start()
         yield
@@ -191,7 +198,8 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
                 d = registry.describe(sid)
             except Exception:  # noqa: BLE001 - one broken library entry must not hide the others
                 continue
-            out.append({**d, "deployed": deploy.link_path(CONFIG, sid).exists()})
+            from .. import games as library
+            out.append({**d, "deployed": deploy.link_path(CONFIG, sid).exists(), "ready": library.status(sid)["ready"]})
         return out
 
     @app.get("/api/{sid}/info")
@@ -287,7 +295,7 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
 
     # ------------------------------------------------------------------------------------------ workbenches
     from . import output, routes_games, routes_models, routes_setup, routes_sounds, routes_textures
-    routes_games.register(app, source_ids=registry.source_ids)
+    routes_games.register(app, source_ids=registry.source_ids, jobs=jobs, reset_runtime=reset_runtime)
     routes_setup.register(app, jobs=jobs, reset_runtime=reset_runtime)
     routes_models.register(app, jobs=jobs, need=need, catalog_of=catalog_of, texcat_of=texcat_of,
                            converted=converted, conv_reset=conv_reset)

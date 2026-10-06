@@ -73,4 +73,8 @@ def compile_qc(qc: Path, sandbox: Path | None = None, studiomdl: Path | None = N
                 and "fastest tracing" not in w and "2-dimensional geometry" not in w
                 and "bounding box out of range" not in w]            # harmless: a prop bigger than the idle box
     ok = p.returncode == 0 and "Completed" in log and not errors
+    if not ok and not errors and not log.strip():
+        # the process did not get to print anything: a DLL it needs is missing (Windows code 0xC0000135)
+        errors = [f"studiomdl n’a pas démarré (code {p.returncode & 0xFFFFFFFF:#x}) : un fichier du compilateur "
+                  f"manque à côté de {Path(studiomdl).name} (réinstalle-le depuis la page Installation)"]
     return CompileResult(ok, log, [], errors, warnings)

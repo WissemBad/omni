@@ -11,8 +11,8 @@ import type {
 export function useSources() {
   const sources = useState<SourceInfo[]>('sources', () => [])
   const ready = useState('sources-ready', () => false)
-  async function load() {
-    if (ready.value) return sources.value
+  async function load(force = false) {
+    if (ready.value && !force) return sources.value
     sources.value = await api<SourceInfo[]>('/sources')
     ready.value = true
     return sources.value

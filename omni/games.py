@@ -197,3 +197,59 @@ def ensure_defaults() -> None:
             add(folder)
     except Exception:  # noqa: BLE001 - the library is a convenience
         log.debug("default game not added", exc_info=True)
+
+
+# ------------------------------------------------------------------------------------------------ preparation
+def _engine_module(g: dict):
+    if g.get("engine") == "unreal":
+        from .sources.unreal import prepare
+        return prepare
+    if g.get("profile") == "hitman3":
+        from .sources.glacier import hitman_prepare
+        return hitman_prepare
+    return None
+
+
+def get(game_id: str) -> dict | None:
+    return next((g for g in load() if g["id"] == game_id), None)
+
+
+def status(game_id: str) -> dict:
+    """Preparation of a library game: its steps and whether it is ready to browse and convert.
+    007 First Light (built-in) answers with its first-run setup."""
+    if game_id == "007fl":
+        from .core import setup
+        st = setup.status()
+        return {"steps": [], "ready": bool(st["ready"]), "updated": False, "builtin": True}
+    g = get(game_id)
+    mod = _engine_module(g) if g else None
+    if g is None or mod is None or not g.get("supported"):
+        return {"steps": [], "ready": False, "updated": False, "reason": (g or {}).get("reason", "jeu non pris en charge")}
+    try:
+        st = mod.status(g)
+    except Exception as e:  # noqa: BLE001 - a moved/uninstalled game folder
+        return {"steps": [], "ready": False, "updated": False, "reason": f"{type(e).__name__}: {e}"}
+    from .core import setup
+    tool = setup.studiomdl_ok()["ok"]          # shared by every game: fetched by the first preparation
+    st["steps"].append({"key": "studiomdl", "label": "Compilateur de modèles (StudioMDL-CE)", "ok": tool})
+    st["ready"] = st["ready"] and tool
+    return st
+
+
+def prepare(game_id: str, say=print, count=None, cancel=None) -> dict:
+    """Everything a game needs, from its folder only: the engine's own steps, then the shared tools (model
+    compiler) when they are missing."""
+    g = get(game_id)
+    if g is None:
+        raise ValueError(f"jeu inconnu : {game_id}")
+    mod = _engine_module(g)
+    if mod is None or not g.get("supported"):
+        raise ValueError(g.get("reason") or "ce jeu n’est pas encore pris en charge")
+    out = mod.run(g, say, count, cancel)
+    from .core import setup
+    if not setup.studiomdl_ok()["ok"]:
+        say("Compilateur de modèles (StudioMDL-CE)…")
+        setup.fetch_studiomdl(say, None, cancel)
+    if not setup.gmod_ok()["ok"]:
+        say("Garry’s Mod introuvable : la conversion fonctionne, l’addon sera lié une fois GMod installé")
+    return out

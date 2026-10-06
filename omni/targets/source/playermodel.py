@@ -434,8 +434,13 @@ def hitbox_qc(tpl: Template, world: np.ndarray, parts: list[PosedPart]) -> list[
     geometry keeps the stock box."""
     hb_bones = {h.bone for h in tpl.info.hitboxes}
     pts = _points_by_owner(parts, _owner(tpl, hb_bones))
+    # studiomdl drops bones no vertex follows: a hitbox on one of them aborts the compile (a character without
+    # toes leaves ValveBiped's Toe0 unweighted)
+    weighted = {int(b) for pp in parts for b in np.unique(pp.bones[pp.weights > 0])}
     out = ['$hboxset "default"']
     for h in tpl.info.hitboxes:
+        if h.bone not in weighted:
+            continue
         lo, hi = h.bbmin, h.bbmax
         P = pts.get(h.bone)
         if P is not None and len(P) >= 30:

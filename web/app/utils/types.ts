@@ -5,6 +5,9 @@ export interface SourceInfo {
   title: string
   description?: string
   capabilities: Capability[]
+  /** browsing works (built-in: first-run setup done; library game: prepared) */
+  ready?: boolean
+  engine?: string
   deployed: boolean
 }
 
