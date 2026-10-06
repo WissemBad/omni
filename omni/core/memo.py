@@ -1,6 +1,6 @@
 """Persistent memo of expensive, deterministic results (convex decompositions, template resolutions...).
 
-One SQLite file per memo in ``workspace/cache``, shared by every batch worker (WAL: readers never wait for a writer)
+One SQLite file per memo in ``<workspace>/cache``, shared by every batch worker (WAL: readers never wait for a writer)
 and kept between sessions. Values are pickled. A memo is an optimisation only: any error reading or writing it is
 ignored and the caller computes the value again. Keys must contain everything the value depends on (input bytes,
 parameters, a version that is bumped when the code producing the value changes).

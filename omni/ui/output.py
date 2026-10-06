@@ -1,7 +1,7 @@
 """Model viewer API: browse and inspect compiled Source models (.mdl/.vvd/.vtx/.phy) with their .vmt/.vtf.
 
 Every route lives under ``/api/<source id>/output/...`` and reads a *root* folder: by default the GMod addon omni writes
-(``workspace/addons/omni_<source>``, with the conversion features: origin, comparison, reconversion), or any folder the
+(``<exports>/<source>/garrysmod-addon``, with the conversion features: origin, comparison, reconversion), or any folder the
 user adds (a decompiled addon...), which is only read. What the viewer shows is rebuilt from the compiled files, not
 from the game's data, so it is what GMod will load.
 """
@@ -44,7 +44,7 @@ class Root:
     external: bool
 
 
-ROOTS_FILE = CONFIG.workspace / "viewer_roots.json"
+ROOTS_FILE = CONFIG.config_dir / "viewer_roots.json"
 VTX_EXTS = (".dx90.vtx", ".dx80.vtx", ".sw.vtx")
 
 
@@ -529,7 +529,7 @@ def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: 
         return r, f
 
     def cache_dir(sid: str) -> Path:
-        return CONFIG.workspace / "preview" / sid / "output"
+        return CONFIG.previews / sid / "output"
 
     # ---- roots
     @app.get("/api/{sid}/output/roots")

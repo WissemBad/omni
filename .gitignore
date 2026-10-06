@@ -22,10 +22,7 @@ web/.output/
 web/.data/
 web/dist
 
-# local data (never committed: game assets, exports, caches)
-/workspace/
-/Assets/
-/third_party/
+# nothing a game produced lives in the repository: data is in the Omni folder (Documents\Omni)
 *.log
 .env
 .DS_Store

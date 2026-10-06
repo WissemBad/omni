@@ -2,7 +2,7 @@
 
 ``identify(folder)`` looks at what is inside (Glacier ``Runtime/chunk*.rpkg``, Unreal ``<Project>/Content/Paks`` with
 ``.pak``/``.utoc`` and a ``*-Shipping.exe``) and returns what omni needs to know: engine, profile (the converter
-variant), title and the capabilities its source offers. The library (``<workspace>/games.json``) lists the games the
+variant), title and the capabilities its source offers. The library (``<workspace>/config/games.json``) lists the games the
 user added; ``scan_steam()`` offers the ones installed in the Steam libraries.
 """
 from __future__ import annotations
@@ -129,7 +129,7 @@ def identify(folder: str | Path) -> dict | None:
 
 # ------------------------------------------------------------------------------------------------ library
 def _file() -> Path:
-    return CONFIG.workspace / "games.json"
+    return CONFIG.games_file
 
 
 def load() -> list[dict]:

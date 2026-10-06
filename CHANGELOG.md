@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- **One Omni folder, two parts.** Everything omni writes goes to `Documents\Omni` (movable with `omni home set <folder>`):
+  `exports\<game>\` holds what you take away (the Garry's Mod addon, glTF models, sounds, textures, Blender files, the
+  `.gma` archive) and `workspace\` what omni manages (settings, queue, catalogs, caches, tools, logs). The application
+  itself holds no data. Data of the earlier layouts moves over without deleting or overwriting anything
+  (`omni migrate <old folder>`), and the Garry's Mod link follows the addon. The exports folder can also be set apart
+  in the settings.
+- The glTF writer is part of the Rust core: arrays are validated before writing, images are encoded without the GIL
+  and a native crash while exporting costs one model instead of the batch. Props are exported by worker processes.
+- The prop catalog (11 s instead of 4 minutes), the texture catalog (12 s instead of 2.5 minutes), the sound list
+  (25 s instead of 5 minutes) and the hashing of sounds before an export read the game's files in parallel in the Rust
+  core. The VTF writer is the core's too.
+
+### Removed
+
+- The pure-Python texture fallback (`quicktex`), the `pygltflib` runtime dependency and the community files that the
+  other repositories do not carry (issue and pull request templates, `CODEOWNERS`, `CONTRIBUTING.md`, `SECURITY.md`).
+
 ### Added
 
 - **Unreal Engine 5 games** (any UE 5.x game with IoStore containers; validated on *Bronzebeard's Tavern*, UE 5.1):

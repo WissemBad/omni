@@ -3,7 +3,7 @@
 * **One heavy job at a time.** Conversions, exports, indexing and setup steps share the CPU, the disk and the sandbox:
   they wait in a queue (FIFO, a job can be moved to the front) instead of running side by side. Quick, user-driven
   jobs (one playermodel) run at once. An identical job already queued or running is refused.
-* **Persistent.** Jobs, their log tail and every result live in ``<workspace>/jobs.sqlite``: the history survives a
+* **Persistent.** Jobs, their log tail and every result live in ``<workspace>/state/jobs.sqlite``: the history survives a
   restart, a job that was cut short is marked *interrupted* and can be resumed (``retry``).
 * **Observable.** ``version`` changes at every state change; ``wait`` lets the SSE endpoint push updates instead of the
   interface polling. Results are paged (``results``), failures are grouped by cause (``report``).
@@ -85,6 +85,8 @@ class Jobs:
         self._queue: deque[str] = deque()
         self._pending: dict[str, list] = {}            # results not written to the database yet
         self._dirty: set[str] = set()
+        if db_path:
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._db = sqlite3.connect(str(db_path) if db_path else ":memory:", check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         with self.lock:

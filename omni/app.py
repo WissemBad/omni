@@ -114,7 +114,7 @@ def _first_instance() -> bool:
 
 def _run_file() -> Path:
     from .core.config import CONFIG
-    return CONFIG.workspace / "run.json"
+    return CONFIG.state_dir / "run.json"
 
 
 def _focus_running() -> bool:
@@ -133,7 +133,7 @@ def _focus_running() -> bool:
 # ---------------------------------------------------------------------------------------------------- window state
 def _state_file() -> Path:
     from .core.config import CONFIG
-    return CONFIG.workspace / "window.json"
+    return CONFIG.config_dir / "window.json"
 
 
 def _load_state() -> dict:
@@ -210,6 +210,7 @@ class Server:
                 raise RuntimeError("le serveur local met trop de temps à démarrer")
             time.sleep(0.05)
         try:
+            _run_file().parent.mkdir(parents=True, exist_ok=True)
             _run_file().write_text(json.dumps({"pid": os.getpid(), "port": self.port}), encoding="utf-8")
         except OSError:
             pass
@@ -333,6 +334,7 @@ def run(port: int = PORT, browser: bool = False, path: str = "/") -> int:
                 state.update(x=window.x, y=window.y, width=window.width, height=window.height)
             else:
                 state.update({k: old[k] for k in ("x", "y", "width", "height") if k in old})
+            _state_file().parent.mkdir(parents=True, exist_ok=True)
             _state_file().write_text(json.dumps(state), encoding="utf-8")
         except Exception:  # noqa: BLE001
             log.debug("could not save the window state", exc_info=True)

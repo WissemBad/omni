@@ -89,7 +89,7 @@ def register(app: FastAPI, *, jobs, need, texcat_of, catalog_of, converted) -> N
         if normal < 0:
             row = texcat_of(sid).get(key) if texcat_of(sid) is not None else None
             normal = int(bool(row and row["role"] in ("normal", "detail_normal")))
-        out = CONFIG.workspace / "preview" / sid / "srctex" / f"{key.upper()}_{channel}_{size}_{normal}.png"
+        out = CONFIG.previews / sid / "srctex" / f"{key.upper()}_{channel}_{size}_{normal}.png"
         if not out.exists():
             try:
                 png = src.texture_png(key.upper(), channel, size, bool(normal))
@@ -120,11 +120,11 @@ def register(app: FastAPI, *, jobs, need, texcat_of, catalog_of, converted) -> N
 
     @app.post("/api/{sid}/textures/{key}/export")
     def tex_export(sid: str, key: str):
-        """Write the full-resolution PNG to workspace/exports/textures and show it in the Explorer."""
+        """Write the full-resolution PNG to <exports>/<game>/textures and show it in the Explorer."""
         src = need(sid, "textures")
         row = texcat_of(sid).get(key) if texcat_of(sid) is not None else None
         png = src.texture_png(key.upper(), "rgba", 16384, bool(row and row["role"] in ("normal", "detail_normal")))
-        folder = CONFIG.workspace / "exports" / sid / "textures" / ((row["folder"] if row else "") or "misc")
+        folder = CONFIG.textures_dir(sid) / ((row["folder"] if row else "") or "misc")
         folder.mkdir(parents=True, exist_ok=True)
         name = re.sub(r"[^A-Za-z0-9_.-]+", "_", (row["name"] if row else key)).strip("_") or key
         f = folder / f"{name}_{key[-6:].lower()}.png"

@@ -36,7 +36,7 @@ def runtime_of(info: dict) -> Path:
 
 
 def names_dir(game_id: str) -> Path:
-    d = CONFIG.workspace / "games" / game_id / "names"
+    d = CONFIG.game_dir(game_id) / "names"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -111,7 +111,7 @@ class HitmanSource(GlacierSource):
     def characters(self) -> list[dict]:
         if self._characters is not None:
             return list(self._characters.values())
-        cache = self.config.workspace / "games" / self.id / "characters.json"
+        cache = self.config.game_dir(self.id) / "characters.json"
         sig = [len(self.archive.index("PRIM")), self._names_sig(), 1]
         try:
             data = json.loads(cache.read_text(encoding="utf-8"))

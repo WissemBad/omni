@@ -337,7 +337,7 @@ const rustLabel = computed(() => {
                 <span class="min-w-0 flex-1 truncate text-toned" :title="t.path">{{ t.label }}</span>
               </li>
             </ul>
-            <p v-if="system" class="truncate text-xs text-muted" :title="system.workspace">Espace de travail : {{ system.workspace }} · {{ system.cpus }} cœurs</p>
+            <p v-if="system" class="truncate text-xs text-muted" :title="system.home">Dossier Omni : {{ system.home }} · {{ system.cpus }} cœurs</p>
           </div>
           <div class="space-y-2">
             <h3 class="text-xs font-semibold uppercase tracking-wide text-muted">Cœur Rust</h3>

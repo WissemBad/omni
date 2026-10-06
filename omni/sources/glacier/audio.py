@@ -26,7 +26,6 @@ from __future__ import annotations
 import json
 import re
 import struct
-from concurrent.futures import ThreadPoolExecutor
 
 from ...core.ir import SoundRef
 
@@ -219,13 +218,10 @@ def iter_sounds(source, progress=print) -> list[SoundRef]:
     wes, wem = a.index("WWES"), a.index("WWEM")
     refs: list[SoundRef] = []
 
-    def label_of(path, offset=0, size=-1):
-        with path.open("rb") as f:                       # an extracted file or a package resource
-            return _label(f, offset, size)
-
-    # labels of every standalone media (cheap: chunk headers only), in parallel
-    with ThreadPoolExecutor(16) as ex:
-        labels = dict(zip(list(wes) + list(wem), ex.map(label_of, list(wes.values()) + list(wem.values()))))
+    names.prefetch(list(wes) + list(a.index("DLGE")) + list(a.index("WWEV")) + list(a.index("WBNK")))
+    # labels of every standalone media (cheap: chunk headers only), in parallel in the Rust core
+    media_hashes = list(wes) + list(wem)
+    labels = dict(zip(media_hashes, a.labels("WWES", list(wes)) + a.labels("WWEM", list(wem))))
     progress(f"labels read: {len(labels)}")
 
     # 0 - own game path
@@ -239,12 +235,10 @@ def iter_sounds(source, progress=print) -> list[SoundRef]:
                                        "language": lang, "album": gp.rsplit("/", 1)[0]}))
 
     # 1 - dialogue lines
-    for h, p in a.index("DLGE").items():
-        m = a.meta(p)
-        if not m:
-            continue
+    dlge = a.flagged_refs("DLGE", list(a.index("DLGE")))
+    for h, drefs in dlge.items():
         conv = _conversation(names.name(h))
-        for r, fl in m.refs:
+        for r, fl in drefs:
             if r in wes:
                 lang = _LANG.get(fl & 0x7F, f"lang{fl & 0x7F}")
                 stem = labels.get(r) or f"{r:016X}"
@@ -258,8 +252,11 @@ def iter_sounds(source, progress=print) -> list[SoundRef]:
 
     # event names first (their FNV-1 ids are what the bank hierarchy references)
     events: list[tuple[int, str, bytes]] = []
-    for h, p in a.index("WWEV").items():
-        d = p.read_bytes()
+    wwev = a.index("WWEV")
+    ev_refs = a.flagged_refs("WWEV", list(wwev))
+    for h, d in zip(list(wwev), a.read_many("WWEV", list(wwev))):
+        if d is None:
+            continue
         try:
             ev = parse_event(d)[0]
         except (struct.error, IndexError):
@@ -292,8 +289,7 @@ def iter_sounds(source, progress=print) -> list[SoundRef]:
         _ev, emb, wrefs = parse_event(d)
         group = _clean(ev.split("_")[0].lower()) if "_" in ev else "misc"
         base = f"events/{group}/{_clean(ev)}"
-        m = a.meta(p)
-        mrefs = m.refs if m else []
+        mrefs = ev_refs.get(h, [])
         media = [(_label_bytes(d, off, sz), str(p), off, sz, f"WWEV:{h:016X}#{i}", mid) for i, (mid, off, sz) in enumerate(emb)]
         for ri, mid in wrefs:
             r = mrefs[ri][0] if ri < len(mrefs) else None

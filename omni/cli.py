@@ -5,6 +5,7 @@ import argparse
 import json
 import time
 from dataclasses import asdict
+from pathlib import Path
 
 from . import __version__
 from .core.config import CONFIG
@@ -75,7 +76,7 @@ def cmd_preview(a):
     src = _source(a.source)
     for k in a.hash:
         model, mats = src.load_model(int(k, 16))
-        out = CONFIG.workspace / "preview" / f"{k.upper()}.glb"
+        out = CONFIG.previews / f"{k.upper()}.glb"
         export_glb(src, model, mats, out)
         print(out)
 
@@ -188,7 +189,7 @@ def cmd_sounds(a):
     from pathlib import Path
     from .targets.audio.export import export_sounds
     src = _source(a.source)
-    out = Path(a.out) if a.out else CONFIG.workspace / "audio" / src.id
+    out = Path(a.out) if a.out else CONFIG.sounds_dir(src.id)
     refs = src.list_sounds(progress=lambda m: print(m, flush=True))
     from .core import settings
     st = settings.load()["sounds"]
@@ -214,6 +215,40 @@ def cmd_native(a):
         print("restart the command to load the new build")
         return
     print(json.dumps(native.status(), indent=1))
+
+
+def cmd_home(a):
+    from .core import migrate
+    from .core.config import default_home, store_home
+    if a.action == "set":
+        if not a.path:
+            raise SystemExit("omni home set <dossier>")
+        rep = migrate.relocate(Path(a.path))
+        print(f"Dossier Omni : {a.path} ({rep.summary()})")
+    elif a.action == "reset":
+        rep = migrate.relocate(default_home())
+        store_home(None)
+        print(f"Dossier Omni : {default_home()} ({rep.summary()})")
+    else:
+        print(f"Dossier Omni  : {CONFIG.home}")
+        print(f"  workspace   : {CONFIG.workspace}")
+        print(f"  exports     : {CONFIG.exports}")
+
+
+def cmd_migrate(a):
+    from .core import migrate
+    old = Path(a.old)
+    if not (old / "workspace").is_dir():
+        raise SystemExit(f"{old} ne contient pas de dossier workspace")
+    rep = migrate.apply(old, CONFIG.home, dry_run=a.dry_run)
+    verb = "à déplacer" if a.dry_run else "déplacé"
+    for m in rep.moved:
+        print(f"{verb}: {m.src} -> {m.dst}")
+    for m in rep.skipped + rep.errors:
+        print(f"laissé: {m.src} ({m.note})")
+    for line in rep.relinked:
+        print(f"lien GMod: {line}")
+    print(rep.summary())
 
 
 def cmd_gma(a):
@@ -270,11 +305,16 @@ def main(argv=None):
     po.set_defaults(fn=cmd_pm_outfit)
     d = sub.add_parser("deploy"); d.add_argument("--remove", action="store_true"); d.set_defaults(fn=cmd_deploy)
     g = sub.add_parser("gma"); g.set_defaults(fn=cmd_gma)
+    hm = sub.add_parser("home", help="show the Omni folder; `set <dir>` / `reset` move it")
+    hm.add_argument("action", nargs="?", choices=["show", "set", "reset"], default="show"); hm.add_argument("path", nargs="?")
+    hm.set_defaults(fn=cmd_home)
+    mg = sub.add_parser("migrate", help="bring the data of an earlier layout (a folder with workspace/, tools/) into the Omni folder")
+    mg.add_argument("old"); mg.add_argument("--dry-run", action="store_true"); mg.set_defaults(fn=cmd_migrate)
     nv = sub.add_parser("native", help="status of the Rust core; --build compiles and installs it")
     nv.add_argument("--build", action="store_true")
     nv.set_defaults(fn=cmd_native)
     so = sub.add_parser("sounds", help="export every sound of the game to a named folder tree")
-    so.add_argument("--out", help="output folder (default: workspace/audio/<source>)")
+    so.add_argument("--out", help="output folder (default: <exports>/<source>/sounds)")
     so.add_argument("--format", default="auto", choices=["auto", "ogg", "flac", "wav", "mp3"],
                     help="auto = game Vorbis rewrapped as .ogg without re-encoding, other codecs as lossless .flac")
     so.add_argument("--match", default="", help="only sounds whose output path contains this text")
@@ -289,12 +329,22 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if not getattr(a, "fn", None):                    # no command: the desktop window
         a = ap.parse_args(["app"])
+    problems: list[str] = []
+    if a.fn in (cmd_app, cmd_ui):                     # data moves before any file of the workspace is opened
+        from .core import migrate
+        for step in (migrate.finish_pending, migrate.migrate_installed):
+            try:
+                step()
+            except (OSError, RuntimeError) as e:
+                problems.append(f"{step.__name__}: {e}")
     if a.fn is not cmd_pick_folder:                   # every command uses the configured paths (assets, GMod...)
         from .core import settings
         settings.apply()
     if a.fn in (cmd_app, cmd_ui):                     # the packaged app has no console: errors go to logs/omni.log
         from .core import log
         log.setup(console=a.fn is cmd_ui)
+        for p in problems:
+            log.logging.getLogger("omni").warning("data move skipped: %s", p)
     a.fn(a)
 
 

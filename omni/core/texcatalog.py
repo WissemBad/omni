@@ -18,7 +18,8 @@ VERSION = 3
 class TextureCatalog:
     def __init__(self, source, path: Path | None = None):
         self.source = source
-        self.path = path or CONFIG.workspace / f"textures_{source.id}.sqlite"
+        self.path = path or CONFIG.game_dir(source.id) / "textures.sqlite"
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(self.path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.lock = threading.Lock()

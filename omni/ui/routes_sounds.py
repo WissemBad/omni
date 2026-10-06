@@ -19,7 +19,7 @@ class SoundExport(BaseModel):
     format: str | None = None
     match: str = ""
     languages: str | None = None
-    folder: str = ""               # sub-folder of workspace/audio/<source> (default: the format name)
+    folder: str = ""               # sub-folder of <exports>/<source>/sounds (default: the format name)
     force: bool = False            # rewrite files already exported (new names / tags)
     clean: bool = False            # then remove the files an earlier naming left
     workers: int | None = None
@@ -69,8 +69,8 @@ def register(app: FastAPI, *, jobs, need) -> None:
     SETS = ("ogg", "mp3", "flac", "wav")
 
     def root_of(sid: str, fmt: str = "") -> Path:
-        """``workspace/audio/<source>/<format>``: one folder per exported format (auto lives at the root)."""
-        base = CONFIG.workspace / "audio" / sid
+        """``<exports>/<source>/sounds/<format>``: one folder per exported format (auto lives at the root)."""
+        base = CONFIG.sounds_dir(sid)
         if fmt in SETS:
             return base / fmt
         for f in SETS:                                   # default: the first set that has been exported
@@ -96,7 +96,7 @@ def register(app: FastAPI, *, jobs, need) -> None:
                 "summary": json.loads(summary.read_text()) if summary.exists() else None,
                 "running": running[0]["id"] if running else None,
                 "tagged": bool(idx.rows) and "title" in idx.rows[0], "set": root.name if root.name in SETS else "",
-                "sets": [f for f in SETS if (CONFIG.workspace / "audio" / sid / f / "index.csv").exists()]}
+                "sets": [f for f in SETS if (CONFIG.sounds_dir(sid) / f / "index.csv").exists()]}
 
     def start_sounds(sid: str, body: dict) -> dict:
         req = SoundExport(**body)

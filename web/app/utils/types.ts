@@ -379,6 +379,8 @@ export interface SystemTool {
 export interface SystemInfo {
   version: string
   workspace: string
+  exports: string
+  home: string
   cpus: number
   setup?: { ready: boolean; can_convert: boolean }
   rust: {
@@ -425,7 +427,7 @@ export interface Overview {
 
 export interface Settings {
   general: { open_browser: boolean; port: number }
-  paths: { gmod: string }
+  paths: { gmod: string; exports: string; assets: string }
   textures: { quality: string; encoder: number; lossless_normals: boolean }
   props: { physics: boolean; collision: string; workers: number; blend: boolean; gltf?: boolean }
   characters: { max_tris: number; preview_size: number }

@@ -20,9 +20,10 @@ _COLUMNS = "key TEXT PRIMARY KEY, name TEXT, rel TEXT, size INTEGER, cat TEXT, s
 class Catalog:
     def __init__(self, source, path: Path | None = None):
         self.source = source
-        self.path = path or CONFIG.workspace / f"catalog_{source.id}.sqlite"
+        self.path = path or CONFIG.game_dir(source.id) / "catalog.sqlite"
         self.lock = threading.RLock()
         self._building = threading.Lock()
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(self.path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         with self.lock:

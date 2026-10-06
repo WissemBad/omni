@@ -237,7 +237,7 @@ export function useUpdate() {
   return { info, check, install }
 }
 
-/** Server-side settings (workspace/settings.json): what the conversions, exports and previews really use. */
+/** Server-side settings (workspace/config/settings.json): what the conversions, exports and previews really use. */
 export function useSettings() {
   const values = useState<Settings | null>('settings', () => null)
   const defaults = useState<Settings | null>('settings-defaults', () => null)

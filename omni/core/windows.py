@@ -65,6 +65,25 @@ def find_steam_game(*names: str) -> Path | None:
     return None
 
 
+def documents_dir() -> Path:
+    """The user's Documents folder as Windows knows it (it may be redirected, e.g. to OneDrive)."""
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+            guid = (ctypes.c_ubyte * 16).from_buffer_copy(bytes.fromhex("D0 9A D3 FD 8F 23 AF 46 AD B4 6C 85 48 03 69 C7".replace(" ", "")))
+            out = ctypes.c_wchar_p()
+            fn = ctypes.windll.shell32.SHGetKnownFolderPath
+            fn.argtypes = [ctypes.c_void_p, wintypes.DWORD, wintypes.HANDLE, ctypes.POINTER(ctypes.c_wchar_p)]
+            if fn(ctypes.byref(guid), 0, None, ctypes.byref(out)) == 0 and out.value:
+                path = Path(out.value)
+                ctypes.windll.ole32.CoTaskMemFree(out)
+                return path
+        except (OSError, AttributeError, ValueError):
+            pass
+    return Path.home() / "Documents"
+
+
 def reveal(path: Path) -> None:
     """Show a file (selected) or a folder in Explorer."""
     if path.is_file():

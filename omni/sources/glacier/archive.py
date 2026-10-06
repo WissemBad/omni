@@ -12,6 +12,7 @@ import os
 import struct
 from pathlib import Path
 
+from ...native import N
 from .meta import Meta, parse_meta
 
 log = logging.getLogger("omni.archive")
@@ -106,6 +107,22 @@ class Archive:
 
     def find(self, kind: str, h: int) -> Path | None:
         return self.index(kind).get(h)
+
+    def labels(self, kind: str, hashes: list[int]) -> list[str]:
+        """Original Wwise name of each .wem (``""`` when it has none), read by the Rust core in parallel."""
+        idx = self.index(kind)
+        return N.wem_labels([(dict.get(idx, h) or "", 0, -1) for h in hashes])
+
+    def read_many(self, kind: str, hashes: list[int]) -> list[bytes | None]:
+        """Whole resources, read in parallel (``None`` for one that cannot be read)."""
+        idx = self.index(kind)
+        return N.read_files([dict.get(idx, h) or "" for h in hashes])
+
+    def flagged_refs(self, kind: str, hashes: list[int]) -> dict[int, list[tuple[int, int]]]:
+        """{hash: [(referenced hash, flag)]} from the ``.meta`` files, read in parallel (absent ones are left out)."""
+        idx = self.index(kind)
+        rows = N.meta_refs_flags([dict.get(idx, h) or "" for h in hashes])
+        return {h: r for h, r in zip(hashes, rows) if r is not None}
 
     def meta(self, path: Path) -> Meta | None:
         mp = Path(str(path) + ".meta")

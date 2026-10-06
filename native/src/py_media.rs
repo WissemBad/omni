@@ -57,29 +57,6 @@ fn scan_media(py: Python<'_>, items: Vec<(String, u64, i64)>, threads: usize) ->
         .collect()
 }
 
-/// export_media([(file, offset, size, out_base, [(tag, value)])], fmt="auto", threads=0)
-///   -> [{path, skipped, codec, channels, rate, samples, label, bytes, error}]
-#[pyfunction]
-#[pyo3(signature = (jobs, fmt="auto", threads=0))]
-fn export_media(py: Python<'_>, jobs: Vec<(String, u64, i64, String, Vec<(String, String)>)>, fmt: &str, threads: usize) -> PyResult<Vec<PyObject>> {
-    let jobs: Vec<audio::Job> = jobs.into_iter().map(|(file, offset, size, out_base, tags)| audio::Job { file, offset, size, out_base, tags }).collect();
-    let p = pool(threads)?;
-    let fmt = fmt.to_string();
-    let res = py.allow_threads(|| p.install(|| audio::export(&jobs, &fmt)));
-    res.iter()
-        .map(|r| {
-            let d = match &r.info {
-                Some(i) => info_dict(py, i)?,
-                None => PyDict::new_bound(py),
-            };
-            d.set_item("path", &r.path)?;
-            d.set_item("skipped", r.skipped)?;
-            d.set_item("bytes", r.bytes)?;
-            d.set_item("error", &r.error)?;
-            Ok(d.into_py(py))
-        })
-        .collect()
-}
 
 type Links = (Vec<(u64, u32)>, Vec<(u64, Vec<u32>)>, Vec<(u32, Vec<(u32, Vec<u32>)>)>, Vec<u32>, usize);
 
@@ -156,27 +133,7 @@ fn png_rgba<'py>(py: Python<'py>, rgba: PyReadonlyArray3<'py, u8>, channel: &str
     Ok(PyBytes::new_bound(py, &out))
 }
 
-/// vtf_png(vtf bytes, channel="rgb", max_dim=1024) -> PNG bytes
-#[pyfunction]
-#[pyo3(signature = (data, channel="rgb", max_dim=1024))]
-fn vtf_png<'py>(py: Python<'py>, data: &[u8], channel: &str, max_dim: usize) -> PyResult<Bound<'py, PyBytes>> {
-    let out = py
-        .allow_threads(|| {
-            let (w, h, px) = vtf::decode_vtf(data, max_dim)?;
-            vtf::png(&px, w, h, channel, 0)
-        })
-        .map_err(err)?;
-    Ok(PyBytes::new_bound(py, &out))
-}
 
-/// texture_rgba(text, texd=None, max_dim=0, normal=False) -> uint8 (h, w, 4): the largest game mip that fits
-/// (BC5/BC4/RG8 normals get their Z rebuilt when `normal`).
-#[pyfunction]
-#[pyo3(signature = (text, texd=None, max_dim=0, normal=false))]
-fn texture_rgba<'py>(py: Python<'py>, text: &[u8], texd: Option<&[u8]>, max_dim: usize, normal: bool) -> PyResult<Bound<'py, PyArray3<u8>>> {
-    let (w, h, px) = py.allow_threads(|| texture::top_rgba(text, texd, max_dim, normal)).map_err(err)?;
-    Ok(numpy::ndarray::Array3::from_shape_vec((h, w, 4), px).map_err(err)?.into_pyarray_bound(py))
-}
 
 /// texture_png(text, texd=None, channel="rgb", max_dim=1024, normal=False) -> (PNG bytes, (w, h) shown)
 #[pyfunction]
@@ -191,32 +148,21 @@ fn texture_png<'py>(py: Python<'py>, text: &[u8], texd: Option<&[u8]>, channel: 
     Ok((PyBytes::new_bound(py, &png), wh))
 }
 
-/// texture_header(text) -> {width, height, format, mips, first_text_mip} (header only)
-#[pyfunction]
-fn texture_header<'py>(py: Python<'py>, text: &[u8]) -> PyResult<Bound<'py, PyDict>> {
-    let hd = texture::parse_header(text).map_err(err)?;
-    let h = PyDict::new_bound(py);
-    h.set_item("width", hd.width)?;
-    h.set_item("height", hd.height)?;
-    h.set_item("format", texture::format_name(hd.fmt).unwrap_or("?"))?;
-    h.set_item("mips", hd.mips)?;
-    h.set_item("first_text_mip", hd.first_text_mip)?;
-    Ok(h)
-}
 
-/// texture_headers([path]) -> [(width, height, format, mips) | None], read in parallel (texture catalog)
+/// texture_headers([path]) -> [(width, height, format, mips, file size) | None], read in parallel (texture catalog)
 #[pyfunction]
-fn texture_headers(py: Python<'_>, paths: Vec<String>) -> Vec<Option<(u32, u32, String, u32)>> {
+fn texture_headers(py: Python<'_>, paths: Vec<String>) -> Vec<Option<(u32, u32, String, u32, u64)>> {
     use rayon::prelude::*;
     py.allow_threads(|| {
         paths
             .par_iter()
             .map(|p| {
                 let mut f = std::fs::File::open(p).ok()?;
+                let size = f.metadata().ok()?.len();
                 let mut b = vec![0u8; 0x98];
                 std::io::Read::read_exact(&mut f, &mut b).ok()?;
                 let hd = texture::parse_header(&b).ok()?;
-                Some((hd.width, hd.height, texture::format_name(hd.fmt).unwrap_or("?").to_string(), hd.mips))
+                Some((hd.width, hd.height, texture::format_name(hd.fmt).map(str::to_string).unwrap_or_else(|| format!("0x{:02X}", hd.fmt)), hd.mips, size))
             })
             .collect()
     })
@@ -280,16 +226,12 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         wrap_pyfunction!(wem_info, m)?,
         wrap_pyfunction!(convert_wem, m)?,
         wrap_pyfunction!(scan_media, m)?,
-        wrap_pyfunction!(export_media, m)?,
         wrap_pyfunction!(bank_links, m)?,
         wrap_pyfunction!(encode_vtf, m)?,
         wrap_pyfunction!(write_vtf, m)?,
         wrap_pyfunction!(decode_vtf, m)?,
         wrap_pyfunction!(png_rgba, m)?,
-        wrap_pyfunction!(vtf_png, m)?,
-        wrap_pyfunction!(texture_rgba, m)?,
         wrap_pyfunction!(texture_png, m)?,
-        wrap_pyfunction!(texture_header, m)?,
         wrap_pyfunction!(texture_headers, m)?,
         wrap_pyfunction!(rpkg_info, m)?,
         wrap_pyfunction!(rpkg_extract, m)?,

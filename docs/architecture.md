@@ -21,23 +21,34 @@ packaging/               PyInstaller spec and Inno Setup script
 
 ## Data
 
-Everything the user owns or derives lives outside the repository, in the data folder (`%LOCALAPPDATA%\omni`, `OMNI_HOME`):
+The application holds no user data. Everything the user owns or derives lives in the **Omni folder** (`Config.home`, `Documents\Omni` by default; `OMNI_HOME`, `omni home set <dir>` or `%LOCALAPPDATA%\omni\home.json` choose another). `core/config.py` is the only place that knows the layout; code asks `CONFIG.addon_dir(id)`, `CONFIG.sounds_dir(id)`, `CONFIG.game_dir(id)`... and never builds a path by hand.
 
-| Path | Content |
-| --- | --- |
-| `Assets/Sorted/chunkN/<TYPE>/<HASH>.<TYPE>(.meta)` | resources extracted from the game packages (setup step 1) |
-| `workspace/names/` | the readable resource paths and their lookup database (step 2) |
-| `workspace/addons/omni_<source>/` | the generated Garry's Mod addon, linked into `garrysmod/addons` |
-| `workspace/audio/<source>/<format>/` | exported sounds and `index.csv` |
-| `workspace/cache`, `catalog_*.sqlite`, `textures_*.sqlite` | derived data, rebuilt on demand |
-| `workspace/settings.json` | settings |
-| `tools/studiomdl-ce/` | the model compiler (step 4) |
+```
+Omni/
+  exports/<game>/          what the user takes away (setting paths.exports moves it alone)
+    garrysmod-addon/       the addon, linked into garrysmod/addons by a junction
+    gltf/ sounds/ textures/ blend/    models for Blender, audio (+ index.csv), raw textures
+    omni_<game>.gma
+  workspace/               what omni manages
+    config/                settings.json, games.json, viewer_roots.json, window.json
+    state/                 jobs.sqlite (queue and history), run.json, migrated.json
+    games/<game>/          catalog.sqlite, textures.sqlite, per-game caches (Unreal: Oodle, mappings, state.json)
+    tools/                 StudioMDL-CE, Oodle (downloaded, SHA-256 pinned)
+    names/ cache/ sandbox/ preview/ logs/ reports/ updates/ webview/
+    assets/Sorted/         resources of a game extracted from its packages (optional, 007 only; setting paths.assets)
+```
+
+`core/migrate.py` moves data of the earlier layouts (one data root with a mixed `workspace/` and `tools/`) into this one: nothing is deleted or overwritten, same-volume moves are renames, the junction in `garrysmod/addons` follows the addon. It runs at start for `%LOCALAPPDATA%\omni`, and by hand with `omni migrate <old root>`.
 
 ## Native core
 
 One crate built by maturin as a CPython module (features `python` and `parallel`); it is required (no Python or WebAssembly fallback). `omni/native.py` exposes it as `N`, a Rust panic surfacing as `NativeError`. `cargo test --no-default-features` tests the modules without Python; `native/src/fuzz.rs` feeds every parser random and mutated files.
 
-Modules: textures (TEXT/TEXD, BCn, mips, DXT, VTF, PNG), audio (Wwise Vorbis to Ogg, Platinum ADPCM, FLAC, WAV), Wwise banks (HIRC hierarchy), RPKG reader and extractor, PhysX collision (ALOC), skinning, SMD, entities.
+Modules: textures (TEXT/TEXD, BCn, mips, DXT, VTF, PNG, JPEG), audio (Wwise Vorbis to Ogg, Platinum ADPCM, FLAC, WAV), Wwise banks (HIRC hierarchy), RPKG reader and extractor, PhysX collision (ALOC), skinning, SMD, entities, the glTF writer (`gltf.rs`) and the bulk readers (`scan.rs`).
+
+`gltf.rs` builds every `.glb` (`N.Glb`: textures, materials, meshes, skeleton and skin, atomic save). Python decides what a model contains; Rust checks the arrays (lengths, index range, finite values), converts the frame, normalises tangents and weights, encodes the images without the GIL and writes the file. Props are exported by worker processes (`pipeline.run_gltf_batch`), so a native crash costs one model.
+
+`scan.rs` reads tens of thousands of small files in parallel (PRIM headers, `.meta` references, Wwise labels, whole files): opening a file costs milliseconds under a real-time antivirus, which made the catalog and the sound list take minutes when read one by one.
 
 ## Extraction
 

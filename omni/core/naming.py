@@ -102,6 +102,7 @@ class Names:
                 self.db_path.unlink(missing_ok=True)        # a build that was killed halfway: start again
                 fresh = True
             if fresh:
+                self.db_path.parent.mkdir(parents=True, exist_ok=True)
                 # one scratch file per process: several workers may find the database missing at the same time
                 tmp = self.db_path.with_name(f"{self.db_path.name}.{os.getpid()}.building")
                 tmp.unlink(missing_ok=True)
@@ -167,6 +168,21 @@ class Names:
                 self._memo = {}
             self._memo[h] = r
         return r
+
+    def prefetch(self, hashes) -> None:
+        """Load the names of many hashes with a few queries instead of one per hash (tens of thousands of lookups
+        one by one cost seconds each thousand)."""
+        todo = [h for h in hashes if h not in self._memo]
+        with self._lock:
+            db = self._connect()
+            for i in range(0, len(todo), 20000):
+                chunk = todo[i:i + 20000]
+                rows = db.execute(f"SELECT h,t,n FROM names WHERE h IN ({','.join('?' * len(chunk))})", [_s64(h) for h in chunk]).fetchall()
+                found = {(r[0] & 0xFFFFFFFFFFFFFFFF): (r[1], r[2]) for r in rows}
+                if len(self._memo) + len(chunk) >= 500_000:
+                    self._memo = {}
+                for h in chunk:
+                    self._memo[h] = found.get(h)
 
     def name(self, h: int) -> str:
         r = self.get(h)

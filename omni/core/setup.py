@@ -105,14 +105,14 @@ def status() -> dict:
     if not a["ok"] and pk:
         # nothing extracted, but the installed game's packages are read in place: no extraction needed
         a = {"path": str(pk[0]), "ok": True, "chunks": [], "direct": True}
-    free = shutil.disk_usage(CONFIG.root if CONFIG.root.exists() else CONFIG.root.parent).free if (CONFIG.root.exists() or CONFIG.root.parent.exists()) else 0
+    free = shutil.disk_usage(CONFIG.home if CONFIG.home.exists() else CONFIG.home.parent).free if (CONFIG.home.exists() or CONFIG.home.parent.exists()) else 0
     return {
         "game": {"path": str(game) if game else "", "ok": bool(pk), "packages": [p.name for p in pk[1]] if pk else [],
                  "detected": game is not None and CONFIG.game is None},
         "assets": a, "names": n, "gmod": g, "studiomdl": s,
         "ready": a["ok"] and n["ok"],
         "can_convert": a["ok"] and n["ok"] and g["ok"] and s["ok"],
-        "data_dir": str(CONFIG.root), "free_bytes": free,
+        "data_dir": str(CONFIG.home), "free_bytes": free,
     }
 
 
@@ -153,7 +153,7 @@ def fetch_names(say=print, count=None, cancel=None, release=None) -> dict:
     old database is deleted (the running source keeps it open, which Windows does not allow to delete)."""
     import py7zr
     CONFIG.hash_list.parent.mkdir(parents=True, exist_ok=True)
-    archive = CONFIG.workspace / "names" / "latest-hashes.7z"
+    archive = CONFIG.names_dir / "latest-hashes.7z"
     say("téléchargement de la liste des noms (Bond-Hashes)…")
     download(NAMES_URL, archive, lambda d, t: count and count(d, t), cancel)
     say("décompression…")

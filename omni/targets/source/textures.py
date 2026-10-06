@@ -5,7 +5,6 @@ Two paths:
   * encode: the full-size image (after the material's colour work) goes to the Rust core, which builds the whole
     mip chain itself (colour maps averaged in linear light, normal maps renormalised, alpha-tested maps keeping
     their coverage), encodes DXT1/DXT5 or BGRA8888 and writes the VTF with its reflectivity.
-A pure-Python path (PIL mips + quicktex) remains for machines without the Rust core.
 """
 from __future__ import annotations
 

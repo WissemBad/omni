@@ -110,6 +110,15 @@ def _work_pm(cid: str, kw: dict):
             "seconds": r.seconds}
 
 
+def _work_gltf(key: str, kw: dict):
+    """One model as a .glb in a worker process (a native crash on a corrupt file only costs this model)."""
+    from .targets.gltf.export import export_one
+    try:
+        return {"key": key, "status": "OK", "model": export_one(_src, key, kw["tex_size"]), "errors": [], "seconds": {}}
+    except Exception as e:  # noqa: BLE001 - one model never stops the export
+        return {"key": key, "status": "FAILED", "model": "", "errors": [f"{type(e).__name__}: {e}"], "seconds": {}}
+
+
 def _pool(workers: int, source_name: str) -> ProcessPoolExecutor:
     threads = max(1, (os.cpu_count() or 4) // max(1, workers))
     # numpy's OpenBLAS starts one thread per core in every worker: N workers x all cores oversubscribed the CPU
@@ -177,7 +186,13 @@ def run_pm_batch(source_name: str, ids: list[str], workers: int, kw: dict, on_re
     """Build the playermodel families ``ids`` in worker processes (see run_pool). ``kw``: max_tris, tex_quality,
     lossless_normals."""
     return run_pool(source_name, ids, _work_pm, kw, workers, on_result=on_result, cancel=cancel,
-                    report=CONFIG.workspace / "reports" / time.strftime("pm_%Y%m%d_%H%M%S.jsonl"))
+                    report=CONFIG.reports / time.strftime("pm_%Y%m%d_%H%M%S.jsonl"))
+
+
+def run_gltf_batch(source_name: str, keys: list[str], workers: int, tex_size: int, on_result=None, cancel=None) -> dict:
+    """Write the .glb of the models ``keys`` in worker processes (see run_pool)."""
+    return run_pool(source_name, keys, _work_gltf, {"tex_size": tex_size}, workers, on_result=on_result, cancel=cancel,
+                    report=CONFIG.reports / time.strftime("gltf_%Y%m%d_%H%M%S.jsonl"))
 
 
 def run_pool(source_name: str, keys: list[str], work, kw: dict, workers: int = 4, report: Path | None = None,
@@ -187,7 +202,7 @@ def run_pool(source_name: str, keys: list[str], work, kw: dict, workers: int = 4
     is FAILED."""
     t0 = time.perf_counter()
     workers = clamp_workers(min(workers, len(keys)) if keys else workers)
-    report = report or CONFIG.workspace / "reports" / time.strftime("run_%Y%m%d_%H%M%S.jsonl")
+    report = report or CONFIG.reports / time.strftime("run_%Y%m%d_%H%M%S.jsonl")
     report.parent.mkdir(parents=True, exist_ok=True)
     stats = {"OK": 0, "PARTIAL": 0, "FAILED": 0, "SKIPPED": 0}
     from .cli import _source

@@ -26,7 +26,7 @@ from pathlib import Path
 
 from ...core.ir import SoundRef
 from ...native import N
-from .wwise import FORMATS, VORBIS, wem_info
+from .wwise import FORMATS, VORBIS, WemInfo, wem_info
 
 MAX_REL = 180          # Windows MAX_PATH: keep room for the output root
 _EXTS = (".ogg", ".flac", ".wav", ".mp3")
@@ -174,6 +174,32 @@ def _hash(ref: SoundRef):
     return hashlib.sha1(data).hexdigest(), info
 
 
+def _hash_all(keys: dict, workers: int, count) -> dict:
+    """{(file, offset, size): (sha1, WemInfo | None)}. Media in plain files are read and hashed by the Rust core in
+    parallel (one call per batch); media inside game packages (``rpkg:``) go through their store, in threads."""
+    digest: dict = {}
+    plain = [k for k in keys if not str(k[0]).startswith("rpkg:")]
+    done = 0
+    for i in range(0, len(plain), 8192):
+        batch = plain[i:i + 8192]
+        for k, (sha, info, error) in zip(batch, N.scan_media(batch, 32)):
+            if error:                                                  # unreadable here: the Python path reports why
+                digest[k] = _hash(keys[k])
+            else:
+                digest[k] = (sha, WemInfo(info["codec"], info["channels"], info["rate"], info["samples"], info["label"],
+                                          info["data_size"]) if info else None)
+        done += len(batch)
+        count(done, len(keys))
+    packed = [k for k in keys if k not in digest]
+    with ThreadPoolExecutor(min(32, workers * 2)) as ex:
+        for k, d in zip(packed, ex.map(_hash, [keys[k] for k in packed], chunksize=64)):
+            digest[k] = d
+            done += 1
+            if done % 256 == 0 or done == len(keys):
+                count(done, len(keys))
+    return digest
+
+
 def export_sounds(refs: list[SoundRef], out: Path, fmt: str = "auto", workers: int | None = None,
                   match: str = "", limit: int = 0, progress=print, tags: bool = True, skip_stubs: bool = True,
                   languages: str = "all", cancel=None, on_count=None, force: bool = False,
@@ -201,12 +227,7 @@ def export_sounds(refs: list[SoundRef], out: Path, fmt: str = "auto", workers: i
         keys.setdefault((r.file, r.offset, r.size), r)
     progress(f"hashing {len(keys)} media...")
     count = step("Empreintes des médias", len(keys))
-    digest = {}
-    with ThreadPoolExecutor(min(32, workers * 2)) as ex:
-        for i, (k, d) in enumerate(zip(keys, ex.map(_hash, keys.values(), chunksize=64)), 1):
-            digest[k] = d
-            if i % 256 == 0 or i == len(keys):
-                count(i, len(keys))
+    digest = _hash_all(keys, workers, count)
     stubs = {k for k, (_sha, info) in digest.items() if skip_stubs and is_stub(info)}
     # media that are not audio (Wwise plugin data such as convolution impulse responses: "PLUG" blocks)
     other = {k for k, (_sha, info) in digest.items() if info is None}

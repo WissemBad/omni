@@ -377,19 +377,11 @@ impl UnrealGame {
     }
 }
 
-/// binka_decode(data) -> (channels, rate, int16 PCM bytes)
-#[pyfunction]
-fn binka_decode<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(u16, u32, Bound<'py, PyBytes>)> {
-    let d = py.allow_threads(|| crate::binka::decode(data)).map_err(err)?;
-    let bytes: Vec<u8> = d.pcm.iter().flat_map(|s| s.to_le_bytes()).collect();
-    Ok((d.channels, d.sample_rate, PyBytes::new_bound(py, &bytes)))
-}
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(oodle_load, m)?)?;
     m.add_function(wrap_pyfunction!(unreal_mappings, m)?)?;
     m.add_function(wrap_pyfunction!(unreal_usmap, m)?)?;
-    m.add_function(wrap_pyfunction!(binka_decode, m)?)?;
     m.add_class::<UnrealGame>()?;
     Ok(())
 }

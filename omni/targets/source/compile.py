@@ -30,7 +30,7 @@ def ensure_sandbox(sandbox: Path) -> None:
     t = "\t"
     # the staging addons are mounted too (after the sandbox itself), only so that a model viewer (hlmv -game
     # <sandbox>) finds the converted materials; studiomdl writes into the sandbox and never reads them.
-    addons = [f'{t}{t}{t}game{t}{t}{t}"{d.as_posix()}"' for d in sorted((CONFIG.workspace / "addons").glob("omni_*")) if d.is_dir()]
+    addons = [f'{t}{t}{t}game{t}{t}{t}"{d.as_posix()}"' for d in CONFIG.addon_dirs()]
     lines = [
         '"GameInfo"', "{", f'{t}game{t}"omni sandbox"', f'{t}title{t}"omni"', f"{t}type{t}singleplayer_only",
         f"{t}FileSystem", f"{t}{{", f"{t}{t}SteamAppId{t}4000", f"{t}{t}SearchPaths", f"{t}{t}{{",

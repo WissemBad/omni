@@ -1,4 +1,4 @@
-"""User settings, stored in ``workspace/settings.json`` and read by the backend itself (conversions, sound export,
+"""User settings, stored in ``<workspace>/config/settings.json`` and read by the backend itself (conversions, sound export,
 previews, paths), so the web UI, the batch workers and the CLI all apply the same choices.
 
 Values are merged over ``DEFAULTS`` section by section: a new setting gets its default on old files, an unknown or
@@ -22,9 +22,10 @@ DEFAULTS: dict = {
     },
     "paths": {                       # "" = automatic
         "game": "",                  # folder of the game that holds Runtime/*.rpkg (extraction)
-        "assets": "",                # extracted resources (Sorted: chunk0/PRIM/...), default <data>/Assets/Sorted
+        "assets": "",                # extracted resources (Sorted: chunk0/PRIM/...), default <workspace>/assets/Sorted
+        "exports": "",               # where the exports go (default <Omni folder>/exports)
         "gmod": "",                  # Garry's Mod folder (Steam default)
-        "studiomdl": "",             # cestudiomdl.exe (default: downloaded into <data>/tools)
+        "studiomdl": "",             # cestudiomdl.exe (default: downloaded into <workspace>/tools)
         "ffmpeg": "",                # ffmpeg.exe, MP3 and Vorbis re-encoding only
         "blender": "",               # blender.exe, optional .blend output
     },
@@ -60,9 +61,12 @@ DEFAULTS: dict = {
     },
 }
 
-_FILE = CONFIG.workspace / "settings.json"
 _lock = threading.Lock()
-_cache: tuple[float, dict] | None = None
+_cache: tuple[tuple[str, float], dict] | None = None
+
+
+def _file():
+    return CONFIG.settings_file
 
 
 def _merge(base: dict, over: dict) -> dict:
@@ -90,14 +94,15 @@ def load() -> dict:
     global _cache
     with _lock:
         try:
-            mtime = _FILE.stat().st_mtime if _FILE.exists() else 0.0
-            if _cache and _cache[0] == mtime:
+            f = _file()
+            stamp = (str(f), f.stat().st_mtime if f.exists() else 0.0)
+            if _cache and _cache[0] == stamp:
                 return copy.deepcopy(_cache[1])
-            raw = json.loads(_FILE.read_text(encoding="utf-8")) if _FILE.exists() else {}
+            raw = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
         except (OSError, ValueError):
-            mtime, raw = 0.0, {}
+            stamp, raw = ("", 0.0), {}
         merged = _merge(DEFAULTS, raw)
-        _cache = (mtime, merged)
+        _cache = (stamp, merged)
         return copy.deepcopy(merged)
 
 
@@ -123,16 +128,17 @@ def save(patch: dict) -> dict:
             if section in cur and isinstance(values, dict):
                 cur[section].update(_bounded(dict(values)))
         merged = _merge(DEFAULTS, cur)
-        _FILE.parent.mkdir(parents=True, exist_ok=True)
-        tmp = _FILE.with_name(f"{_FILE.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+        f = _file()
+        f.parent.mkdir(parents=True, exist_ok=True)
+        tmp = f.with_name(f"{f.name}.{os.getpid()}.{threading.get_ident()}.tmp")
         tmp.write_text(json.dumps(merged, indent=1, ensure_ascii=False), encoding="utf-8")
-        os.replace(tmp, _FILE)
+        os.replace(tmp, f)
     apply(merged)
     return merged
 
 
 def reset() -> dict:
-    _FILE.unlink(missing_ok=True)
+    _file().unlink(missing_ok=True)
     s = load()
     apply(s)
     return s

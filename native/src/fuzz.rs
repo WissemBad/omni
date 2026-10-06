@@ -301,4 +301,26 @@ fn unreal_parsers_survive_garbage() {
         let _ = crate::binka::decode(b);
         let _ = audio::wem_info(b);
     });
+
+    let mut meta = vec![0u8; 40];
+    meta[24] = 1;
+    meta.extend(3u16.to_le_bytes());
+    meta.extend([0u8, 0, 1, 2, 3]);
+    meta.extend(vec![0x11u8; 24]);
+    fuzz("scan::meta_refs_flags", &meta, |b| {
+        let _ = crate::scan::meta_refs_flags(b);
+    });
+    let wem = riff(0xFFFF);
+    fuzz("scan::label_in", &wem, |b| {
+        for size in [-1i64, 0, 60, i64::MAX] {
+            let _ = crate::scan::label_in(&mut std::io::Cursor::new(b), 0, size);
+        }
+        let _ = crate::scan::label_in(&mut std::io::Cursor::new(b), u64::MAX - 3, -1);
+    });
+    fuzz("gltf::encode_image", &[255; 64], |b| {
+        for (w, h) in [(0, 0), (4, 4), (1, 16), (7, 3), (65536, 1)] {
+            let _ = crate::gltf::encode_image(b, w, h, 8, 0);
+            let _ = crate::gltf::encode_image(b, w, h, 0, 80);
+        }
+    });
 }

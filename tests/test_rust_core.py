@@ -83,3 +83,55 @@ def test_settings_merge_ignores_bad_values():
     assert m["textures"]["quality"] == "high"
     assert m["textures"]["encoder"] == DEFAULTS["textures"]["encoder"]      # wrong type: default kept
     assert "nope" not in m["textures"] and "nosection" not in m
+
+
+# ---- glTF writer and bulk readers -------------------------------------------------------------------------------
+def _quad():
+    return {"positions": np.array([[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]], np.float32),
+            "normals": np.tile(np.float32([0, -1, 0]), (4, 1)), "uvs": np.zeros((4, 2), np.float32),
+            "indices": np.array([0, 1, 2, 0, 2, 3], np.uint32)}
+
+
+def test_glb_writer_makes_a_valid_file_and_rejects_bad_meshes(tmp_path):
+    g = N.Glb("viewer")
+    tex = g.texture(np.full((8, 8, 4), 200, np.uint8), 4)
+    jpg = g.texture(np.full((8, 8, 4), 200, np.uint8), 0, 85)
+    mat = g.material("m", base=jpg, normal=tex, alpha="MASK")
+    g.node("quad", g.mesh("quad", [{**_quad(), "material": mat}]))
+    out = tmp_path / "deep" / "quad.glb"
+    g.save(out)
+    data = out.read_bytes()
+    assert data[:4] == b"glTF" and int.from_bytes(data[8:12], "little") == len(data)
+    assert not list(out.parent.glob("*.part"))                    # written atomically
+    assert data == g.to_bytes()
+    bad = _quad()
+    bad["indices"] = np.array([0, 1, 9], np.uint32)
+    with pytest.raises(ValueError, match="index"):
+        N.Glb().mesh("bad", [bad])
+    nan = _quad()
+    nan["positions"][0, 0] = np.nan
+    with pytest.raises(ValueError, match="non-finite"):
+        N.Glb().mesh("nan", [nan])
+    with pytest.raises(ValueError):
+        N.Glb("sideways")
+    with pytest.raises(ValueError):
+        N.Glb().texture(np.zeros((4, 4, 3), np.uint8))
+    with pytest.raises(ValueError):
+        N.Glb().material("m", base=3)                             # no such texture
+
+
+def test_bulk_readers_follow_the_files(tmp_path):
+    prim = tmp_path / "a.PRIM"
+    prim.write_bytes((16).to_bytes(8, "little") + bytes(8) + bytes([0, 0, 0, 0, 0b1100, 0, 0, 0]))
+    wem = tmp_path / "b.wem"
+    wem.write_bytes(_wem(1, 1, 8000, bytes(16), 2, 16, label="vox_unit_test_001"))
+    marker = tmp_path / "c.wem"
+    marker.write_bytes(_wem(1, 1, 8000, bytes(16), 2, 16, label="Marker 2"))
+    assert N.prim_headers([str(prim), str(tmp_path / "none")]) == [(prim.stat().st_size, 0b1100), None]
+    assert N.wem_labels([(str(wem), 0, -1), (str(marker), 0, -1), (str(tmp_path / "none"), 0, -1)]) == ["vox_unit_test_001", "", ""]
+    assert N.read_files([str(wem), str(tmp_path / "none")]) == [wem.read_bytes(), None]
+    meta = bytearray(40)
+    meta[24] = 1
+    meta += (2).to_bytes(2, "little") + bytes([0, 0, 1, 7]) + (0xAA).to_bytes(8, "little") + (0xBB).to_bytes(8, "little")
+    (tmp_path / "a.PRIM.meta").write_bytes(bytes(meta))
+    assert N.meta_refs_flags([str(prim), str(tmp_path / "none")]) == [[(0xAA, 1), (0xBB, 7)], None]

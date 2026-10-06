@@ -60,7 +60,7 @@ class PreviewConfig(Config):
     """Character previews convert their materials into a scratch addon, never into the real one."""
 
     def addon_dir(self, source_id: str) -> Path:
-        return self.workspace / "preview" / source_id / "pm_addon"
+        return self.previews / source_id / "pm_addon"
 
 
 def _tex_info(src, key: str, texcat) -> dict:
@@ -143,7 +143,7 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
     def prop_glb(sid: str, key: str):
         src = need(sid, "props")
         key = key.upper()
-        out = CONFIG.workspace / "preview" / f"{key}.glb"
+        out = CONFIG.previews / f"{key}.glb"
         if not out.exists():
             from ..preview.glb import export_glb
             try:
@@ -348,7 +348,7 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
         return src, c
 
     def _preview_dir(sid: str) -> Path:
-        return CONFIG.workspace / "preview" / sid / "characters"
+        return CONFIG.previews / sid / "characters"
 
     building: dict[str, dict] = {}
     build_lock = threading.Semaphore(2)              # at most two previews prepared at once

@@ -16,7 +16,7 @@ STEPS = [("packages", "Paquets du jeu (lecture directe)"), ("names", "Noms des r
 
 def _dir(info: dict):
     from ...core.config import CONFIG
-    d = CONFIG.workspace / "games" / info["id"]
+    d = CONFIG.game_dir(info["id"])
     d.mkdir(parents=True, exist_ok=True)
     return d
 

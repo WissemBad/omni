@@ -127,6 +127,26 @@ class StoreArchive:
     def find(self, kind: str, h: int) -> ResPath | None:
         return self.index(kind).get(h)
 
+    def labels(self, kind: str, hashes: list[int]) -> list[str]:
+        return self.store.labels(list(hashes))
+
+    def read_many(self, kind: str, hashes: list[int]) -> list[bytes | None]:
+        out = []
+        for h in hashes:
+            try:
+                out.append(self.read(h, kind))
+            except (RuntimeError, ValueError, OSError):
+                out.append(None)
+        return out
+
+    def flagged_refs(self, kind: str, hashes: list[int]) -> dict[int, list[tuple[int, int]]]:
+        out = {}
+        for h in hashes:
+            m = self.store.meta(h)
+            if m is not None:
+                out[h] = list(m[2])
+        return out
+
     def read(self, h: int, kind: str = "") -> bytes:
         data = self.store.read(h)
         if self.text_hook is not None and kind in ("TEXT",):

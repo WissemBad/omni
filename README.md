@@ -1,78 +1,71 @@
 # omni
 
-Converts the assets of a game into Garry's Mod content: props, player models, textures and sounds. Windows desktop application, no game data included.
+Converts the assets of a game into Garry's Mod content and glTF models, locally, on Windows.
 
-[![CI](https://github.com/Wissem-Industries/omni/actions/workflows/ci.yml/badge.svg)](https://github.com/Wissem-Industries/omni/actions/workflows/ci.yml)
+[![CI](https://ci.wissem.pro/api/badges/17/status.svg)](https://ci.wissem.pro/repos/17)
 [![Release](https://img.shields.io/github/v/release/Wissem-Industries/omni?sort=semver)](https://github.com/Wissem-Industries/omni/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![Rust](https://img.shields.io/badge/Rust-native%20core-000000?logo=rust&logoColor=white)
+![Nuxt](https://img.shields.io/badge/Nuxt-4-00DC82?logo=nuxt&logoColor=white)
 
-omni reads the resources of **your own copy** of a game, on your PC, and writes a ready-to-use Garry's Mod addon (MDL, VMT, VTF) plus audio files (Ogg, FLAC, MP3). Nothing is uploaded and no game file is shipped with omni.
+omni reads the files of **your own copy** of a game and writes a ready-to-use Garry's Mod addon (props, player models, textures), glTF models for Blender and the game's sounds. Nothing is uploaded and no game file is shipped.
 
-Supported games: *007 First Light* and *HITMAN World of Assassination* (Glacier engine), and **Unreal Engine 5 games** in general (validated on *Bronzebeard's Tavern*). You only give omni the game's folder: it identifies the engine and fetches or derives everything else (decompressor, the game's structures, names, catalogs). Besides the Garry's Mod addon, every model can be exported to glTF (`.glb`) for Blender.
+Supported: *007 First Light* and *HITMAN World of Assassination* (Glacier engine) and Unreal Engine 5 games. You only give omni the game's folder: it identifies the engine and fetches what else it needs.
 
-Built with Python, Rust (native core), Nuxt 4, Nuxt UI 4 and [Wissem UI](https://github.com/Wissem-Industries/ui). The window is the system's Edge WebView2, not a bundled browser.
+The parsers, texture codecs, audio converters, glTF writer and bulk readers are a Rust core; Python orchestrates the jobs and serves the interface (Nuxt 4, Nuxt UI 4 and [Wissem UI](https://github.com/Wissem-Industries/ui)) in the system's WebView2 window.
 
 ## Install
 
-Download `Omni-Setup-x.y.z.exe` (or the portable `Omni-x.y.z-windows.zip`) from the [releases](https://github.com/Wissem-Industries/omni/releases) and start Omni.
+Download the installer or the portable archive from the [releases](https://github.com/Wissem-Industries/omni/releases), start Omni, then add a game on the **Jeux** page. A short guide in French is in [docs/mode-emploi.md](docs/mode-emploi.md).
 
-Add a game on the **Jeux** page (pick its folder, or take one detected in Steam): omni prepares it in the background and opens it when ready. For Unreal Engine 5 and Hitman, nothing is extracted: the game's files are read in place.
+Requirements: Windows 10 or 11 with the WebView2 runtime, a copy of the game, Garry's Mod for the model conversion.
 
-*007 First Light* keeps its first-run setup:
+## Where files go
 
-1. **Game**: omni finds the game in your Steam libraries (or you pick its folder) and reads its packages in place (an already extracted `Assets/Sorted` folder is used too).
-2. **Names**: the readable resource paths come from [Bond-Hashes](https://github.com/glacier-modding/Bond-Hashes) (MIT), downloaded once.
-3. **Garry's Mod**: detected in Steam; its player animations and addons folder are used.
-4. **Compiler**: [StudioMDL-CE](https://github.com/DeadZoneLuna/StudioMDL-CE) is downloaded and verified against pinned SHA-256 sums.
+Omni keeps everything it writes in one folder, `Documents\Omni` by default (`omni home set <folder>` or the settings move it):
 
-Requirements: Windows 10 or 11 with the WebView2 runtime (included in Windows 11), a copy of the game, Garry's Mod for model conversion, and some free space for caches and exports (an optional 007 extraction needs about 40 GB). [ffmpeg](https://ffmpeg.org) is only needed for MP3 and for re-encoding non-Vorbis sounds to Ogg.
-
-Closing the window while a job runs keeps omni working in the notification area (toast when it ends); omni checks GitHub for a newer release at launch (a read token is needed while the repository is private).
-
-Data lives in `%LOCALAPPDATA%\omni` (override with `OMNI_HOME`). Uninstalling leaves it in place.
-
-## Use
-
-| Page | What it does |
+| Folder | Content |
 | --- | --- |
-| Home | State of the source, global exports with progress, GMod addon (link, `.gma`), tools and Rust core health |
-| Models | Props and characters with one layout: list, 3D view, inspector with materials and the game's raw textures; conversion and playermodel builds |
-| Textures | Every texture of the game, filters, channel preview, who uses it (materials, models) |
-| Viewer | The compiled result as Garry's Mod loads it, with debug layers; also opens a decompiled addon |
-| Sounds | Parallel export (Ogg, FLAC, WAV, MP3) with tags, browser and player |
-| Jobs (panel) | The queue: one heavy job at a time, live progress, failures grouped by cause, retry / resume, history |
-| Games | The library: add a game by its folder, omni identifies the engine; games stay separate |
-| Settings | Quality, collision, parallelism, sounds, paths, updates, storage, maintenance |
+| `exports\<game>\` | What you take away: `garrysmod-addon`, `gltf`, `sounds`, `textures`, `blend`, the `.gma` archive |
+| `workspace\` | What omni manages (settings, catalogs, caches, tools, logs). Safe to ignore |
 
-Everything is available from the command line too: `Omni.exe --help`.
+The application itself holds no data. An older data folder is moved into the new layout on first start (`omni migrate <old folder>` for a custom location).
 
 ## Development
 
-Requirements: [uv](https://docs.astral.sh/uv/), [Bun](https://bun.sh), a Rust toolchain (rustup) and a token with `read:packages` in your user `.npmrc` for `@wissem-industries/ui`.
+Requirements: [uv](https://docs.astral.sh/uv/), [Bun](https://bun.sh), Rust (rustup) and a token with `read:packages` in your user `.npmrc` for `@wissem-industries/ui`.
 
-```bash
+```powershell
 uv sync
-uv run python -m omni native --build      # Rust core (omni_native)
-cd web && bun install && bun run build    # interface
-uv run python -m omni app                 # window (or `omni ui` for the browser)
-uv run pytest                             # tests (the ones needing game data skip themselves)
-cargo test --manifest-path native/Cargo.toml --no-default-features
+uv run python -m omni native --build     # Rust core
+cd web; bun install; bun run build; cd ..
+.\Omni.cmd                               # or: uv run python -m omni app
 ```
 
-Package locally: `uv run --no-sync pyinstaller packaging/omni.spec --noconfirm`, then compile `packaging/omni.iss` with Inno Setup for the installer.
+Checks:
 
-Layout and conventions are in [docs/architecture.md](docs/architecture.md) and [AGENTS.md](AGENTS.md); contributions in [CONTRIBUTING.md](CONTRIBUTING.md).
+```powershell
+uv run ruff check
+uv run pytest
+cargo test --manifest-path native/Cargo.toml --no-default-features
+cd web; bun run check
+```
+
+Tests that need game data skip themselves. Point `OMNI_HOME` at a throwaway folder when a command writes exports.
+
+Package locally with `uv run --no-sync pyinstaller packaging/omni.spec --noconfirm`, then compile `packaging/omni.iss` with Inno Setup.
 
 ## Release
 
-Versions follow Semantic Versioning and are listed in [CHANGELOG.md](CHANGELOG.md).
+Versions follow Semantic Versioning and changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
-```bash
-uv run python scripts/release.py 0.4.0    # bumps every version file and the changelog
+```powershell
+uv run python scripts/release.py <x.y.z>
 ```
 
-Merge the release pull request, then push the `v0.4.0` tag: the pipeline builds the installer and publishes the release.
+Merge the `chore(release): vX.Y.Z` pull request, then push the `vX.Y.Z` tag: the pipeline builds the installer and publishes the release.
 
-## Legal
+## License
 
-omni contains no asset of any game. It reads files you own, locally. *007 First Light*, *Garry's Mod* and the other names are trademarks of their owners; omni is not affiliated with them.
+[MIT](LICENSE). omni contains no asset of any game; *007 First Light*, *Garry's Mod* and the other names belong to their owners and omni is not affiliated with them.

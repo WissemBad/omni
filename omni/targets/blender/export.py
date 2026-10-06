@@ -44,7 +44,7 @@ def export_blends(source, keys: list[str], out_dir: Path | None = None, tex_size
     if blender is None:
         raise RuntimeError("Blender est introuvable : renseigne son chemin dans Réglages (ou installe-le), "
                            "ou décoche « Produire aussi un .blend ».")
-    out_dir = out_dir or CONFIG.workspace / "blend" / source.id
+    out_dir = out_dir or CONFIG.blend_dir(source.id)
     jobs = []
     for i, k in enumerate(keys):
         if progress:

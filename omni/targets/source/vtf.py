@@ -1,11 +1,9 @@
-"""Minimal VTF 7.2 writer (DXT1/DXT3/DXT5/BGRA8888, single frame, full mip chain, no thumbnail)."""
+"""VTF 7.2 constants and the writer of raw blocks (the Rust core builds the file: DXT1/DXT3/DXT5/BGRA8888, one frame, full mip chain, no thumbnail)."""
 from __future__ import annotations
 
-import os
-import threading
-import time
-import struct
 from pathlib import Path
+
+from ...native import N
 
 DXT1, DXT3, DXT5, BGRA8888, DXT1A = 13, 14, 15, 12, 20
 
@@ -18,33 +16,6 @@ FLAG_ONEBITALPHA = 0x1000
 
 
 def write_vtf(path: Path, fmt: int, mips: list, flags: int = 0, reflectivity=(0.5, 0.5, 0.5)) -> None:
-    """``mips``: [(w, h, bytes)] largest first. Written smallest first as the format requires."""
-    w, h = mips[0][0], mips[0][1]
-    hdr = struct.pack(
-        "<4sIIIHHIHH4s3f4sfIBIBBH",
-        b"VTF\0", 7, 2, 80, w, h, flags, 1, 0, b"\0" * 4,
-        reflectivity[0], reflectivity[1], reflectivity[2], b"\0" * 4,
-        1.0, fmt, len(mips), 0xFFFFFFFF, 0, 0, 1,
-    )
-    hdr += b"\0" * (80 - len(hdr))
-    body = b"".join(m[2] for m in reversed(mips))
-    path.parent.mkdir(parents=True, exist_ok=True)
-    # atomic: parallel workers may produce the same shared texture at the same time
-    tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
-    tmp.write_bytes(hdr + body)
-    replace_retry(tmp, path)
-
-
-def replace_retry(tmp: Path, path: Path, tries: int = 40) -> None:
-    """``os.replace`` that waits while another process holds ``path`` open (Windows refuses the rename then: a
-    worker reading the header of the same shared texture, GMod). If it never frees up but the file exists, the other
-    writer's identical result is kept."""
-    for i in range(tries):
-        try:
-            os.replace(tmp, path)
-            return
-        except PermissionError:
-            time.sleep(0.01 + i * 0.002)
-    tmp.unlink(missing_ok=True)
-    if not path.is_file():
-        raise PermissionError(f"cannot replace {path} (file locked)")
+    """``mips``: [(w, h, bytes)] largest first. Written by the Rust core, atomically (parallel workers may produce
+    the same shared texture at once, and a worker reading its header keeps the rename waiting)."""
+    N.write_vtf(str(path), fmt, mips, flags, tuple(reflectivity))

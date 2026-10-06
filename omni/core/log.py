@@ -42,7 +42,7 @@ class _Stream:
 
 
 def log_dir() -> Path:
-    d = CONFIG.workspace / "logs"
+    d = CONFIG.logs
     d.mkdir(parents=True, exist_ok=True)
     return d
 

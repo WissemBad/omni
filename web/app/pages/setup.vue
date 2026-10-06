@@ -201,7 +201,7 @@ const finish = () => navigateTo('/')
             <UCard :ui="{ body: 'p-3 sm:p-3' }"><p class="text-xs text-muted">Fichiers</p><p class="font-semibold tabular-nums text-highlighted">{{ estimate.files.toLocaleString('fr-FR') }}</p></UCard>
             <UCard :ui="{ body: 'p-3 sm:p-3' }"><p class="text-xs text-muted">Espace libre</p><p class="font-semibold tabular-nums" :class="spaceShort ? 'text-error' : 'text-highlighted'">{{ fmtBytes(status.free_bytes) }}</p></UCard>
           </div>
-          <UAlert v-if="spaceShort" color="warning" variant="subtle" icon="i-ri-hard-drive-2-line" title="Espace disque insuffisant" description="Libère de la place ou choisis un autre emplacement pour les données (variable OMNI_HOME)." />
+          <UAlert v-if="spaceShort" color="warning" variant="subtle" icon="i-ri-hard-drive-2-line" title="Espace disque insuffisant" description="Libère de la place ou déplace le dossier Omni (Réglages, Dossiers) vers un disque plus grand." />
 
           <template v-if="running && running.label.startsWith('Extraction')">
             <UProgress :model-value="running.total ? running.done : null" :max="running.total || undefined" />

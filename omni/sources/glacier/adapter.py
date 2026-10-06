@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from ...core.config import CONFIG, Config
 from ...core.ir import Material, Model, SubMesh, TextureData, TextureRef
 from ...core.naming import Names, parse_ioi, slug
+from ...native import N
 from ..base import Source
 from . import roles
 from .archive import Archive
@@ -208,18 +209,16 @@ class GlacierSource(Source):
         return self._shared
 
     def catalog_rows(self):
-        """Light-weight rows for the catalog: header flags are read without parsing the whole PRIM."""
-        import struct
-        for h, p in self.archive.index("PRIM").items():
-            info = self.info(h)
-            flags = 0
-            try:
-                with p.open("rb") as f:
-                    (ho,) = struct.unpack("<Q", f.read(8))
-                    f.seek(ho)
-                    flags = struct.unpack("<BBHI", f.read(8))[3]
-            except (OSError, struct.error):
-                pass
+        """Light-weight rows for the catalog: sizes and header flags of every PRIM, read in parallel by the Rust
+        core (opening 30,000 files one by one took minutes under a real-time antivirus)."""
+        items = list(self.archive.index("PRIM").items())
+        heads = N.prim_headers([str(p) for _, p in items])
+        self.names.prefetch([h for h, _ in items])
+        for (h, _p), head in zip(items, heads):
+            name = self.names.name(h)
+            dirs, cont, leaf = parse_ioi(name) if name else ([], "", "")
+            size, flags = head if head else (0, 0)
+            info = AssetInfo("%016X" % h, name, dirs, cont, leaf, size, "PRIM")
             yield {
                 "key": info.key, "name": info.name, "rel": self.rel_path(info), "size": info.size,
                 "cat": "/".join(info.dirs[:2]) if info.dirs else "unnamed",
@@ -350,37 +349,38 @@ class GlacierSource(Source):
         those materials. Names: the hash list when it has the texture (with its usage hint ``(ascolormap)``),
         else the first material using it and the slot."""
         import struct
-        from concurrent.futures import ThreadPoolExecutor
         from ...native import N
+        from .store import ResPath
         from .texture import FORMATS
         a = self.archive
         text, mati, prim = a.index("TEXT"), a.index("MATI"), a.index("PRIM")
 
-        def head(item):
-            h, p = item
-            try:
-                with p.open("rb") as f:
-                    d = f.read(0x98)
-                w, hh, fmt, mips = struct.unpack_from("<HHHH", d, 0x0C)
-                return h, w, hh, FORMATS.get(fmt, ("0x%02X" % fmt, 0))[0], mips, p.stat().st_size
-            except (OSError, struct.error):
-                return h, 0, 0, "?", 0, 0
-        with ThreadPoolExecutor(16) as ex:
-            heads = list(ex.map(head, text.items()))
+        text_items = list(text.items())
+        heads = []
+        if text_items and not isinstance(text_items[0][1], ResPath):       # plain files: one parallel Rust pass
+            for (h, p), r in zip(text_items, N.texture_headers([str(p) for _h, p in text_items])):
+                heads.append((h, *r[:4], r[4]) if r else (h, 0, 0, "?", 0, 0))
+        else:
+            for h, p in text_items:
+                try:
+                    d = p.open("rb").read(0x98)
+                    w, hh, fmt, mips = struct.unpack_from("<HHHH", d, 0x0C)
+                    heads.append((h, w, hh, FORMATS.get(fmt, ("0x%02X" % fmt, 0))[0], mips, p.stat().st_size))
+                except (OSError, struct.error):
+                    heads.append((h, 0, 0, "?", 0, 0))
         progress(f"{len(heads)} texture headers read")
 
-        def mat(item):
-            h, p = item
+        mati_hashes = list(mati)
+        parsed = []
+        for h, data in zip(mati_hashes, a.read_many("MATI", mati_hashes)):
             try:
-                return h, self._parse_mati(p.read_bytes())
+                parsed.append((h, self._parse_mati(data) if data is not None else None))
             except Exception:  # noqa: BLE001
-                return h, None
-        with ThreadPoolExecutor(8) as ex:
-            parsed = list(ex.map(mat, mati.items()))
+                parsed.append((h, None))
+        mati_refs = a.flagged_refs("MATI", mati_hashes)
         materials, tex_mat = [], []
         for h, m in parsed:
-            meta = a.meta(mati[h])
-            refs = meta.refs if meta else []
+            refs = mati_refs.get(h, [])
             cls = next((self.names.name(rh) for rh, _f in refs if ".materialclass" in self.names.name(rh)), "")
             fam = roles.class_family(cls)
             materials.append({"key": "%016X" % h, "name": self.material_name(h), "cls": fam,
@@ -406,9 +406,9 @@ class GlacierSource(Source):
         progress(f"{len(mat_model)} mesh/material links")
 
         texd_size: dict[int, int] = {}
-        for h, p in text.items():
-            meta = a.meta(p)
-            for rh, _f in (meta.refs if meta else []):
+        text_refs = a.flagged_refs("TEXT", [h for h, _p in text_items])
+        for h, p in text_items:
+            for rh, _f in text_refs.get(h, []):
                 dp = a.find("TEXD", rh)
                 if dp is not None:
                     try:

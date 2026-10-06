@@ -152,7 +152,7 @@ def test_catalog_rebuild_swaps_atomically_and_versions(tmp_path):
 
 
 def test_settings_numbers_are_bounded(tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "_FILE", tmp_path / "settings.json")
+    monkeypatch.setattr(settings, "_file", lambda: tmp_path / "settings.json")
     monkeypatch.setattr(settings, "_cache", None, raising=False)
     s = settings.save({"props": {"workers": 500}, "sounds": {"workers": 0}})
     assert s["props"]["workers"] == 61 and s["sounds"]["workers"] == 1

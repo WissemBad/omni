@@ -79,7 +79,7 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
     app.state.shell = Shell()
     def all_ids() -> list[str]:
         return list(sources) if sources else registry.source_ids()
-    jobs = Jobs(CONFIG.workspace / "jobs.sqlite" if jobs_db == "auto" else jobs_db)
+    jobs = Jobs(CONFIG.jobs_db if jobs_db == "auto" else jobs_db)
     jobs.on_finish.append(app.state.shell.notify_job)
 
     def look_for_update():
@@ -158,7 +158,7 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         conv_cache.clear()
         sizes.clear()
         if purge:                                   # everything derived from the old data
-            for pat in ("catalog_*.sqlite", "textures_*.sqlite"):
+            for pat in ("games/*/catalog.sqlite", "games/*/textures.sqlite"):
                 for f in CONFIG.workspace.glob(pat):
                     f.unlink(missing_ok=True)
             shutil.rmtree(CONFIG.cache / "archive", ignore_errors=True)
@@ -322,7 +322,7 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         ]
         from ..core import setup
         ready = setup.status()
-        return {"version": VERSION, "workspace": str(CONFIG.workspace), "cpus": os.cpu_count(),
+        return {"version": VERSION, "workspace": str(CONFIG.workspace), "exports": str(CONFIG.exports), "home": str(CONFIG.home), "cpus": os.cpu_count(),
                 "setup": {"ready": ready["ready"], "can_convert": ready["can_convert"]},
                 "rust": {k: v for k, v in core.items() if k != "native_functions"},
                 "tools": tools}
@@ -349,7 +349,7 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         if tc is not None:
             out["textures"] = {"ready": tc.ready(), "building": tc.building, **(tc.stats() if tc.ready() else {})}
         if "sounds" in caps:
-            base = CONFIG.workspace / "audio" / sid
+            base = CONFIG.sounds_dir(sid)
             sets = {}
             for f in ("ogg", "mp3", "flac", "wav", ""):
                 sj = (base / f / "summary.json") if f else (base / "summary.json")
@@ -367,10 +367,10 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         if not cached or time.time() - cached[0] > 120:
             def measure():
                 sizes[sid] = (time.time(), {"addon": _dir_size(CONFIG.addon_dir(sid), 30),
-                                            "previews": _dir_size(CONFIG.workspace / "preview" / sid, 10)})
+                                            "previews": _dir_size(CONFIG.previews / sid, 10)})
             sizes.setdefault(sid, (time.time(), {"addon": None, "previews": None}))
             threading.Thread(target=measure, daemon=True).start()
-        gma_file = CONFIG.workspace / "gma" / f"omni_{sid}.gma"
+        gma_file = CONFIG.gma_path(sid)
         out["addon"] = {"path": str(CONFIG.addon_dir(sid)), "deployed": lp.exists(), "link": str(lp),
                         "models": len(conv), **sizes[sid][1],
                         "gma": str(gma_file) if gma_file.exists() else "",
@@ -391,19 +391,74 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
     def settings_reset():
         return {"values": settings.reset(), "defaults": settings.DEFAULTS}
 
+    # ------------------------------------------------------------------------------------------ folders
+    from ..core import config as cfgmod
+    from ..core.windows import pick_folder, reveal
+
+    def home_view() -> dict:
+        pending = cfgmod.pending_home()
+        return {"home": str(CONFIG.home), "workspace": str(CONFIG.workspace), "exports": str(CONFIG.exports),
+                "default": str(cfgmod.default_home()), "pending": str(pending) if pending else "",
+                "synced": any(w in str(CONFIG.home).lower() for w in ("onedrive", "dropbox", "google drive"))}
+
+    @app.get("/api/home")
+    def home_info():
+        """Where omni keeps its files: the Omni folder, its ``workspace`` and the ``exports`` folder."""
+        return home_view()
+
+    @app.post("/api/home/pick")
+    def home_pick():
+        try:
+            return {"path": pick_folder("Dossier Omni")}
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(501, f"Sélecteur de dossier indisponible : {e}")
+
+    @app.post("/api/home/move")
+    def home_move(body: dict):
+        """Ask for the Omni folder to move: carried out at the next start, before any file is open."""
+        raw = str(body.get("path") or "").strip()
+        target = Path(raw) if raw else cfgmod.default_home()
+        if not target.is_absolute():
+            raise HTTPException(400, "Chemin absolu attendu")
+        cur = CONFIG.home.resolve()
+        if target.resolve() == cur:
+            cfgmod.cancel_home_request()
+        elif cur in target.resolve().parents:
+            raise HTTPException(400, "Le nouveau dossier ne peut pas être dans l’ancien")
+        elif target.exists() and any(target.iterdir()):
+            raise HTTPException(400, "Le dossier choisi n’est pas vide")
+        else:
+            cfgmod.request_home(target)
+        return home_view()
+
+    @app.post("/api/home/cancel")
+    def home_cancel():
+        cfgmod.cancel_home_request()
+        return home_view()
+
+    @app.post("/api/reveal")
+    def reveal_folder(body: dict):
+        """Show the Omni folder, the exports or the workspace in Explorer."""
+        which = {"home": CONFIG.home, "exports": CONFIG.exports, "workspace": CONFIG.workspace}.get(str(body.get("target")))
+        if which is None:
+            raise HTTPException(400, "Dossier inconnu")
+        which.mkdir(parents=True, exist_ok=True)
+        reveal(which)
+        return {"ok": True}
+
     # --------------------------------------------------------------------------------------- maintenance
     @app.get("/api/{sid}/storage")
     def storage(sid: str):
         source_of(sid)
-        return {"addon": _dir_size(CONFIG.addon_dir(sid)), "previews": _dir_size(CONFIG.workspace / "preview"),
-                "audio": _dir_size(CONFIG.workspace / "audio" / sid, 6), "cache": _dir_size(CONFIG.cache),
-                "path": str(CONFIG.workspace)}
+        return {"addon": _dir_size(CONFIG.addon_dir(sid)), "previews": _dir_size(CONFIG.previews),
+                "audio": _dir_size(CONFIG.sounds_dir(sid), 6), "cache": _dir_size(CONFIG.cache),
+                "path": str(CONFIG.workspace), "exports": str(CONFIG.exports)}
 
     @app.post("/api/{sid}/previews/clear")
     def clear_previews(sid: str):
         source_of(sid)
-        shutil.rmtree(CONFIG.workspace / "preview" / sid, ignore_errors=True)
-        for f in (CONFIG.workspace / "preview").glob("*.glb"):
+        shutil.rmtree(CONFIG.previews / sid, ignore_errors=True)
+        for f in CONFIG.previews.glob("*.glb"):
             f.unlink(missing_ok=True)
         sizes.pop(sid, None)
         return {"ok": True}

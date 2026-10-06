@@ -11,7 +11,7 @@ fn err(e: impl std::fmt::Display) -> PyErr {
 }
 
 /// A numpy array as a slice: borrowed when it is C-contiguous (no copy under the GIL), copied otherwise.
-fn slice_of<'a, T: numpy::Element + Copy, D: numpy::ndarray::Dimension>(a: &'a numpy::PyReadonlyArray<'_, T, D>) -> std::borrow::Cow<'a, [T]> {
+pub(crate) fn slice_of<'a, T: numpy::Element + Copy, D: numpy::ndarray::Dimension>(a: &'a numpy::PyReadonlyArray<'_, T, D>) -> std::borrow::Cow<'a, [T]> {
     match a.as_slice() {
         Ok(s) => std::borrow::Cow::Borrowed(s),
         Err(_) => std::borrow::Cow::Owned(a.as_array().iter().copied().collect()),
@@ -49,26 +49,6 @@ fn to_rgba<'py>(py: Python<'py>, format: &str, w: u32, h: u32, data: &[u8]) -> P
     Ok(arr.into_pyarray_bound(py))
 }
 
-/// encode_dxt(rgba (h, w, 4) uint8, alpha, quality=1, normal=False) -> DXT1/DXT5 block bytes.
-#[pyfunction]
-#[pyo3(signature = (rgba, alpha, quality=1, normal=false))]
-fn encode_dxt<'py>(py: Python<'py>, rgba: PyReadonlyArray3<'py, u8>, alpha: bool, quality: u8, normal: bool) -> PyResult<Bound<'py, PyBytes>> {
-    let shape = rgba.shape();
-    if shape[2] != 4 {
-        return Err(err("expected (h, w, 4) RGBA"));
-    }
-    let (h, w) = (shape[0], shape[1]);
-    let owned;
-    let data: &[u8] = match rgba.as_slice() {
-        Ok(s) => s,
-        Err(_) => {
-            owned = rgba.as_array().iter().copied().collect::<Vec<u8>>();
-            &owned
-        }
-    };
-    let out = py.allow_threads(|| texture::encode_dxt(data, w, h, alpha, quality, normal));
-    Ok(PyBytes::new_bound(py, &out))
-}
 
 /// parse_collision(data) -> {"kind", "layer", "shapes": [...], "warnings": [...]}; shapes are dicts with
 /// "type" in convex/mesh/box/sphere/capsule (metres, prim frame).
@@ -311,7 +291,6 @@ pub fn omni_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
     m.add_function(wrap_pyfunction!(decode_texture, m)?)?;
     m.add_function(wrap_pyfunction!(to_rgba, m)?)?;
-    m.add_function(wrap_pyfunction!(encode_dxt, m)?)?;
     m.add_function(wrap_pyfunction!(parse_collision, m)?)?;
     m.add_function(wrap_pyfunction!(fold_weights, m)?)?;
     m.add_function(wrap_pyfunction!(parse_temp, m)?)?;
@@ -325,6 +304,7 @@ pub fn omni_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(mesh_volume, m)?)?;
     crate::py_media::register(m)?;
     crate::py_eta::register(m)?;
+    crate::py_gltf::register(m)?;
     crate::py_unreal::register(m)?;
     crate::py_glacier::register(m)?;
     Ok(())

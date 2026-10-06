@@ -4,7 +4,7 @@ import type { Settings } from '~/utils/types'
 definePageMeta({ key: (r) => `${r.params.source}/settings` })
 
 /**
- * Settings, stored by the server (workspace/settings.json): the conversions, exports and previews started from
+ * Settings, stored by the server (workspace/config/settings.json): the conversions, exports and previews started from
  * any page use them. Every change is saved at once. Player and layout preferences stay in this browser.
  */
 const sid = useSourceId()
@@ -22,6 +22,7 @@ onMounted(async () => {
   }
   loadSystem()
   loadStorage()
+  loadHome()
 })
 
 let ready = false
@@ -121,6 +122,50 @@ const TRIS = [
 ]
 const SIZES = [256, 512, 1024, 2048].map((v) => ({ label: `${v} px`, value: v }))
 
+// ---- Omni folder (exports + workspace)
+interface HomeInfo {
+  home: string
+  workspace: string
+  exports: string
+  default: string
+  pending: string
+  synced: boolean
+}
+const home = ref<HomeInfo | null>(null)
+const loadHome = async () => (home.value = await api<HomeInfo>('/home').catch(() => null))
+const openFolder = (target: 'home' | 'exports' | 'workspace') =>
+  api('/reveal', { method: 'POST', body: { target } }).catch((e) =>
+    toast.add({ title: 'Ouverture impossible', description: apiError(e), color: 'error' }),
+  )
+async function chooseHome() {
+  const r = await api<{ path: string }>('/home/pick', { method: 'POST' }).catch((e) => {
+    toast.add({ title: 'Sélecteur indisponible', description: apiError(e), color: 'error' })
+    return null
+  })
+  if (!r?.path) return
+  if (
+    !(await confirm({
+      title: 'Déplacer le dossier Omni ?',
+      description: `Les exports et l’espace de travail seront déplacés vers ${r.path} au prochain démarrage d’omni. Ferme Garry’s Mod avant de relancer.`,
+      confirmLabel: 'Programmer le déplacement',
+    }))
+  )
+    return
+  try {
+    home.value = await api<HomeInfo>('/home/move', { method: 'POST', body: { path: r.path } })
+    toast.add({
+      title: 'Déplacement programmé',
+      description: 'Relance omni pour le terminer.',
+      icon: 'i-ri-folder-transfer-line',
+    })
+  } catch (e) {
+    toast.add({ title: 'Déplacement impossible', description: apiError(e), color: 'error' })
+  }
+}
+async function cancelMove() {
+  home.value = await api<HomeInfo>('/home/cancel', { method: 'POST' })
+}
+
 // ---- storage & maintenance
 const storage = ref<{
   addon: number
@@ -128,6 +173,7 @@ const storage = ref<{
   audio: number
   cache: number
   path: string
+  exports: string
 } | null>(null)
 const loadStorage = async () =>
   (storage.value = await api<typeof storage.value>(`/${sid.value}/storage`).catch(() => null))
@@ -317,8 +363,46 @@ const MAINTENANCE = computed(() => [
 
         <UCard :ui="{ body: 'space-y-4 p-4 sm:p-4' }">
           <template #header>
+            <h2 class="text-base font-semibold text-highlighted">Dossiers</h2>
+            <p class="text-sm text-muted">Tout ce qu’omni écrit tient dans un seul dossier : tes exports d’un côté, ce que l’application gère de l’autre.</p>
+          </template>
+          <div v-if="home" class="space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-default p-3">
+              <div class="min-w-0">
+                <h3 class="text-sm font-medium text-highlighted">Dossier Omni</h3>
+                <p class="truncate font-mono text-xs text-muted" :title="home.home">{{ home.home }}</p>
+              </div>
+              <div class="flex gap-2">
+                <UButton label="Ouvrir" icon="i-ri-folder-open-line" size="xs" color="neutral" variant="soft" @click="openFolder('home')" />
+                <UButton label="Déplacer…" icon="i-ri-folder-transfer-line" size="xs" color="neutral" variant="outline" @click="chooseHome" />
+              </div>
+            </div>
+            <UAlert v-if="home.pending" color="info" variant="subtle" icon="i-ri-time-line" title="Déplacement programmé" :description="`Vers ${home.pending} au prochain démarrage d’omni.`" :actions="[{ label: 'Annuler', color: 'neutral', variant: 'outline', onClick: cancelMove }]" />
+            <UAlert v-if="home.synced" color="warning" variant="subtle" icon="i-ri-cloud-line" title="Dossier synchronisé" description="Ce dossier semble synchronisé dans le cloud (OneDrive…). Les exports sont très volumineux : déplace-le vers un disque local." />
+            <div class="grid gap-3 sm:grid-cols-2">
+              <UFormField label="Exports" description="Addon Garry’s Mod, glTF, sons, textures. Vide : exports dans le dossier Omni.">
+                <div class="flex gap-2">
+                  <UInput v-model="s.paths.exports" class="w-full" :placeholder="home.exports" />
+                  <UButton icon="i-ri-folder-open-line" color="neutral" variant="soft" aria-label="Ouvrir les exports" @click="openFolder('exports')" />
+                </div>
+              </UFormField>
+              <UFormField label="Espace de travail" description="Géré par omni : réglages, catalogues, caches, outils, journaux.">
+                <div class="flex gap-2">
+                  <UInput :model-value="home.workspace" class="w-full" readonly />
+                  <UButton icon="i-ri-folder-open-line" color="neutral" variant="soft" aria-label="Ouvrir l’espace de travail" @click="openFolder('workspace')" />
+                </div>
+              </UFormField>
+              <UFormField label="Ressources extraites (007)" description="Seulement si tu as extrait le jeu toi-même. Vide : lecture directe des paquets du jeu.">
+                <UInput v-model="s.paths.assets" class="w-full" placeholder="…\Assets\Sorted" />
+              </UFormField>
+            </div>
+          </div>
+        </UCard>
+
+        <UCard :ui="{ body: 'space-y-4 p-4 sm:p-4' }">
+          <template #header>
             <h2 class="text-base font-semibold text-highlighted">Stockage et maintenance</h2>
-            <p v-if="storage" class="truncate text-sm text-muted" :title="storage.path">Espace de travail : {{ storage.path }}</p>
+            <p v-if="storage" class="truncate text-sm text-muted" :title="storage.path">Espace de travail : {{ storage.path }} · Exports : {{ storage.exports }}</p>
           </template>
           <OStatGrid v-if="sizes.length" :stats="sizes" :cols="4" />
           <div class="flex flex-wrap gap-2">

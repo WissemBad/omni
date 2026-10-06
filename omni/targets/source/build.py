@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -316,6 +317,7 @@ def build_model(source, key: str, cfg: Config = CONFIG, opts: BuildOptions | Non
             res.notes += cr.warnings[:5]
     except Exception as e:  # noqa: BLE001 - report per-asset failures instead of aborting the batch
         res.errors.append(f"{type(e).__name__}: {e}")
+        logging.getLogger("omni.build").warning("%s failed", key, exc_info=True)       # the traceback goes to the worker's log
     finally:
         res.seconds["total"] = round(time.perf_counter() - t0, 3)
     return res

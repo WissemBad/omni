@@ -48,10 +48,9 @@ def undeploy(source_id: str, cfg: Config = CONFIG) -> str:
 
 def build_gma(source_id: str, cfg: Config = CONFIG) -> Path:
     addon = cfg.addon_dir(source_id)
-    out = cfg.workspace / "gma"
-    out.mkdir(parents=True, exist_ok=True)
+    target = cfg.gma_path(source_id)
+    target.parent.mkdir(parents=True, exist_ok=True)
     gmad = cfg.gmod / "bin" / "gmad.exe"
-    target = out / f"omni_{source_id}.gma"
     r = subprocess.run([str(gmad), "create", "-folder", str(addon), "-out", str(target)], capture_output=True, text=True, creationflags=NOWINDOW)
     if r.returncode != 0:
         raise RuntimeError(r.stdout + r.stderr)

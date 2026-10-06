@@ -28,7 +28,7 @@ _games: dict[str, object] = {}
 
 
 def game_dir(game_id: str) -> Path:
-    d = CONFIG.workspace / "games" / game_id
+    d = CONFIG.game_dir(game_id)
     d.mkdir(parents=True, exist_ok=True)
     return d
 
