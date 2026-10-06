@@ -40,7 +40,7 @@ def cmd_convert(a):
     from .pipeline import make_options
     from .targets.source.build import build_model
     src = _source(a.source)
-    opts = make_options(not a.no_physics, a.collision, a.lossless_normals, _quality(a))
+    opts = make_options(not a.no_physics, a.collision, a.lossless_normals, _quality(a), lods=not a.no_lods)
     keys = list(a.hash or [])
     if a.match:
         needle = a.match.lower()
@@ -68,7 +68,7 @@ def cmd_batch(a):
         done.append(r)
         print(f"[{len(done)}/{len(keys)}] {r['status']:7} {r['key']} {r.get('model','')} {r.get('seconds',{}).get('total','')}s {'; '.join(r.get('errors',[]))[:140]}", flush=True)
     print(run_batch(src.id, keys, a.workers, not a.no_physics, on_result=show,
-                    collision=a.collision, lossless_normals=a.lossless_normals, tex_quality=_quality(a)))
+                    collision=a.collision, lossless_normals=a.lossless_normals, tex_quality=_quality(a), lods=not a.no_lods))
 
 
 def cmd_preview(a):
@@ -275,6 +275,7 @@ def main(argv=None):
                              "from the render mesh; hull: single hull; coacd: precise but slow")
         p_.add_argument("--tex-quality", choices=["max", "high", "balanced", "light"], default=None,
                         help="max: the game's own resolution, normal maps 2048 (default, see settings); high: 4096/2048; balanced: 2048/1024; light: 1024/512")
+        p_.add_argument("--no-lods", action="store_true", help="keep only the highest level of detail (no $lod models)")
         p_.add_argument("--lossless-normals", action="store_true", help="uncompressed normal maps (4x size)")
     v = sub.add_parser("preview"); v.add_argument("hash", nargs="+"); v.set_defaults(fn=cmd_preview)
     bl = sub.add_parser("blend"); bl.add_argument("hash", nargs="+"); bl.set_defaults(fn=cmd_blend)

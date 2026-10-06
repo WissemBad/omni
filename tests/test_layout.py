@@ -159,8 +159,16 @@ def test_addon_namespace_is_a_clean_free_path():
     from omni.core.config import clean_namespace
     assert clean_namespace("omni") == "omni" and clean_namespace("") == "omni"
     assert clean_namespace(" Wissem/Omni/ ") == "wissem/omni"
-    assert clean_namespace("import\wissem") == "import/wissem"
+    assert clean_namespace(r"import\wissem") == "import/wissem"
     assert clean_namespace("../../x y/é") == "x_y"
     cfg = _cfg(Path("."))
     cfg.namespace = "wissem/omni"
     assert cfg.ns("007fl") == "wissem/omni/007fl"
+
+
+def test_lod_option_reaches_the_build_options():
+    from omni.core import settings
+    from omni.pipeline import make_options
+    assert settings.DEFAULTS["props"]["lods"] is True
+    assert make_options(apply_settings=False).lods is True
+    assert make_options(apply_settings=False, lods=False).lods is False

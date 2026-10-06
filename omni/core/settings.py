@@ -37,6 +37,7 @@ DEFAULTS: dict = {
     },
     "props": {
         "physics": True,
+        "lods": True,                # the game's lower levels of detail become $lod models; off: only the highest level is kept
         "collision": "game",         # game | parts | hull | coacd
         "workers": max(1, min(16, CPUS // 2)),
         "blend": False,

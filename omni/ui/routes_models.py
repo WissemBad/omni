@@ -34,6 +34,7 @@ class ConvertRequest(BaseModel):
     keys: list[str] = []
     filter: PropFilter | None = None      # used when ``keys`` is empty
     physics: bool | None = None
+    lods: bool | None = None              # keep the game's lower levels of detail ($lod); off: highest level only
     collision: str | None = None          # game | parts | hull | coacd (see targets/source/build.py)
     tex_quality: str | None = None        # max | high | balanced | light
     lossless_normals: bool | None = None
@@ -221,6 +222,7 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
         st = settings.load()
         opts = dict(physics=req.physics if req.physics is not None else st["props"]["physics"],
                     collision=req.collision or st["props"]["collision"],
+                    lods=req.lods if req.lods is not None else st["props"]["lods"],
                     tex_quality=req.tex_quality or st["textures"]["quality"],
                     lossless_normals=req.lossless_normals if req.lossless_normals is not None else st["textures"]["lossless_normals"])
         from ..pipeline import clamp_workers
@@ -240,7 +242,7 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
                                   "errors": r.get("errors", []), "notes": r.get("notes", [])[:3],
                                   "seconds": r.get("seconds", {}).get("total", 0)})
             stats = run_batch(sid, req.keys, workers, opts["physics"], on_result=on_result, collision=opts["collision"],
-                              lossless_normals=opts["lossless_normals"], tex_quality=opts["tex_quality"],
+                              lossless_normals=opts["lossless_normals"], tex_quality=opts["tex_quality"], lods=opts["lods"],
                               cancel=jobs.cancel_event(job), on_plan=lambda sizes, w: jobs.plan(job, sizes, w))
             if blend:
                 from ..targets.blender.export import export_blends

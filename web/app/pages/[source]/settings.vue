@@ -302,6 +302,7 @@ const MAINTENANCE = computed(() => [
           <UCard :ui="{ body: 'space-y-5 p-4 sm:p-4' }">
             <template #header><h2 class="text-base font-semibold text-highlighted">Props</h2></template>
             <USwitch v-model="s.props.physics" label="Collision" description="Sans collision, le prop traverse le décor et les joueurs." />
+            <USwitch v-model="s.props.lods" label="Niveaux de détail (LOD)" description="Activé : les LOD du jeu deviennent des $lod Source (affichage allégé de loin). Désactivé : seul le niveau le plus détaillé est gardé." />
             <UFormField v-if="s.props.physics" label="Forme de collision"><USelect v-model="s.props.collision" :items="COLLISIONS" class="w-full" /></UFormField>
             <UFormField :label="`Conversions en parallèle : ${s.props.workers}`" :description="`Processus StudioMDL simultanés (${system?.cpus ?? '?'} cœurs sur ce PC).`">
               <USlider v-model="s.props.workers" :min="1" :max="Math.max(4, system?.cpus ?? 16)" :step="1" />

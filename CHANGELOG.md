@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- Option to turn the levels of detail off (Settings, `--no-lods` on the command line): only the highest level of the
+  game's model is kept, without `$lod` models.
 - The folder of the models and materials inside the addon is a free setting (`omni`, `wissem/omni`, `import/wissem`...):
   `models/<folder>/<game>/` and `materials/<folder>/<game>/`. Models converted earlier must be converted again.
 

@@ -75,12 +75,12 @@ def apply_quality(mat_opts, tex_quality: str) -> None:
 
 
 def make_options(physics: bool = True, collision: str = "game", lossless_normals: bool = False,
-                 tex_quality: str = "max", apply_settings: bool = True):
+                 tex_quality: str = "max", apply_settings: bool = True, lods: bool = True):
     from .core import settings
     from .targets.source.build import BuildOptions
     if apply_settings:                 # a batch applies them once per worker: editing them mid-batch changes nothing
         settings.apply()
-    o = BuildOptions(physics=physics, collision=collision)
+    o = BuildOptions(physics=physics, collision=collision, lods=lods)
     o.mat.lossless_normals = lossless_normals
     apply_quality(o.mat, tex_quality)
     return o
@@ -145,10 +145,10 @@ def _kill(ex: ProcessPoolExecutor) -> None:
 
 def run_batch(source_name: str, keys: list[str], workers: int = 4, physics: bool = True, report: Path | None = None,
               on_result=None, collision: str = "game", lossless_normals: bool = False,
-              tex_quality: str = "max", cancel=None, on_plan=None) -> dict:
+              tex_quality: str = "max", cancel=None, on_plan=None, lods: bool = True) -> dict:
     """Convert the props ``keys`` in worker processes (see run_pool). ``on_plan(sizes, workers)`` receives the mesh
     size of each prop (what the remaining-time estimate weighs them by) once the order is known."""
-    kw = dict(physics=physics, collision=collision, lossless_normals=lossless_normals, tex_quality=tex_quality)
+    kw = dict(physics=physics, collision=collision, lossless_normals=lossless_normals, tex_quality=tex_quality, lods=lods)
     sizes: dict = {}
     ordered = biggest_first(source_name, keys, sizes)
     if on_plan:

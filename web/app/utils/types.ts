@@ -430,7 +430,14 @@ export interface Settings {
   general: { open_browser: boolean; port: number; namespace: string }
   paths: { gmod: string; exports: string; assets: string }
   textures: { quality: string; encoder: number; lossless_normals: boolean }
-  props: { physics: boolean; collision: string; workers: number; blend: boolean; gltf?: boolean }
+  props: {
+    physics: boolean
+    lods: boolean
+    collision: string
+    workers: number
+    blend: boolean
+    gltf?: boolean
+  }
   characters: { max_tris: number; preview_size: number }
   sounds: { format: string; workers: number; tags: boolean; skip_stubs: boolean; languages: string }
   viewer: { texture_size: number }
