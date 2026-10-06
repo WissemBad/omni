@@ -50,6 +50,8 @@ pub struct Bone {
 pub struct Mesh {
     pub lods: Vec<Lod>,
     pub bones: Vec<Bone>,
+    /// material slots (package indices) when they are serialised natively (skeletal meshes)
+    pub materials: Vec<i32>,
     pub props: Props,
 }
 
@@ -277,5 +279,5 @@ pub fn read_static_mesh(game: &Game, ctx: &Ctx, pkg: &Package, index: usize, cla
         lods.push(static_lod(game, pkg, pid, &mut r, i < max_lods)?);
     }
     let _ = flags::UNUSED;
-    Ok(Mesh { lods, bones: Vec::new(), props })
+    Ok(Mesh { lods, bones: Vec::new(), materials: Vec::new(), props })
 }

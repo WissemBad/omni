@@ -194,7 +194,7 @@ pub fn convert_mip(pf: &str, w: u32, h: u32, data: &[u8]) -> Result<Vec<u8>> {
     })
 }
 
-fn platform_data(game: &Game, pkg: &Package, pid: u64, r: &mut Reader, with_data: bool) -> Result<(String, u32, u32, u32, Vec<Mip>)> {
+fn platform_data(game: &Game, pkg: &Package, pid: u64, r: &mut Reader, with_data: bool, fetch: bool) -> Result<(String, u32, u32, u32, Vec<Mip>)> {
     if game.ue5_version >= 1009 {
         let using_derived = r.u8()?;
         if using_derived != 0 {
@@ -226,8 +226,8 @@ fn platform_data(game: &Game, pkg: &Package, pid: u64, r: &mut Reader, with_data
         let h = r.i32()?.max(1) as u32;
         let d = r.i32()?.max(1) as u32;
         let data = match &b {
-            Some(b) => game.bulk_bytes(pkg, pid, b).ok().flatten(),
-            None => None,
+            Some(b) if fetch => game.bulk_bytes(pkg, pid, b).ok().flatten(),
+            _ => None,
         };
         mips.push(Mip { width: w, height: h, depth: d, data });
     }
@@ -237,6 +237,11 @@ fn platform_data(game: &Game, pkg: &Package, pid: u64, r: &mut Reader, with_data
 
 /// Texture2D (and the other texture classes sharing its layout) at export `index`.
 pub fn read_texture(game: &Game, ctx: &Ctx, pkg: &Package, index: usize, class: &str) -> Result<Texture> {
+    read_texture_opt(game, ctx, pkg, index, class, true)
+}
+
+/// `want_data` false: header and mip sizes only (no payload read).
+pub fn read_texture_opt(game: &Game, ctx: &Ctx, pkg: &Package, index: usize, class: &str, want_data: bool) -> Result<Texture> {
     let pid = game.package_id_of(&pkg.name).unwrap_or(0);
     let e = &pkg.exports[index];
     let data = pkg.export_data(index);
@@ -252,6 +257,7 @@ pub fn read_texture(game: &Game, ctx: &Ctx, pkg: &Package, index: usize, class: 
     if game.ue5_version >= 1010 {
         with_data = r.u32()? != 0;
     }
+    let fetch = want_data;
     loop {
         let fmt = ctx.fname(&mut r)?;
         if fmt == "None" {
@@ -260,7 +266,7 @@ pub fn read_texture(game: &Game, ctx: &Ctx, pkg: &Package, index: usize, class: 
         let at = r.pos;
         let skip = r.i64()?;
         let end = at as i64 + skip;
-        match platform_data(game, pkg, pid, &mut r, with_data) {
+        match platform_data(game, pkg, pid, &mut r, with_data, fetch) {
             Ok((pf, w, h, slices, mips)) if !mips.is_empty() => {
                 return Ok(Texture { format: pf, width: w, height: h, slices, mips, props });
             }

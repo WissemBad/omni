@@ -38,8 +38,30 @@ fn u32le(d: &[u8], o: usize) -> Option<u32> {
     d.get(o..o + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
 }
 
+/// Pseudo codec id of Unreal's Bink Audio streams ("ABEU" container, decoded by binka.rs).
+pub const BINKA: u16 = 0xB1CA;
+
+fn binka_info(b: &[u8]) -> Option<WemInfo> {
+    if b.len() < 0x1C {
+        return None;
+    }
+    Some(WemInfo {
+        codec: BINKA,
+        channels: b[5] as u16,
+        rate: u32le(b, 8)?,
+        bits: 16,
+        samples: Some(u32le(b, 0x0C)? as u64),
+        data_off: 0,
+        data_size: b.len(),
+        ..Default::default()
+    })
+}
+
 /// RIFF/WAVE header of a .wem: codec, layout, exact sample count when known, Wwise label (LIST/labl).
 pub fn wem_info(b: &[u8]) -> Option<WemInfo> {
+    if b.get(0..4)? == b"ABEU" {
+        return binka_info(b);
+    }
     if b.get(0..4)? != b"RIFF" || b.get(8..12)? != b"WAVE" {
         return None;
     }
@@ -457,6 +479,17 @@ pub struct Converted {
 /// external encoder).
 pub fn convert(wem: &[u8], fmt: &str, tags: &[(String, String)]) -> Result<Converted, String> {
     let mut info = wem_info(wem).ok_or("not a RIFF/WAVE .wem")?;
+    if info.codec == BINKA {
+        let d = crate::binka::decode(wem)?;
+        info.samples = Some((d.pcm.len() / d.channels.max(1) as usize) as u64);
+        return match fmt {
+            "wav" | "pcm" => {
+                let t: &[(String, String)] = if fmt == "pcm" { &[] } else { tags };
+                Ok(Converted { ext: ".wav", bytes: encode_wav(&d.pcm, d.channels, d.sample_rate, t), info, pcm: None })
+            }
+            _ => Ok(Converted { ext: ".flac", bytes: encode_flac(&d.pcm, d.channels, d.sample_rate, tags)?, info, pcm: None }),
+        };
+    }
     if fmt == "auto" && info.codec == VORBIS {
         if let Ok(ogg) = wem_to_ogg(wem, &info, tags) {
             return Ok(Converted { ext: ".ogg", bytes: ogg, info, pcm: None });

@@ -31,3 +31,5 @@ pub mod unreal;
 mod py;
 #[cfg(feature = "python")]
 mod py_media;
+#[cfg(feature = "python")]
+mod py_unreal;

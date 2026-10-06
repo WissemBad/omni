@@ -46,6 +46,8 @@ pub struct Game {
     pub package_paths: HashMap<u64, String>,
     pub store: HashMap<u64, StoreEntry>,
     pub script: Option<ScriptObjects>,
+    /// property layouts (from the executable): needed to read unversioned packages
+    pub schema: reflect::Schema,
     /// every file of the containers: game path (original case) -> (container, toc index)
     pub files: Vec<(String, usize, u32)>,
 }
@@ -80,6 +82,7 @@ impl Game {
             package_paths: HashMap::new(),
             store: HashMap::new(),
             script: None,
+            schema: reflect::Schema::default(),
             files: Vec::new(),
         };
         let mut header_versions = Vec::new();

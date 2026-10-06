@@ -70,7 +70,8 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
     security.install(app)
     from .shell import Shell
     app.state.shell = Shell()
-    ids = sources or registry.source_ids()
+    def all_ids() -> list[str]:
+        return list(sources) if sources else registry.source_ids()
     jobs = Jobs(CONFIG.workspace / "jobs.sqlite" if jobs_db == "auto" else jobs_db)
     jobs.on_finish.append(app.state.shell.notify_job)
 
@@ -163,9 +164,10 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         """Slow first requests (outfit index, catalogs) are computed in the background at launch."""
         def run():
             from ..core import setup
-            if not (setup.assets_ok()["ok"] and setup.names_ok()["ok"]):
-                return                                  # not set up yet: nothing to index
-            for sid in ids:
+            glacier_ready = setup.assets_ok()["ok"] and setup.names_ok()["ok"]
+            for sid in all_ids():
+                if sid == "007fl" and not glacier_ready:
+                    continue                            # not set up yet: nothing to index
                 try:
                     src = registry.get_source(sid)
                     if "props" in src.capabilities:
@@ -184,11 +186,12 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
     def sources_():
         from ..targets.source import deploy
         out = []
-        for sid in ids:
-            cls = registry.source_class(sid)
-            out.append({"id": sid, "title": cls.title, "description": getattr(cls, "description", ""),
-                        "capabilities": list(getattr(cls, "capabilities", ())),
-                        "deployed": deploy.link_path(CONFIG, sid).exists()})
+        for sid in all_ids():
+            try:
+                d = registry.describe(sid)
+            except Exception:  # noqa: BLE001 - one broken library entry must not hide the others
+                continue
+            out.append({**d, "deployed": deploy.link_path(CONFIG, sid).exists()})
         return out
 
     @app.get("/api/{sid}/info")

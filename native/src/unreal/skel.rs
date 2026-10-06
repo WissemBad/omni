@@ -210,8 +210,9 @@ pub fn read_skeletal_mesh(game: &Game, ctx: &Ctx, pkg: &Package, index: usize, c
     strip(&mut r)?;
     r.skip(if ue5 >= 1004 { 56 } else { 28 })?; // imported bounds
     let nmat = r.count(12)?;
+    let mut materials = Vec::with_capacity(nmat);
     for _ in 0..nmat {
-        r.i32()?;
+        materials.push(r.i32()?);
         ctx.fname(&mut r)?;
         if r.u32()? != 0 {
             ctx.fname(&mut r)?;
@@ -250,5 +251,5 @@ pub fn read_skeletal_mesh(game: &Game, ctx: &Ctx, pkg: &Package, index: usize, c
     for i in 0..nlods {
         lods.push(lod(game, pkg, pid, &mut r, has_colors, i < max_lods)?);
     }
-    Ok(Mesh { lods, bones, props })
+    Ok(Mesh { lods, bones, materials, props })
 }

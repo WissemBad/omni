@@ -407,6 +407,33 @@ def convert_material(mat: Material, cache: TextureCache, mat_root: Path, cd: str
                 g = _param(mat, "ShaderLOD_Gloss")
                 gloss = np.full_like(f0, g if g is not None else 1.0 - _param(mat, "ShaderLOD_Roughness", 0.5))
             rough = 1.0 - gloss
+    if spec is None and (_first(mat, "orm") is not None or _first(mat, "rough") is not None):
+        # metal/roughness workflow (Unreal): packed occlusion-roughness-metal (channel order from the slot,
+        # ORM by default) or separate roughness / metallic maps; dielectric F0 4 % = specular level 0.5
+        orm_ref, rough_ref, metal_ref = _first(mat, "orm"), _first(mat, "rough"), _first(mat, "metal")
+        if orm_ref is not None:
+            ot = cache.get(orm_ref.key)
+            if ot is not None and ot.width > 4:
+                f = _rgb(tx.decode_mips_rgba(ot, opts.max_size_spec)[0])
+                order = (orm_ref.slot or "ORM").upper()
+                order = order if len(order) == 3 and "R" in order else "ORM"
+                rough = f[..., order.find("R")]
+                metal = f[..., order.find("M")] if "M" in order else np.zeros_like(rough)
+                srm_ref = orm_ref
+        elif rough_ref is not None:
+            rt = cache.get(rough_ref.key)
+            if rt is not None and rt.width > 4:
+                rough = _rgb(tx.decode_mips_rgba(rt, opts.max_size_spec)[0])[..., 0]
+                metal = np.zeros_like(rough)
+                mt = cache.get(metal_ref.key) if metal_ref is not None else None
+                if mt is not None and mt.width > 4:
+                    m0 = _rgb(tx.decode_mips_rgba(mt, opts.max_size_spec)[0])[..., 0]
+                    ys = np.linspace(0, m0.shape[0] - 1, rough.shape[0]).astype(int)
+                    xs = np.linspace(0, m0.shape[1] - 1, rough.shape[1]).astype(int)
+                    metal = m0[ys][:, xs]
+                srm_ref = rough_ref
+        if rough is not None:
+            spec = np.full_like(rough, 0.5)
     if spec is None:
         const = _constant_spec(mat, is_hair, is_eye)
         if const is not None:
@@ -511,6 +538,8 @@ def convert_material(mat: Material, cache: TextureCache, mat_root: Path, cd: str
     elif translucent:
         vmt["$translucent"] = "1"
         res.translucent = True
+    if "two_sided" in mat.flags:
+        vmt["$nocull"] = "1"                # the game draws both faces (leaves, cloth, thin panels)
     if overlay:
         vmt["$decal"] = "1"
     # a decal whose base colour is opaque (or missing) would paint a solid patch over the surface

@@ -22,8 +22,9 @@ log = logging.getLogger("omni.games")
 # profile -> what the source of that profile can do today
 PROFILES = {
     "007fl": {"engine": "glacier", "title": "007 First Light", "capabilities": ["props", "characters", "textures", "sounds"]},
-    "hitman3": {"engine": "glacier", "title": "HITMAN World of Assassination", "capabilities": []},
-    "unreal": {"engine": "unreal", "title": "", "capabilities": []},
+    "hitman3": {"engine": "glacier", "title": "HITMAN World of Assassination",
+                "capabilities": ["props", "characters", "textures", "sounds"]},
+    "unreal": {"engine": "unreal", "title": "", "capabilities": ["props", "characters", "textures", "sounds"]},
 }
 _lock = threading.Lock()
 
@@ -66,6 +67,26 @@ def _unreal_version(exe: Path) -> str:
     return ""
 
 
+def steam_title(folder: Path) -> str:
+    """The game's name in its Steam manifest (``appmanifest_*.acf`` whose installdir is ``folder``)."""
+    try:
+        apps = folder.parent.parent
+        for acf in apps.glob("appmanifest_*.acf"):
+            text = acf.read_text(encoding="utf-8", errors="replace")
+            d = re.search(r'"installdir"\s+"([^"]*)"', text)
+            n = re.search(r'"name"\s+"([^"]*)"', text)
+            if d and n and d.group(1).lower() == folder.name.lower():
+                return n.group(1)
+    except OSError:
+        pass
+    return ""
+
+
+def _pretty(name: str) -> str:
+    """"BronzebeardsTavern" -> "Bronzebeards Tavern"."""
+    return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name).replace("_", " ").strip()
+
+
 def _unreal(folder: Path) -> dict | None:
     for project in [folder, *sorted(p for p in folder.iterdir() if p.is_dir())[:20]] if folder.is_dir() else []:
         paks = project / "Content" / "Paks"
@@ -75,9 +96,10 @@ def _unreal(folder: Path) -> dict | None:
         if not containers:
             continue
         exes = sorted((project / "Binaries" / "Win64").glob("*-Shipping.exe")) or sorted(folder.glob("**/*-Shipping.exe"))[:1]
-        return {"profile": "unreal", "title": project.name, "root": str(folder), "project": project.name,
+        title = steam_title(folder) or _pretty(project.name)
+        return {"profile": "unreal", "title": title, "root": str(folder), "project": project.name,
                 "paks": str(paks), "iostore": any(p.suffix.lower() == ".utoc" for p in containers),
-                "version": _unreal_version(exes[0]) if exes else ""}
+                "exe": str(exes[0]) if exes else "", "version": _unreal_version(exes[0]) if exes else ""}
     return None
 
 
@@ -91,7 +113,17 @@ def identify(folder: str | Path) -> dict | None:
         return None
     profile = PROFILES[info["profile"]]
     info.update(engine=profile["engine"], capabilities=profile["capabilities"], supported=bool(profile["capabilities"]))
-    info["id"] = info["profile"] if info["profile"] != "unreal" else "ue-" + slug(info["title"])
+    info["id"] = info["profile"] if info["profile"] != "unreal" else "ue-" + slug(info.get("project") or info["title"])
+    if info["engine"] == "unreal":
+        why = []
+        if not info.get("iostore"):
+            why.append("conteneurs .pak seuls (UE4) : non pris en charge")
+        if not info.get("exe"):
+            why.append("exécutable *-Shipping.exe introuvable")
+        if not str(info.get("version", "")).startswith("5"):
+            why.append(f"version du moteur {info.get('version') or 'inconnue'} (UE5 requis)")
+        if why:
+            info.update(supported=False, reason=" ; ".join(why))
     return info
 
 
