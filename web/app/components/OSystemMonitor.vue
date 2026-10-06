@@ -20,7 +20,6 @@ const last = ref<Sample | null>(null)
 const cpu = ref<number[]>([])
 const ram = ref<number[]>([])
 const gpuLoad = ref<number[]>([])
-const gpuTemp = ref<number[]>([])
 const failed = ref(false)
 
 const push = (a: Ref<number[]>, v: number | null | undefined) => {
@@ -36,7 +35,6 @@ async function poll() {
     push(cpu, s.cpu)
     push(ram, s.memory.percent)
     push(gpuLoad, s.gpu?.load)
-    push(gpuTemp, s.gpu?.temp)
   } catch {
     failed.value = true
   }
@@ -62,9 +60,6 @@ function path(values: number[], max: number, close = false) {
   const line = `M${pts.join(' L')}`
   return close ? `${line} L${W},${H} L${x0.toFixed(1)},${H} Z` : line
 }
-
-const tempColor = (t?: number | null) =>
-  t == null ? 'text-muted' : t >= 80 ? 'text-error' : t >= 70 ? 'text-warning' : 'text-success'
 
 const charts = computed(() => {
   const g = last.value?.gpu
@@ -102,18 +97,8 @@ const charts = computed(() => {
             values: gpuLoad.value,
             max: 100,
             now: g.load != null ? `${g.load.toFixed(0)} %` : '—',
-            sub: `${g.name}${g.mem_used != null && g.mem_total ? ` · ${(g.mem_used / 1024).toFixed(1)} / ${(g.mem_total / 1024).toFixed(0)} Go` : ''}${g.power != null ? ` · ${g.power.toFixed(0)} W` : ''}`,
+            sub: `${g.name}${g.temp != null ? ` · ${g.temp.toFixed(0)} °C` : ''}${g.mem_used != null && g.mem_total ? ` · ${(g.mem_used / 1024).toFixed(1)} / ${(g.mem_total / 1024).toFixed(0)} Go` : ''}${g.power != null ? ` · ${g.power.toFixed(0)} W` : ''}`,
             color: 'text-success',
-          },
-          {
-            key: 'gput',
-            label: 'Température GPU',
-            icon: 'i-ri-temp-hot-line',
-            values: gpuTemp.value,
-            max: 100,
-            now: g.temp != null ? `${g.temp.toFixed(0)} °C` : '—',
-            sub: 'Sur 100 °C',
-            color: tempColor(g.temp),
           },
         ]
       : []),
@@ -128,7 +113,7 @@ const charts = computed(() => {
       <p class="text-sm text-muted">Charge de la machine pendant les conversions, une minute d’historique. Omni travaille sur le processeur ; le GPU sert à l’affichage 3D.</p>
     </template>
     <UAlert v-if="failed" color="warning" variant="subtle" icon="i-ri-error-warning-line" title="Mesures indisponibles" />
-    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       <div v-for="c in charts" :key="c.key" class="min-w-0 rounded-md border border-default p-3">
         <div class="flex items-center justify-between gap-2">
           <span class="flex items-center gap-1.5 text-sm text-muted"><UIcon :name="c.icon" class="size-4" />{{ c.label }}</span>
