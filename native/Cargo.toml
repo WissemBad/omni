@@ -18,7 +18,7 @@ parallel = ["dep:rayon", "texpresso/rayon"]
 pyo3 = { version = "0.22", features = ["extension-module", "abi3-py312", "generate-import-lib"], optional = true }
 numpy = { version = "0.22", optional = true }
 rayon = { version = "1.10", optional = true }
-lz4_flex = { version = "0.11", default-features = false, features = ["std", "safe-decode"] }
+lz4_flex = { version = "0.14", default-features = false, features = ["std", "safe-decode"] }
 texture2ddecoder = "0.1"
 texpresso = { version = "2" }
 lewton = "0.10"
