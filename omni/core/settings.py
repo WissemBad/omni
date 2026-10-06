@@ -19,6 +19,7 @@ DEFAULTS: dict = {
     "general": {
         "open_browser": True,        # `omni ui` / the launcher opens the interface
         "port": 8770,
+        "namespace": "omni",         # addon folder of models and materials: models/<namespace>/<game>/ (free path, e.g. wissem/omni)
     },
     "paths": {                       # "" = automatic
         "game": "",                  # folder of the game that holds Runtime/*.rpkg (extraction)
@@ -152,6 +153,8 @@ def apply(s: dict | None = None) -> None:
     """Push settings that live in module globals (paths, encoder effort)."""
     s = s or load()
     CONFIG.refresh(s["paths"])
+    from .config import clean_namespace
+    CONFIG.namespace = clean_namespace(s["general"]["namespace"])
     try:
         from ..targets.source import textures
         textures.ENCODER_QUALITY = int(s["textures"]["encoder"])

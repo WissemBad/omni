@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
 from dataclasses import dataclass, field
@@ -112,6 +113,12 @@ def steam_common() -> list[Path]:
     return [lib / "steamapps" / "common" for lib in steam_libraries()]
 
 
+def clean_namespace(value: str) -> str:
+    """A free folder path for the addon (``wissem/omni``, ``import/wissem``...): lower case, letters, digits, ``_``, ``-``, ``/``."""
+    parts = [re.sub(r"[^a-z0-9_\-]+", "_", p.strip().lower()).strip("_") for p in str(value or "").replace("\\", "/").split("/")]
+    return "/".join(p for p in parts if p and p not in (".", "..")) or "omni"
+
+
 def find_gmod() -> Path:
     for common in steam_common():
         if (common / "GarrysMod" / "garrysmod").is_dir():
@@ -133,6 +140,7 @@ class Config:
     studiomdl: Path = field(default_factory=lambda: find_studiomdl(HOME / "workspace" / "tools"))
     ffmpeg: str = field(default_factory=lambda: os.environ.get("OMNI_FFMPEG", "ffmpeg"))
     blender: str = ""
+    namespace: str = "omni"             # folder of the models and materials inside the addon: models/<namespace>/<game>/
     game: Path | None = None            # folder of the game (holds Runtime/*.rpkg), for the extraction
 
     # ------------------------------------------------------------------------------------------ roots
@@ -236,6 +244,10 @@ class Config:
         """Every game's addon that exists (the sandbox mounts them to preview converted materials)."""
         base = self.exports
         return sorted(d / "garrysmod-addon" for d in base.glob("*") if (d / "garrysmod-addon").is_dir()) if base.is_dir() else []
+
+    def ns(self, source_id: str) -> str:
+        """``<namespace>/<game>``: where a game's models and materials live in the addon (``models/`` and ``materials/``)."""
+        return f"{self.namespace}/{source_id}"
 
     # ----------------------------------------------------------------------------------- locations
     def refresh(self, paths: dict | None = None) -> None:

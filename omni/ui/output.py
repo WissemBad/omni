@@ -114,7 +114,7 @@ class OutputIndex:
     def _scan(self) -> None:
         omni = not self.root.external
         top = self.addon / "models" if omni else self.addon
-        prefix = f"models/omni/{self.sid}/"
+        prefix = f"models/{CONFIG.ns(self.sid)}/"
         rows: list[dict] = []
         stack = [(top, "models" if omni else "")]
         while stack and top.exists():
@@ -244,7 +244,7 @@ def _material(addon: Path, cds: list[str], name: str, root: Path | None = None) 
             t = {"param": key, "label": PARAM_LABEL.get(key, key), "name": val,
                  "path": (addon / "materials" / f"{val}.vtf").relative_to(root).as_posix(), "exists": f.exists(),
                  # not ours and not in the addon: a texture GMod/the base game ships
-                 "stock": not f.exists() and not val.startswith("omni/")}
+                 "stock": not f.exists() and not val.startswith(CONFIG.namespace + "/")}
             if t["exists"]:
                 try:
                     t.update(studio.vtf_info(f))
@@ -271,7 +271,7 @@ def _material(addon: Path, cds: list[str], name: str, root: Path | None = None) 
 def _find_source(sid: str, catalog, rel_path: str) -> dict | None:
     """The catalog row a prop output came from (the reverse of ``build._model_path``)."""
     from ..targets.source.build import _model_path
-    prefix = f"models/omni/{sid}/"
+    prefix = f"models/{CONFIG.ns(sid)}/"
     if not rel_path.startswith(prefix) or rel_path.startswith(prefix + "pm/"):
         return None
     inner = rel_path[len(prefix):-4]
@@ -280,7 +280,7 @@ def _find_source(sid: str, catalog, rel_path: str) -> dict | None:
     if not rows and len(tail) == 6:
         rows = catalog._query("SELECT key, rel, cat, name FROM assets WHERE lower(key) LIKE ?", (f"%{tail}",))
     for r in rows:
-        if _model_path(sid, r["rel"], r["key"]) == f"omni/{sid}/{inner}":
+        if _model_path(sid, r["rel"], r["key"]) == f"{CONFIG.ns(sid)}/{inner}":
             return {"key": r["key"], "rel": r["rel"], "cat": r["cat"]}
     return None
 
@@ -373,7 +373,7 @@ def _describe(sid: str, root: str, external: bool, rel: str, mtime: float, sourc
     if external:
         kind = "character" if sum(b["name"].startswith("ValveBiped.") for b in d["bones"]) >= 20 else "prop"
     else:
-        kind = "character" if rel.startswith(f"models/omni/{sid}/pm/") else "prop"
+        kind = "character" if rel.startswith(f"models/{CONFIG.ns(sid)}/pm/") else "prop"
 
     files = []
     present = {p.name[len(stem.name):]: p for p in stem.parent.glob(glob_escape(stem.name) + ".*")}

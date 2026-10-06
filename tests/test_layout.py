@@ -153,3 +153,14 @@ def test_relocate_moves_workspace_and_exports(tmp_path, monkeypatch):
     (full / "x").mkdir(parents=True)
     with pytest.raises(RuntimeError):
         migrate.relocate(full)
+
+
+def test_addon_namespace_is_a_clean_free_path():
+    from omni.core.config import clean_namespace
+    assert clean_namespace("omni") == "omni" and clean_namespace("") == "omni"
+    assert clean_namespace(" Wissem/Omni/ ") == "wissem/omni"
+    assert clean_namespace("import\wissem") == "import/wissem"
+    assert clean_namespace("../../x y/é") == "x_y"
+    cfg = _cfg(Path("."))
+    cfg.namespace = "wissem/omni"
+    assert cfg.ns("007fl") == "wissem/omni/007fl"

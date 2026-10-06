@@ -381,6 +381,7 @@ export interface SystemInfo {
   workspace: string
   exports: string
   home: string
+  namespace: string
   cpus: number
   setup?: { ready: boolean; can_convert: boolean }
   rust: {
@@ -426,7 +427,7 @@ export interface Overview {
 }
 
 export interface Settings {
-  general: { open_browser: boolean; port: number }
+  general: { open_browser: boolean; port: number; namespace: string }
   paths: { gmod: string; exports: string; assets: string }
   textures: { quality: string; encoder: number; lossless_normals: boolean }
   props: { physics: boolean; collision: string; workers: number; blend: boolean; gltf?: boolean }

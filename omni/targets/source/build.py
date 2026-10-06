@@ -54,7 +54,7 @@ class BuildResult:
 
 
 def _model_path(source_id: str, rel: str, key: str) -> str:
-    base = f"omni/{source_id}/"
+    base = f"{CONFIG.ns(source_id)}/"
     path = base + rel
     if len(path) > 110:
         parts = rel.split("/")
@@ -183,7 +183,7 @@ def build_model(source, key: str, cfg: Config = CONFIG, opts: BuildOptions | Non
             res.notes.append("skinned model exported as a static pose (statue)")
 
         addon = cfg.addon_dir(source.id)
-        cd = f"omni/{source.id}"
+        cd = cfg.ns(source.id)
 
         # overlay layers (game z-bias) get their own "$decal" variant of the material
         for sm in model.submeshes:

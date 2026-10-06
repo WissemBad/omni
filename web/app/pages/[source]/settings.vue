@@ -348,6 +348,9 @@ const MAINTENANCE = computed(() => [
               </p>
             </div>
             <USwitch v-model="s.general.open_browser" label="Ouvrir le navigateur au lancement" description="Pour la commande « omni ui » (l’application a sa propre fenêtre)." />
+            <UFormField label="Dossier des modèles et matériaux dans l’addon" description="Champ libre : models/&lt;dossier&gt;/&lt;jeu&gt; et materials/&lt;dossier&gt;/&lt;jeu&gt;. Exemples : omni, wissem/omni, import/wissem. Reconvertis les modèles après un changement.">
+              <UInput v-model="s.general.namespace" class="w-full" placeholder="omni" />
+            </UFormField>
             <UFormField label="Dossier de Garry’s Mod" description="Vide : le dossier Steam par défaut.">
               <UInput v-model="s.paths.gmod" class="w-full" placeholder="C:\Program Files (x86)\Steam\steamapps\common\GarrysMod" />
             </UFormField>

@@ -1,8 +1,8 @@
 import type { Prop } from '~/utils/types'
 
 /** Where `omni` writes a converted prop inside the GMod addon (mirror of targets/source/build.py `_model_path`). */
-export function modelPath(sid: string, p: Pick<Prop, 'rel' | 'key'>): string {
-  const base = `omni/${sid}/`
+export function modelPath(sid: string, p: Pick<Prop, 'rel' | 'key'>, namespace = 'omni'): string {
+  const base = `${namespace}/${sid}/`
   let path = base + p.rel
   if (path.length > 110)
     path = `${base}${(p.rel.split('/').pop() ?? '').slice(0, 30)}_${p.key.slice(-6).toLowerCase()}`

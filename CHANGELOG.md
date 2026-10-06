@@ -4,6 +4,11 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- The folder of the models and materials inside the addon is a free setting (`omni`, `wissem/omni`, `import/wissem`...):
+  `models/<folder>/<game>/` and `materials/<folder>/<game>/`. Models converted earlier must be converted again.
+
 ### Changed
 
 - **One Omni folder, two parts.** Everything omni writes goes to `Documents\Omni` (movable with `omni home set <folder>`):

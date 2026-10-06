@@ -108,7 +108,7 @@ def _prepare(source, part_specs: list[str], opts: PMOptions, cfg: Config, res: P
 
     # materials -> VMT/VTF (same converter as props; skin and cloth are plain VertexLitGeneric)
     addon = addon or cfg.addon_dir(source.id)
-    cd = f"omni/{source.id}"
+    cd = cfg.ns(source.id)
     cache = TextureCache(source)
     names, dropped = {}, set()
     for mk, mat in materials.items():
@@ -134,7 +134,7 @@ def build_playermodel(source, part_specs: list[str], opts: PMOptions, cfg: Confi
         tpl, sk, P, S, posed, names = prep["tpl"], prep["sk"], prep["P"], prep["S"], prep["posed"], prep["names"]
         addon, cd = prep["addon"], prep["cd"]
         slug_name = slug(opts.name, 40)
-        mpath = f"omni/{source.id}/pm/{slug_name}"
+        mpath = f"{cfg.ns(source.id)}/pm/{slug_name}"
         work = cfg.sandbox / "modelsrc" / mpath
         work.mkdir(parents=True, exist_ok=True)
         res.triangles = pm.write_reference(work / "ref.smd", tpl, S, posed, names)
@@ -254,7 +254,7 @@ def export_character_preview(source, part_specs: list[str], opts: PMOptions, cfg
     for mk, mat in prep["materials"].items():
         mats.append({"name": prep["names"].get(mk, mat.name), "key": mk, "source": mat.source_name,
                      "textures": [{"role": t.role, "slot": t.slot, "key": t.key} for t in mat.textures]})
-    meta = {"model": f"models/omni/{source.id}/pm/{slug(opts.name, 40)}.mdl", "family": opts.name, "lod": 0,
+    meta = {"model": f"models/{cfg.ns(source.id)}/pm/{slug(opts.name, 40)}.mdl", "family": opts.name, "lod": 0,
             "groups": [], "base": [opts.name], "skins": 1,
             "presets": [{"name": opts.name, "variant": 0, "skin": 0, "bodygroups": {}}],
             "materials": mats, "skin_materials": [{}]}

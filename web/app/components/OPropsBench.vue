@@ -3,6 +3,10 @@ import type { Category, Page, Prop, PropDetails } from '~/utils/types'
 
 /** Models › Props: the game's meshes, their 3D preview and an inspector with the raw game data. */
 const sid = useSourceId()
+const { info: system, load: loadSystem } = useSystem()
+onMounted(() => {
+  if (!system.value) loadSystem()
+})
 const route = useRoute()
 const router = useRouter()
 const { details: srcDetails, refresh: refreshDetails } = useSourceDetails()
@@ -127,7 +131,9 @@ onBeforeUnmount(() => clearInterval(waitTimer))
 const glb = computed(() =>
   active.value ? `/api/${sid.value}/props/${active.value.key}/glb` : undefined,
 )
-const gmodPath = computed(() => (active.value ? modelPath(sid.value, active.value) : ''))
+const gmodPath = computed(() =>
+  active.value ? modelPath(sid.value, active.value, system.value?.namespace) : '',
+)
 const activeIndex = computed(() => items.value.findIndex((p) => p.key === active.value?.key))
 const info = ref<PropDetails | null>(null)
 const infoLoading = ref(false)

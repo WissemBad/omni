@@ -322,7 +322,7 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         ]
         from ..core import setup
         ready = setup.status()
-        return {"version": VERSION, "workspace": str(CONFIG.workspace), "exports": str(CONFIG.exports), "home": str(CONFIG.home), "cpus": os.cpu_count(),
+        return {"version": VERSION, "workspace": str(CONFIG.workspace), "exports": str(CONFIG.exports), "home": str(CONFIG.home), "namespace": CONFIG.namespace, "cpus": os.cpu_count(),
                 "setup": {"ready": ready["ready"], "can_convert": ready["can_convert"]},
                 "rust": {k: v for k, v in core.items() if k != "native_functions"},
                 "tools": tools}

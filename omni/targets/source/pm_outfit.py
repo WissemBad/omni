@@ -224,7 +224,7 @@ def prepare(source, outfit_keys: list[int], opts, cfg: Config = CONFIG, name: st
 
     # materials: one Source material per (mesh, slot) column, one variant per skin
     addon = cfg.addon_dir(source.id)
-    cd = f"omni/{source.id}"
+    cd = cfg.ns(source.id)
     slug_name = slug(name, 40)
     vmt_cd = f"{cd}/pm/{slug_name}"
     vdir = addon / "materials" / vmt_cd
@@ -336,7 +336,7 @@ def prepare(source, outfit_keys: list[int], opts, cfg: Config = CONFIG, name: st
             out.append(pp)
         posed[p.prim] = out
     plan = Plan(source, cfg, name, outfits, tpl, pieces, by_prim, base, groups, lod, sk, P, S, posed, columns,
-                skins, skin_of, vmt_cd, f"omni/{source.id}/pm/{slug_name}", notes, infos)
+                skins, skin_of, vmt_cd, f"{cfg.ns(source.id)}/pm/{slug_name}", notes, infos)
     plan.materials_backup = backup if backup.exists() else None
     return plan
 
