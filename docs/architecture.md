@@ -60,6 +60,10 @@ Modules: textures (TEXT/TEXD, BCn, mips, DXT, VTF, PNG, JPEG), audio (Wwise Vorb
 
 `native/src/source_anim.rs` reads compiled Source models (v44-49) and their `.ani`: skeleton, sequences and the per-frame bone transforms of one animation (raw 48/64-bit quaternions, half-float positions, run-length encoded streams scaled per bone, sections and external animation blocks). `ui/animation.py` lists the playable sequences of a model and of the models it includes (`targets/source/gmodanim.py` extracts `m_anm`, `f_anm`, `z_anm` once from Garry's Mod's VPK into `workspace/cache/gmod_anims`) and retargets a sequence onto the viewed skeleton by bone name: rotations on top of the model's own rest pose, only the pelvis moves, scaled by the height ratio; a movement sequence plays its most dynamic blend. `/api/<game>/output/animations` and `/animation` feed `OViewer.vue`, which drives the bones of the skinned GLB (`ui/output.build_glb` skins models whose vertices follow several bones).
 
+## Texture roles of Glacier materials
+
+A material instance (MATI) names its texture slots, many of them generically (`mapTexture2D_04`), and the meaning of a generic slot changes with the material class. The class (a `MATE` resource, a compiled shader package) lists its parameters as plain strings: each texture slot followed by what the class calls it (`mapEmissive`, `mapRGB_Mask`, `mapSpecular_R_SpecularLevel_G_Roughness_B_Metallic`...). `native/src/mate.rs` reads that list, `GlacierSource.class_slots` caches it per class and `roles.semantic_role` turns the meaning into a role. Order of authority: explicit slot names (`mapTex_Basecolor`), the class's meaning, the texture's file name, the slot position. The class's placeholder textures (`/constants/`: black, grey) in emissive, translucency, mask and specular slots are dropped, and a material the class left without a base colour keeps the texture named like one.
+
 ## Sources
 
 A source subclasses `Source`, declares its `capabilities` and is registered in `omni/sources/registry.py`. The API reads nothing else about it: `/api/sources` lists the workbenches, the pages show only those.

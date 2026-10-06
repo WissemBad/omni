@@ -231,6 +231,17 @@ class GlacierSource(Source):
         base = slug(parse_ioi(n)[2], 36) if n else "mat"
         return f"{base}_{h & 0xFFFFFF:06x}"
 
+    def class_slots(self, h: int) -> dict[str, str]:
+        """{slot (lower case): what the material class ``h`` calls it}, read once per class from its MATE resource."""
+        memo = self.__dict__.setdefault("_class_slots", {})
+        if h not in memo:
+            p = self.archive.find("MATE", h)
+            try:
+                memo[h] = {s.lower(): m for s, m in N.mate_slots(p.read_bytes()) if m} if p is not None else {}
+            except (OSError, ValueError):
+                memo[h] = {}
+        return memo[h]
+
     def load_material(self, h: int) -> Material:
         """The material instance ``h`` (a fresh copy: callers modify it). Parsed once per process: playermodel
         variants and prop skins ask for the same instances thousands of times."""
@@ -255,13 +266,16 @@ class GlacierSource(Source):
             mat.flags.add("unparsed")
             return mat
         cls = ""
+        slots: dict[str, str] = {}
         for rh, _f in meta.refs:
             nm = self.names.name(rh)
             if ".materialclass" in nm:
                 cls = nm
+                slots = self.class_slots(rh)
                 break
         fam = roles.class_family(cls)
         mat.flags.add("class:" + fam)
+        legacy: list = []
         for t in mt.textures:
             if t.ref_index >= len(meta.refs):
                 continue
@@ -275,12 +289,21 @@ class GlacierSource(Source):
                     fmt = parse_text_header(tp.read_bytes()[:0x98]).name
                 except Exception:
                     pass
-            role = roles.resolve(t.name, fam, tname, fmt)
+            role = roles.resolve(t.name, fam, tname, fmt, slots.get(t.name.lower(), ""))
+            if role in ("emissive", "translucency", "mask", "spec") and "/constants/" in tname:
+                continue                            # the class's placeholder (black, grey) for a map this material does not set
             if role == "other" and t.name.lower() not in roles.IGNORED and t.name not in mat.unknown_slots:
                 mat.unknown_slots.append(t.name)
             if tp is None:
                 continue
             mat.textures.append(TextureRef(role, t.name, "%016X" % th))
+            legacy.append((mat.textures[-1], roles.resolve(t.name, fam, tname, fmt)))
+        if not any(x.role == "base" for x in mat.textures):
+            # the class gave every map another meaning: a texture named like a colour map is still the best base colour
+            for ref, guess in legacy:
+                if guess == "base":
+                    ref.role = "base"
+                    break
         for p in mt.params:
             mat.params[p.name] = p.values
         # several normal maps (garment normal + tiled weave/detail arrays): the main one keeps the role

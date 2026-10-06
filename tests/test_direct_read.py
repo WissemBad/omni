@@ -36,7 +36,7 @@ def test_store_reads_like_the_extracted_tree(tmp_path):
         res.append(Res(h, kind, p.read_bytes(), m.refs, scramble=len(res) % 2 == 0, compress=len(res) % 3 == 0))
         if depth < 3:
             for rh, _f in m.refs:
-                for k in ("MATI", "TEXT", "TEXD", "BORG"):
+                for k in ("MATI", "MATE", "TEXT", "TEXD", "BORG"):
                     add(rh, k, depth + 1)
     for h in prims:
         add(h, "PRIM")

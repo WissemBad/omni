@@ -58,6 +58,38 @@ _LEAF_ROLE = [
 ]
 
 
+def semantic_role(slot: str, meaning: str) -> str:
+    """Role of a texture from what its material class calls the slot (``mapSpecular``, ``mapEmissive``,
+    ``mapSpecular_R_SpecularLevel_G_Roughness_B_Metallic``...): the class is the authority for the generic slot
+    names, whose meaning changes from one class to the next."""
+    s = meaning.lower()
+    if "specular_r_specularlevel_g_roughness_b_metallic" in s:
+        return "srm"
+    if "normal" in s and "detail" not in s:
+        return "normal"
+    if "compoundnormal" in slot.lower() and "detail" in s:
+        return "detail_normal"
+    if "mask" in s or "lut" in s:
+        return "mask"
+    if "emissive" in s or "emmisve" in s:
+        return "emissive"
+    if "translucen" in s:
+        return "translucency"
+    if "height" in s and "wind" not in s:
+        return "height"
+    if any(k in s for k in ("basecolor", "diffuse", "albedo")):
+        return "base"
+    if "detail" in s:
+        return "detail"
+    if "occlusion" in s and "spec" not in s:
+        return "ao"
+    if "specular" in s:
+        return "spec"
+    if "alpha" in s or "opacity" in s:
+        return "alpha"
+    return "other"
+
+
 def class_family(class_name: str) -> str:
     c = class_name.lower()
     for key in ("colormask", "hardalpha", "glass", "skin", "fabric", "decal", "foliage", "relief", "zmapped", "detail"):
@@ -73,12 +105,14 @@ def _leaf(texture_name: str) -> tuple[str, str]:
     return (m.group(1).lower() if m else ""), (ann.group(1) if ann else "")
 
 
-def resolve(slot: str, cls_family: str, texture_name: str = "", fmt: str = "") -> str:
-    """Explicit slot names first, then the texture's own file name (diffuse_a / specular_a / normal_a ...,
-    the author's intent), then the slot position for the generic scheme."""
+def resolve(slot: str, cls_family: str, texture_name: str = "", fmt: str = "", meaning: str = "") -> str:
+    """Explicit slot names first, then what the material class calls the slot (``meaning``, read from the class
+    itself), then the texture's own file name (diffuse_a / specular_a / normal_a ...), then the slot position."""
     s = re.sub(r"^map[a-z0-9]+(?:_[a-z0-9]+)*?_tex_", "maptex_", slot.lower())   # mapRED_Tex_SRM, mapGREEN_DIRT_Tex_Basecolor ...
     if s in NAMED:
         return NAMED[s]
+    if meaning:
+        return semantic_role(slot, meaning)
     leaf, ann = _leaf(texture_name) if texture_name else ("", "")
     if ann == "normalmap":
         return "normal"

@@ -36,31 +36,18 @@ from .compile import compile_qc
 from .materials import TextureCache, convert_material
 from .pm_build import PMResult, register, _VISIBLE
 
-REGIONS = [
-    ("Head", r"(^|_)head(_|$)"),
-    ("Hair", r"hair|beard|moustache|mustache|eyebrow"),
-    ("Headwear", r"beanie|(^|_)cap(_|$)|(^|_)hat(_|$)|helmet|balaclava|mask|(^|_)hood(_|$)|headset|headwear|earpiece|"
-                 r"bandana|beret|glasses|goggles|headband"),
-    ("Vest", r"vest|chestrig|harness|body_?armou?r|armou?r|plate_carrier"),
-    ("Torso", r"shirt|tanktop|(^|_)top(_|$)|sweater|hoodie|jacket|coat|parka|suit|dress|blouse|raglan|polo|uniform|"
-              r"kimono|labcoat|waistcoat|jumpsuit|flightsuit|apron|turtleneck|torso|cardigan|blazer"),
-    ("Back", r"backpack|bckpck|(^|_)bags?(_|$)|(^|_)pack(_|$)|quiver"),
-    ("Arms", r"(^|_)arms?(_|$)|forearm|bicep"),
-    ("Hands", r"glove|(^|_)hands?(_|$)|nails"),
-    ("Legs", r"pants|jeans|shorts|skirt|trousers|(^|_)legs?(_|$)|sweatpants|tights|stockings|leggings"),
-    ("Feet", r"boot|shoe|sneaker|trainer|heel|sandal|loafer|clog|flipflop|(^|_)feet(_|$)|sock"),
-    ("Accessories", r""),
-]
+from ...sources.glacier.slots import SLOTS, slot_index
+
 MAX_SKINS = 32                       # studiomdl MAXSTUDIOSKINS
 MAX_MATERIALS = 128                  # studiomdl: "Too many materials used, max 128"
 
 
-def region_of(label: str) -> int:
-    low = label.lower()
-    for i, (_name, rx) in enumerate(REGIONS):
-        if re.search(rx, low):
-            return i
-    return len(REGIONS) - 1
+REGIONS = SLOTS
+
+
+def region_of(label: str, template: str = "") -> int:
+    """The body slot of a part: the game's catalogue folder first, its name when the folder says nothing."""
+    return slot_index(template, label)
 
 
 @dataclass
@@ -85,7 +72,7 @@ def plan_groups(outfits) -> tuple[list[Piece], list[int], list[Group]]:
     pieces: dict[int, Piece] = {}
     for k, o in enumerate(outfits):
         for part in o.parts:
-            p = pieces.setdefault(part.prim, Piece(part.prim, part.label, region_of(part.label)))
+            p = pieces.setdefault(part.prim, Piece(part.prim, part.label, region_of(part.label, getattr(part, "template", ""))))
             p.wearers.add(k)
             p.slots.setdefault(k, part.slots)
     n = len(outfits)
@@ -99,7 +86,7 @@ def plan_groups(outfits) -> tuple[list[Piece], list[int], list[Group]]:
                 g.members.append(p.prim)
                 break
         else:
-            groups.append(Group(REGIONS[p.region][0], p.region, [p.prim]))
+            groups.append(Group(REGIONS[p.region][1], p.region, [p.prim]))
     seen: dict[str, int] = {}
     for g in groups:
         seen[g.name] = seen.get(g.name, 0) + 1

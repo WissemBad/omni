@@ -128,8 +128,15 @@ fn read_files<'py>(py: Python<'py>, paths: Vec<String>, threads: usize) -> PyRes
     Ok(data.into_iter().map(|d| d.map(|b| PyBytes::new_bound(py, &b))).collect())
 }
 
+/// mate_slots(data) -> [(slot, meaning | None)]: the texture slots of a material class (see `mate.rs`).
+#[pyfunction]
+fn mate_slots(py: Python<'_>, data: &[u8]) -> Vec<(String, Option<String>)> {
+    py.allow_threads(|| crate::mate::slots(data))
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<GlacierStore>()?;
+    m.add_function(wrap_pyfunction!(mate_slots, m)?)?;
     m.add_function(wrap_pyfunction!(wem_labels, m)?)?;
     m.add_function(wrap_pyfunction!(meta_refs_flags, m)?)?;
     m.add_function(wrap_pyfunction!(read_files, m)?)?;

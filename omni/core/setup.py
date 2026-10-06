@@ -21,7 +21,7 @@ from .config import CONFIG
 from .windows import find_steam_game
 
 # resource types the sources read (kept in sync with the ``archive.index`` calls of sources/glacier)
-NEEDED_TYPES = ["ALOC", "ASET", "BORG", "DLGE", "ECPB", "ECPT", "MATI", "MATT", "PRIM", "TBLU", "TEMP", "TEXD", "TEXT",
+NEEDED_TYPES = ["ALOC", "ASET", "BORG", "DLGE", "ECPB", "ECPT", "MATE", "MATI", "MATT", "PRIM", "TBLU", "TEMP", "TEXD", "TEXT",
                 "WBNK", "WSGB", "WSGT", "WSWB", "WSWT", "WWEM", "WWES", "WWEV"]
 
 NAMES_URL = "https://github.com/glacier-modding/Bond-Hashes/releases/latest/download/latest-hashes.7z"

@@ -24,6 +24,7 @@ pub mod binka;
 pub mod ww2ogg;
 pub mod wwise;
 pub mod par;
+pub mod mate;
 pub mod scan;
 pub mod source_anim;
 #[cfg(test)]

@@ -302,6 +302,11 @@ fn unreal_parsers_survive_garbage() {
         let _ = audio::wem_info(b);
     });
 
+    let mut mate = b"\x01\x02mapTexture2D_01\0mapDiffuse\0\0\0mapTexture2D_02\0mapEmissive\0".to_vec();
+    mate.extend(vec![0x41u8; 64]);
+    fuzz("mate::slots", &mate, |b| {
+        let _ = crate::mate::slots(b);
+    });
     let mut meta = vec![0u8; 40];
     meta[24] = 1;
     meta.extend(3u16.to_le_bytes());

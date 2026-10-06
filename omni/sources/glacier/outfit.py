@@ -45,6 +45,7 @@ class Geom:
     label: str                     # name of the outfit part it belongs to
     origin: int = -1               # index of that part in the outfit template
     aspect: int = 0                # entity type of the geometry (ZBodyPartEntity + ZMaterialOverwriteAspect)
+    template: str = ""             # path of the part template of the outfit this geometry belongs to (the game's catalogue folder)
 
 
 @dataclass
@@ -68,6 +69,7 @@ class OutfitPart:
     label: str
     prim: int
     slots: dict                    # source MATI -> Slot
+    template: str = ""             # path of its part template: the folder says what it is (see slots.py)
 
 
 @dataclass
@@ -239,8 +241,10 @@ class OutfitResolver:
                     g += gg
                     m += mm
                 if depth == 0:
+                    tname = self.source.names.name(s.type_ref)
                     for x in g:
                         x.origin = i
+                        x.template = tname
                 geoms_of[i] = g
                 geoms += g
                 mats += m
@@ -282,5 +286,5 @@ class OutfitResolver:
                         for p in me.props.values():
                             if p.pid != TARGETS_PROP and p.value is not None and not p.name.startswith(("0x", "m_")):
                                 s.params[p.name] = p.value
-            parts.append(OutfitPart(g.label, g.prim, slots))
+            parts.append(OutfitPart(g.label, g.prim, slots, g.template))
         return Outfit(key, name, fam, var, body_type(name), parts, rig if isinstance(rig, int) else 0)

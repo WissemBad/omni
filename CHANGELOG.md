@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- 007 First Light: the role of a texture (colour, emissive, mask, specular...) now comes from the material class itself
+  (its `.materialclass` resource lists what each generic slot means in that class) instead of the slot position and the
+  texture's file name. About one texture in ten of the materials checked changes role or is dropped: the class's black and
+  grey placeholder textures were taken for base colours, emissive maps for masks, and so on. The extraction now also
+  keeps the material classes (`MATE`).
 - Animations in the viewer: the sequences of a model and of the models it includes are listed and played on its
   skeleton (play/pause, scrub, speed, loop on by default). A player model starts on Garry's Mod's own idle
   (`idle_all_01`), *Aucune* shows the reference pose again. The Source animation files (`.mdl` and `.ani`, raw and

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from .config import CONFIG
 
-VERSION = 3
+VERSION = 4
 
 
 class TextureCatalog:
