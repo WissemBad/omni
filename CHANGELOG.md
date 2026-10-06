@@ -31,6 +31,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 
+- The viewer reported every material of an Unreal game as missing when the game has a content folder named `Materials`
+  (it took that folder for the addon root).
+- Starting a sound export failed with "'function' object is not subscriptable".
 - `uv sync` / `uv run` removed the Rust core installed by maturin and left an empty package that made the Rust badge
   and `/api/system` fail. The launcher uses `uv sync --inexact`, an incomplete module is reported as absent.
 

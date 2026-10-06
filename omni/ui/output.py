@@ -73,15 +73,18 @@ def _find_vtx(stem: Path) -> Path | None:
 
 
 def _asset_base(root: Path, rel: str) -> Path:
-    """Folder whose ``materials/`` serves a model: the closest parent that has one (a folder of several addons
-    keeps each addon's materials next to its models), else the root itself."""
-    d = (root / rel).parent
-    while True:
-        if (d / "materials").is_dir():
-            return d
-        if d == root or root not in d.parents:
-            return root
-        d = d.parent
+    """Folder whose ``materials/`` serves a model: the closest parent that is an addon (it has ``models/`` and
+    ``materials/``; a game folder of the same name as ``materials`` inside ``models/`` is not one), else the closest
+    parent with a ``materials/``, else the root itself."""
+    for need_models in (True, False):
+        d = (root / rel).parent
+        while True:
+            if (d / "materials").is_dir() and (not need_models or (d / "models").is_dir()):
+                return d
+            if d == root or root not in d.parents:
+                break
+            d = d.parent
+    return root
 
 
 def _within(root: Path, rel: str) -> Path:
