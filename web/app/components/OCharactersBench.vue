@@ -441,6 +441,9 @@ const TRIS = [
             class="min-w-0 flex-1"
             :ui="{ wrapper: 'min-w-0', name: 'truncate', description: 'truncate' }"
           />
+          <UTooltip v-if="(item as Entry).c.reward" text="Tenue de récompense">
+            <UIcon name="i-ri-trophy-line" class="size-4 shrink-0 text-warning" />
+          </UTooltip>
           <UTooltip v-if="(item as Entry).c.built" text="Playermodel créé">
             <UIcon name="i-ri-checkbox-circle-fill" class="size-4 shrink-0 text-success" />
           </UTooltip>
@@ -461,6 +464,7 @@ const TRIS = [
                 {{ titleCase(active.mission) }} · {{ roleLabel(active.role) }} · {{ bodyLabel(active.body) }}
                 <template v-if="meta"> · LOD {{ meta.lod }}</template>
               </p>
+              <p v-if="active.variation" class="truncate text-xs text-dimmed" title="Nom de la tenue dans le jeu">{{ active.variation }}</p>
             </WGlassCard>
           </div>
         </template>

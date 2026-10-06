@@ -87,7 +87,7 @@ class GlacierSource(Source):
             sig = self.archive._signature("TEMP") + [len(self.archive.index("TEMP")), self._names_sig()]
             try:
                 data = json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else None
-                if data and data.get("sig") == sig and data.get("version") == 1:
+                if data and data.get("sig") == sig and data.get("version") == 2:
                     self._characters = {c["id"]: c for c in data["items"]}
                     return list(self._characters.values())
             except (OSError, ValueError):
@@ -98,22 +98,28 @@ class GlacierSource(Source):
             for f, v, h, n in OutfitResolver(self).outfits():
                 if body_type(f):
                     fam[f].append({"v": v, "key": "%016X" % h, "name": n})
+            from .naming import bond_variations, known_missions, split_family, variation_of
+            from .schema import read_enums
+            bodies = {f: body_type(f) for f in fam}
+            missions = known_missions(list(fam), bodies)
+            variations = bond_variations(read_enums(self))
             out = []
             for f, vs in fam.items():
-                body = body_type(f)
-                toks = f[: f.rfind(body)].strip("_").split("_") if body else f.split("_")
-                kind, mission = toks[0], (toks[1] if len(toks) > 1 else "")
-                rest = toks[2:]
-                role = rest[0] if len(rest) > 1 else ""
-                title = " ".join(rest[1:] if role else rest).strip()
-                out.append({"id": f, "title": title or mission or f, "kind": kind, "mission": mission, "role": role,
-                            "body": body, "variants": sorted(vs, key=lambda x: x["v"])})
+                body = bodies[f]
+                s = split_family(f, body, missions)
+                item = {"id": f, "title": s["title"], "kind": s["kind"], "mission": s["mission"], "role": s["role"],
+                        "body": body, "reward": s["reward"], "variants": sorted(vs, key=lambda x: x["v"])}
+                var = variation_of(f, body, variations) if s["bond"] else None
+                if var:                                   # the game's own name of this Bond outfit
+                    item["variation"] = var[1]
+                    item["reward"] = item["reward"] or "reward" in var[1].lower()
+                out.append(item)
             self._characters = {c["id"]: c for c in sorted(out, key=lambda c: (c["mission"], c["role"], c["title"]))}
             try:
                 if not self._characters:
                     raise OSError("nothing found: not cached, the next call looks again")
                 cache.parent.mkdir(parents=True, exist_ok=True)
-                cache.write_text(json.dumps({"sig": sig, "version": 1, "items": list(self._characters.values())}),
+                cache.write_text(json.dumps({"sig": sig, "version": 2, "items": list(self._characters.values())}),
                                  encoding="utf-8")
             except OSError:
                 pass

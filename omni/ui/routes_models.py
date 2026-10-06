@@ -299,7 +299,7 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
         done = _built(sid)
 
         def keep(c, skip=""):
-            hay = f"{c['id']} {c['title']} {c['mission']} {c['role']}".lower()
+            hay = f"{c['id']} {c['title']} {c['mission']} {c['role']} {c.get('variation', '')}".lower()
             return (all(w in hay for w in words)
                     and (skip == "mission" or not mission or c["mission"] == mission)
                     and (skip == "role" or not role or c["role"] == role)

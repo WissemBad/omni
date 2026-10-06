@@ -54,6 +54,9 @@ DEFAULTS: dict = {
         "skip_stubs": True,          # skip bank copies of the first bytes of streamed music
         "languages": "all",          # all | english | neutral
     },
+    "texts": {
+        "locr_key": "",              # XTEA key of the game's localised texts (32 hex digits, several separated by commas); empty: texts stay enciphered
+    },
     "viewer": {
         "texture_size": 1024,        # textures of the 3D previews
     },

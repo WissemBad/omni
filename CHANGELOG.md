@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- 007 First Light: omni checks its reading of the game's entities against the game's own class schemas (`CPPT`, with the
+  blueprints `CBLU`). The four properties it reads by id (outfit parts and rig, body part mesh, material targets) are
+  confirmed at load, and over the 2,909 outfit templates 357,154 stored properties match the schemas with no type
+  mismatch (the rest are material parameters). A game update that renumbers them now shows as a warning instead of wrong
+  outfits. `omni schema [--audit N]` prints the report; the readers are in the Rust core (`schema.rs`).
+- Outfit names: Bond's outfits (`..._hero_bond_...`, wherever the words fall) and rewards are read correctly, a
+  reward outfit gets a trophy in the list, and an outfit whose name equals a member of the game's enumeration of Bond
+  variations (`bond_outfit_variations`, an `ENUM` resource) shows that name.
+- Localised texts (`LOCR`): the Rust core reads their structure (200 files, 15 languages, 126,735 entries) and decodes
+  them once a key is given (Settings, *Clé des textes du jeu*). The texts of 007 First Light are enciphered with a key
+  that is not the one of the earlier Hitman games, so they stay unreadable until that key is known; the display names of
+  outfits therefore remain the game's internal names for now.
+
 - 007 First Light: the role of a texture (colour, emissive, mask, specular...) now comes from the material class itself
   (its `.materialclass` resource lists what each generic slot means in that class) instead of the slot position and the
   texture's file name. About one texture in ten of the materials checked changes role or is dropped: the class's black and

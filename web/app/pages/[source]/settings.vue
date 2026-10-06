@@ -375,6 +375,9 @@ const MAINTENANCE = computed(() => [
             <UFormField label="Dossier de Garry’s Mod" description="Vide : le dossier Steam par défaut.">
               <UInput v-model="s.paths.gmod" class="w-full" placeholder="C:\Program Files (x86)\Steam\steamapps\common\GarrysMod" />
             </UFormField>
+            <UFormField v-if="s.texts" label="Clé des textes du jeu (LOCR)" description="32 chiffres hexadécimaux. Les textes d’affichage (noms de tenues, de lieux) sont chiffrés dans 007 First Light : sans clé, omni utilise les noms internes des tenues.">
+              <UInput v-model="s.texts.locr_key" class="w-full font-mono" placeholder="00112233445566778899aabbccddeeff" autocomplete="off" />
+            </UFormField>
             <UFormField label="Lecteur de sons (ce navigateur)">
               <div class="space-y-3">
                 <USlider v-model="player.volume" :min="0" :max="1" :step="0.05" />

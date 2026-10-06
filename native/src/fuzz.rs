@@ -1,7 +1,7 @@
 //! Malformed-input tests: every parser the game files go through must answer random and mutated bytes with an error
 //! (or nothing), never a panic. Deterministic (fixed seeds), quick enough for every `cargo test`.
 
-use crate::{aloc, audio, entity, texture, vtf, wwise};
+use crate::{aloc, audio, entity, locr, schema, texture, vtf, wwise};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 struct Rng(u64);
@@ -306,6 +306,20 @@ fn unreal_parsers_survive_garbage() {
     mate.extend(vec![0x41u8; 64]);
     fuzz("mate::slots", &mate, |b| {
         let _ = crate::mate::slots(b);
+    });
+    let c = locr::Cipher { key: locr::HITMAN_KEY, rounds: 32, big_endian: false };
+    let l = locr::tests::file(2, &[(1, "Black Tie"), (2, "Gilded suit")], &c);
+    fuzz("locr::parse", &l, |b| {
+        if let Ok(x) = locr::Locr::parse(b) {
+            let _ = x.find_key(&[locr::HITMAN_KEY]);
+            let _ = x.texts(0, &c);
+        }
+    });
+    let sch = schema::tests::bin1(&[0u8; 80], &["float32", "bool"]);
+    fuzz("schema", &sch, |b| {
+        let _ = schema::class_schema(b);
+        let _ = schema::blueprint_class(b);
+        let _ = schema::enum_def(b);
     });
     let mut meta = vec![0u8; 40];
     meta[24] = 1;

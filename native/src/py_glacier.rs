@@ -134,8 +134,54 @@ fn mate_slots(py: Python<'_>, data: &[u8]) -> Vec<(String, Option<String>)> {
     py.allow_threads(|| crate::mate::slots(data))
 }
 
+/// class_schema(data) -> [(CRC32 of the property name, type, has default)] of a CPPT (see `schema.rs`).
+#[pyfunction]
+fn class_schema(py: Python<'_>, data: &[u8]) -> PyResult<Vec<(u32, String, bool)>> {
+    py.allow_threads(|| crate::schema::class_schema(data))
+        .map(|v| v.into_iter().map(|p| (p.crc, p.ty, p.default)).collect())
+        .map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
+/// blueprint_class(data) -> class name of a CBLU.
+#[pyfunction]
+fn blueprint_class(py: Python<'_>, data: &[u8]) -> PyResult<String> {
+    py.allow_threads(|| crate::schema::blueprint_class(data)).map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
+/// enum_def(data) -> (name, [(member, value)], former names) of an ENUM.
+#[pyfunction]
+fn enum_def(py: Python<'_>, data: &[u8]) -> PyResult<(String, Vec<(String, i32)>, Vec<String>)> {
+    py.allow_threads(|| crate::schema::enum_def(data))
+        .map(|e| (e.name, e.members, e.legacy))
+        .map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
+/// locr_structure(data) -> [entries per language] of a LOCR (readable without a key).
+#[pyfunction]
+fn locr_structure(py: Python<'_>, data: &[u8]) -> PyResult<Vec<usize>> {
+    py.allow_threads(|| crate::locr::Locr::parse(data))
+        .map(|l| l.languages.iter().map(Vec::len).collect())
+        .map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
+/// locr_read(data, keys) -> None while no key reads the file, else [[(text id, text)] per language].
+/// `keys` are 4-word XTEA keys, tried in order (see `locr.rs`).
+#[pyfunction]
+fn locr_read(py: Python<'_>, data: &[u8], keys: Vec<[u32; 4]>) -> PyResult<Option<Vec<Vec<(u32, String)>>>> {
+    py.allow_threads(|| {
+        let l = crate::locr::Locr::parse(data)?;
+        Ok(l.find_key(&keys).map(|c| (0..l.languages.len()).map(|i| l.texts(i, &c)).collect()))
+    })
+    .map_err(|e: String| pyo3::exceptions::PyValueError::new_err(e))
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<GlacierStore>()?;
+    m.add_function(wrap_pyfunction!(class_schema, m)?)?;
+    m.add_function(wrap_pyfunction!(blueprint_class, m)?)?;
+    m.add_function(wrap_pyfunction!(enum_def, m)?)?;
+    m.add_function(wrap_pyfunction!(locr_structure, m)?)?;
+    m.add_function(wrap_pyfunction!(locr_read, m)?)?;
     m.add_function(wrap_pyfunction!(mate_slots, m)?)?;
     m.add_function(wrap_pyfunction!(wem_labels, m)?)?;
     m.add_function(wrap_pyfunction!(meta_refs_flags, m)?)?;

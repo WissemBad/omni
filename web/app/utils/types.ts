@@ -50,6 +50,10 @@ export interface Character {
   body: string
   count: number
   built?: boolean
+  /** reward outfit (name or the game's own variation list) */
+  reward?: boolean
+  /** the game's name for this outfit (its variation enumeration), when it has one */
+  variation?: string
 }
 
 export interface CharacterPage extends Page<Character> {
@@ -440,6 +444,7 @@ export interface Settings {
   }
   characters: { max_tris: number; preview_size: number }
   sounds: { format: string; workers: number; tags: boolean; skip_stubs: boolean; languages: string }
+  texts?: { locr_key: string }
   viewer: { texture_size: number }
   updates: { check: boolean; token: string }
 }

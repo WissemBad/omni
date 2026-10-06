@@ -17,6 +17,7 @@ materials (-> Source skins) and sometimes other meshes (-> bodygroups).
 """
 from __future__ import annotations
 
+import logging
 import re
 import struct
 import zlib
@@ -24,11 +25,23 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from .entity import EntityReader, Prop, parse_bin1, _array, _zstring
+from .schema import SchemaBook
+
+log = logging.getLogger("omni.outfit")
 
 PRIM_PROP = 0xF7C7EF8D       # body part geometry (ZRuntimeResourceID -> .weightedprim)
 TARGETS_PROP = 0xCF7517E8    # material entity -> geometry entities it applies to
 PARTS_PROP = 0xDC933FAB      # outfit root -> visible body parts
 RIG_PROP = 0x42190F15        # outfit root -> BORG
+
+# the properties read by id, with the class that owns them and their type in the game's class schemas (CPPT):
+# checked once against the schemas of the game being read (see schema.SchemaBook.verify)
+EXPECTED = {
+    "outfit parts": ("zhumanoidoutfitentity", PARTS_PROP, "TArray<ZEntityReference>"),
+    "outfit rig": ("zhumanoidoutfitentity", RIG_PROP, "ZRuntimeResourceID"),
+    "part mesh": ("zbodypartentity", PRIM_PROP, "ZRuntimeResourceID"),
+    "material targets": ("zrendermaterialentity", TARGETS_PROP, "TArray<ZEntityReference>"),
+}
 
 _VARIANT = re.compile(r"^(.*)_v(\d+)$")
 _BODY = re.compile(r"_(male_reg|male_large|male_lc|male_maincast|fem_reg|fem_lc|fem_maincast)(?:_|$)")
@@ -107,6 +120,17 @@ class OutfitResolver:
         self._slot_paths: dict[int, dict[int, int]] = {}
         self._kinds: dict[int, str] = {}
         self._aspects: dict[int, list[int]] = {}
+        self.schema = SchemaBook(source)
+        self._verified: list[str] | None = None
+
+    def problems(self) -> list[str]:
+        """What does not match the game's class schemas in the properties read by id (empty: all consistent). A game
+        update that renumbers or retypes them shows here instead of as wrong outfits."""
+        if self._verified is None:
+            self._verified = self.schema.verify(EXPECTED) if self.schema.classes else []
+            for p in self._verified:
+                log.warning("outfit properties: %s", p)
+        return self._verified
 
     # ---- catalogue -----------------------------------------------------------------
     def outfits(self) -> list[tuple[str, int, int, str]]:
@@ -258,6 +282,7 @@ class OutfitResolver:
         return geoms, mats + local
 
     def resolve(self, key: int) -> Outfit:
+        self.problems()
         full = self.source.names.name(key)
         name = outfit_name(full.lower())
         fam, var = split_variant(name)

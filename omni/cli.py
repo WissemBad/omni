@@ -217,6 +217,38 @@ def cmd_native(a):
     print(json.dumps(native.status(), indent=1))
 
 
+def cmd_schema(a):
+    """What the game's own type data says about omni's reading of it: class schemas, enums, texts."""
+    from .core import settings
+    from .sources.glacier.outfit import OutfitResolver
+    from .sources.glacier.schema import locr_status, read_enums
+    src = _source(a.source)
+    if not hasattr(src.archive, "index"):
+        raise SystemExit(f"{src.title}: no Glacier resources")
+    r = OutfitResolver(src)
+    print(f"class schemas: {len(r.schema.classes)} classes, {len(r.schema.types)} distinct properties")
+    orphan = r.schema.without_schema()
+    print(f"blueprints without a class schema: {len(orphan)}" + (f" ({', '.join(orphan[:5])}...)" if orphan else ""))
+    bad = r.problems()
+    print("properties read by id:", "all consistent with the schemas" if not bad else "")
+    for p in bad:
+        print("  !", p)
+    enums = read_enums(src)
+    print(f"enums: {len(enums)} ({sum(len(e['members']) for e in enums.values())} members)")
+    st = locr_status(src, settings.get("texts", "locr_key"))
+    print(f"texts: {st['files']} files, {st['languages']} languages, {st['entries']} entries: {st['state']}")
+    if st["state"] != "lisible":
+        print("  the texts are enciphered; set Settings > texts.locr_key (32 hex digits) once the game's key is known")
+    if a.audit:
+        import collections
+        tot = collections.Counter()
+        for _f, _v, h, _n in r.outfits()[: a.audit]:
+            t = r.er.template(h)
+            if t:
+                tot.update(r.schema.audit([p for s in t.subs for p in s.props + s.post_props] + [o.prop for o in t.overrides]))
+        print(f"outfit properties checked: {dict(tot)} (unknown = material parameters and script values)")
+
+
 def cmd_home(a):
     from .core import migrate
     from .core.config import default_home, store_home
@@ -311,6 +343,9 @@ def main(argv=None):
     hm.set_defaults(fn=cmd_home)
     mg = sub.add_parser("migrate", help="bring the data of an earlier layout (a folder with workspace/, tools/) into the Omni folder")
     mg.add_argument("old"); mg.add_argument("--dry-run", action="store_true"); mg.set_defaults(fn=cmd_migrate)
+    sc = sub.add_parser("schema", help="check omni's reading of the game's entities against the game's own class schemas, enums, texts")
+    sc.add_argument("--audit", type=int, default=0, metavar="N", help="also check the properties of N outfit templates")
+    sc.set_defaults(fn=cmd_schema)
     nv = sub.add_parser("native", help="status of the Rust core; --build compiles and installs it")
     nv.add_argument("--build", action="store_true")
     nv.set_defaults(fn=cmd_native)
