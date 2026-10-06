@@ -102,6 +102,9 @@ def status() -> dict:
     game = CONFIG.game or detect_game()
     pk = game_packages(game) if game else None
     a, n, g, s = assets_ok(), names_ok(), gmod_ok(), studiomdl_ok()
+    if not a["ok"] and pk:
+        # nothing extracted, but the installed game's packages are read in place: no extraction needed
+        a = {"path": str(pk[0]), "ok": True, "chunks": [], "direct": True}
     free = shutil.disk_usage(CONFIG.root if CONFIG.root.exists() else CONFIG.root.parent).free if (CONFIG.root.exists() or CONFIG.root.parent.exists()) else 0
     return {
         "game": {"path": str(game) if game else "", "ok": bool(pk), "packages": [p.name for p in pk[1]] if pk else [],

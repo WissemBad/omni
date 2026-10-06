@@ -325,5 +325,6 @@ pub fn omni_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(mesh_volume, m)?)?;
     crate::py_media::register(m)?;
     crate::py_unreal::register(m)?;
+    crate::py_glacier::register(m)?;
     Ok(())
 }

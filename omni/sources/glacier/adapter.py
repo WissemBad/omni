@@ -53,10 +53,25 @@ class GlacierSource(Source):
     title = "007 First Light"
     capabilities = ("props", "characters", "textures", "sounds")
     description = "Glacier 2 (IO Interactive)"
+    # format variant of the game (Hitman 3 subclasses override these)
+    _parse_prim = staticmethod(parse_prim)
+    _parse_mati = staticmethod(parse_mati)
+
+    @staticmethod
+    def ioi(path: str) -> int:
+        from ...core.naming import ioi_hash
+        return ioi_hash(path)
 
     def __init__(self, config: Config = CONFIG):
         self.config = config
         self.archive = Archive(config.assets_sorted, config.cache)
+        if not self.archive.chunks and config.game:
+            # no extracted tree but the game is installed: its packages are read in place
+            from ...core.setup import game_packages
+            from .store import StoreArchive
+            found = game_packages(config.game)
+            if found:
+                self.archive = StoreArchive(found[1])
         self.names = Names(config.hash_list, config.names_db)
         self._shared: frozenset[str] | None = None
 
@@ -125,6 +140,9 @@ class GlacierSource(Source):
             except Exception:  # noqa: BLE001 - stale or corrupt cache: rebuild
                 pass
         refs = iter_sounds(self, progress)
+        if hasattr(self.archive, "store"):
+            from .store import package_refs
+            refs = package_refs(refs, self.archive.packages)
         if not refs:
             return refs                          # an empty list is never cached (names or resources not ready yet)
         try:
@@ -196,7 +214,7 @@ class GlacierSource(Source):
             info = self.info(h)
             flags = 0
             try:
-                with open(p, "rb") as f:
+                with p.open("rb") as f:
                     (ho,) = struct.unpack("<Q", f.read(8))
                     f.seek(ho)
                     flags = struct.unpack("<BBHI", f.read(8))[3]
@@ -233,7 +251,7 @@ class GlacierSource(Source):
             mat.flags.add("missing")
             return mat
         meta = self.archive.meta(path)
-        mt = parse_mati(path.read_bytes())
+        mt = self._parse_mati(path.read_bytes())
         if not mt.ok or meta is None:
             mat.flags.add("unparsed")
             return mat
@@ -334,7 +352,6 @@ class GlacierSource(Source):
         import struct
         from concurrent.futures import ThreadPoolExecutor
         from ...native import N
-        from .mati import parse_mati
         from .texture import FORMATS
         a = self.archive
         text, mati, prim = a.index("TEXT"), a.index("MATI"), a.index("PRIM")
@@ -342,7 +359,7 @@ class GlacierSource(Source):
         def head(item):
             h, p = item
             try:
-                with open(p, "rb") as f:
+                with p.open("rb") as f:
                     d = f.read(0x98)
                 w, hh, fmt, mips = struct.unpack_from("<HHHH", d, 0x0C)
                 return h, w, hh, FORMATS.get(fmt, ("0x%02X" % fmt, 0))[0], mips, p.stat().st_size
@@ -355,7 +372,7 @@ class GlacierSource(Source):
         def mat(item):
             h, p = item
             try:
-                return h, parse_mati(p.read_bytes())
+                return h, self._parse_mati(p.read_bytes())
             except Exception:  # noqa: BLE001
                 return h, None
         with ThreadPoolExecutor(8) as ex:
@@ -380,7 +397,7 @@ class GlacierSource(Source):
         progress(f"{len(materials)} materials, {len(tex_mat)} texture slots")
 
         paths = list(prim.items())
-        refs_all = N.meta_refs_many([str(p) for _h, p in paths])
+        refs_all = a.refs_many([p for _h, p in paths]) if hasattr(a, "refs_many") else             N.meta_refs_many([str(p) for _h, p in paths])
         mat_model = []
         for (h, _p), refs in zip(paths, refs_all):
             for rh in refs or []:
@@ -458,7 +475,7 @@ class GlacierSource(Source):
         if path is None:
             raise FileNotFoundError("PRIM %016X not found" % h)
         info = self.info(h)
-        prim = parse_prim(path.read_bytes())
+        prim = self._parse_prim(path.read_bytes())
         mrefs = self.material_refs(h)
         materials: dict[str, Material] = {}
         subs: list[SubMesh] = []
@@ -494,7 +511,6 @@ class GlacierSource(Source):
     def collision_refs(self, h: int) -> dict:
         """ALOC resources of a mesh, found by name: ``[<prim path>].coll`` (static) and
         ``[<prim path>^<leaf>_dynamic.prim].coll`` (the shape used when the object is simulated)."""
-        from ...core.naming import ioi_hash
         name = self.names.name(h)
         out = {}
         if not name or "]" not in name:
@@ -502,7 +518,7 @@ class GlacierSource(Source):
         base = name[: name.rfind("]") + 1]                       # "[assembly:/.../leaf.prim]"
         leaf = base[:-1].rsplit("/", 1)[-1].rsplit(".", 1)[0]
         for kind, path in (("static", base + ".coll"), ("dynamic", f"{base[:-1]}^{leaf}_dynamic.prim].coll")):
-            r = ioi_hash(path)
+            r = self.ioi(path)
             if self.archive.find("ALOC", r) is not None:
                 out[kind] = r
         return out

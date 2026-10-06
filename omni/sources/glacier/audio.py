@@ -220,7 +220,7 @@ def iter_sounds(source, progress=print) -> list[SoundRef]:
     refs: list[SoundRef] = []
 
     def label_of(path, offset=0, size=-1):
-        with open(path, "rb") as f:
+        with path.open("rb") as f:                       # an extracted file or a package resource
             return _label(f, offset, size)
 
     # labels of every standalone media (cheap: chunk headers only), in parallel

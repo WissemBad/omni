@@ -157,7 +157,7 @@ def biggest_first(source_name: str, keys: list[str]) -> list[str]:
         size = {}
         for k in keys:
             p = archive.find("PRIM", int(k, 16))
-            size[k] = os.stat(p).st_size if p is not None else 0
+            size[k] = p.stat().st_size if p is not None else 0
         return sorted(keys, key=lambda k: -size[k])
     except Exception as e:  # noqa: BLE001 - an optimisation only
         log.warning("batch order unchanged: %s", e)

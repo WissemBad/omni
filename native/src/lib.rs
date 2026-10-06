@@ -25,6 +25,7 @@ pub mod par;
 #[cfg(test)]
 mod fuzz;
 pub mod rpkg;
+pub mod rpkg_store;
 pub mod unreal;
 
 #[cfg(feature = "python")]
@@ -33,3 +34,5 @@ mod py;
 mod py_media;
 #[cfg(feature = "python")]
 mod py_unreal;
+#[cfg(feature = "python")]
+mod py_glacier;

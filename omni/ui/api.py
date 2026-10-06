@@ -171,7 +171,7 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         """Slow first requests (outfit index, catalogs) are computed in the background at launch."""
         def run():
             from ..core import setup
-            glacier_ready = setup.assets_ok()["ok"] and setup.names_ok()["ok"]
+            glacier_ready = setup.status()["ready"]
             for sid in all_ids():
                 if sid == "007fl" and not glacier_ready:
                     continue                            # not set up yet: nothing to index
