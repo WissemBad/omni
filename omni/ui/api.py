@@ -389,7 +389,36 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
 
     @app.post("/api/settings/reset")
     def settings_reset():
-        return {"values": settings.reset(), "defaults": settings.DEFAULTS}
+        """Reset 1: the settings (and the remembered window and viewer folders), nothing else."""
+        from ..core import reset
+        reset.reset_settings()
+        return {"values": settings.load(), "defaults": settings.DEFAULTS}
+
+    @app.get("/api/reset/data")
+    def reset_data_preview(exports: bool = True):
+        """What a data reset would remove."""
+        from ..core import reset
+        targets = reset.data_targets(exports=exports)
+        return {"count": len(targets), "exports": str(CONFIG.exports) if exports else "", "bytes": sum(_dir_size(p, 2.0) if p.is_dir() else p.stat().st_size for p in targets[:200])}
+
+    @app.post("/api/reset/data")
+    def reset_data(body: dict):
+        """Reset 2: the exports, the conversions and every cache. Settings, game library, tools and names stay."""
+        from ..core import reset
+        if body.get("confirm") is not True:
+            raise HTTPException(400, "Confirmation requise")
+        exports = bool(body.get("exports", True))
+        job = jobs.create("maintenance", "Réinitialisation des données", "", cancellable=False)
+
+        def run(job):
+            reset_runtime(purge=False)                 # catalogs and caches release their files first
+            res = reset.reset_data(exports=exports, progress=lambda d, t: jobs.count(job, d, t))
+            for line in res["errors"][:20]:
+                jobs.log(job, line)
+            reset_runtime(purge=False)
+            return {"supprimés": res["removed"], "échecs": res["failed"]}
+        jobs.run(job, run)
+        return {"job": job["id"]}
 
     # ------------------------------------------------------------------------------------------ folders
     from ..core import config as cfgmod

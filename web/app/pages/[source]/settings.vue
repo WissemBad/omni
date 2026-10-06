@@ -62,9 +62,10 @@ async function checkNow() {
 async function resetAll() {
   if (
     !(await confirm({
-      title: 'Rétablir les réglages d’origine ?',
-      description: 'Tous les réglages reviennent à leur valeur par défaut.',
-      confirmLabel: 'Rétablir',
+      title: 'Réinitialiser les réglages ?',
+      description:
+        'Tous les réglages (qualité, dossiers, fenêtre…) reviennent à leur valeur par défaut. Tes exports, conversions et jeux ne sont pas touchés.',
+      confirmLabel: 'Réinitialiser les réglages',
       destructive: true,
     }))
   )
@@ -72,7 +73,26 @@ async function resetAll() {
   ready = false
   await reset()
   s.value = structuredClone(toRaw(values.value!))
-  toast.add({ title: 'Réglages d’origine rétablis', icon: 'i-ri-restart-line' })
+  toast.add({ title: 'Réglages réinitialisés', icon: 'i-ri-restart-line' })
+}
+async function resetData() {
+  const p = await api<{ count: number; exports: string; bytes: number }>('/reset/data').catch(
+    () => null,
+  )
+  if (
+    !(await confirm({
+      title: 'Réinitialiser les données ?',
+      description: `Supprime tous les exports (addon Garry’s Mod, glTF, sons, textures${p?.exports ? ` : ${p.exports}` : ''}), les conversions, les aperçus et les caches${p ? ` (${p.count} éléments, au moins ${fmtBytes(p.bytes)})` : ''}. Les réglages, la bibliothèque de jeux, les outils et les noms sont gardés. Ferme Garry’s Mod avant. Irréversible.`,
+      confirmLabel: 'Supprimer les données',
+      destructive: true,
+    }))
+  )
+    return
+  await startJob('/reset/data', {
+    body: { confirm: true, exports: true },
+    title: 'Réinitialisation des données',
+    open: true,
+  })
 }
 
 const player = usePersisted('sound-player', { volume: 0.8, loop: false, next: true })
@@ -272,7 +292,7 @@ const MAINTENANCE = computed(() => [
           <p class="text-sm text-muted">Enregistrés sur ce poste et appliqués à toutes les conversions, exports et aperçus.</p>
         </div>
         <UBadge :label="saving ? 'Enregistrement…' : 'Enregistré'" :color="saving ? 'neutral' : 'success'" variant="subtle" :icon="saving ? 'i-ri-loader-4-line' : 'i-ri-check-line'" />
-        <UButton label="Réglages d’origine" icon="i-ri-restart-line" color="neutral" variant="outline" size="sm" @click="resetAll" />
+        <UButton label="Réinitialiser les réglages" icon="i-ri-restart-line" color="neutral" variant="outline" size="sm" @click="resetAll" />
       </div>
 
       <UAlert v-if="failed" color="error" variant="subtle" icon="i-ri-error-warning-line" title="Réglages indisponibles" :description="failed" />
@@ -412,6 +432,7 @@ const MAINTENANCE = computed(() => [
           <div class="flex flex-wrap gap-2">
             <UButton v-for="m in MAINTENANCE" :key="m.label" :label="m.label" :icon="m.icon" size="sm" color="neutral" variant="outline" @click="m.run()" />
             <UButton label="Vider les aperçus" icon="i-ri-delete-bin-line" size="sm" color="neutral" variant="outline" @click="clearPreviews" />
+            <UButton label="Réinitialiser les données" icon="i-ri-eraser-line" size="sm" color="error" variant="outline" @click="resetData" />
             <UButton label="Arrêter omni" icon="i-ri-shut-down-line" size="sm" color="error" variant="soft" class="ml-auto" @click="stop" />
           </div>
         </UCard>

@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- Two separate resets in the settings: *Réinitialiser les réglages* (settings, window, viewer folders) and *Réinitialiser
+  les données* (exports, conversions, previews, caches, catalogs; the game library, tools and names are kept).
 - Option to turn the levels of detail off (Settings, `--no-lods` on the command line): only the highest level of the
   game's model is kept, without `$lod` models.
 - The folder of the models and materials inside the addon is a free setting (`omni`, `wissem/omni`, `import/wissem`...):
@@ -24,6 +26,11 @@ All notable changes to this project are documented here. The format follows [Kee
 - The prop catalog (11 s instead of 4 minutes), the texture catalog (12 s instead of 2.5 minutes), the sound list
   (25 s instead of 5 minutes) and the hashing of sounds before an export read the game's files in parallel in the Rust
   core. The VTF writer is the core's too.
+
+### Fixed
+
+- `uv sync` / `uv run` removed the Rust core installed by maturin and left an empty package that made the Rust badge
+  and `/api/system` fail. The launcher uses `uv sync --inexact`, an incomplete module is reported as absent.
 
 ### Removed
 

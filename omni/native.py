@@ -57,6 +57,8 @@ class _Missing:
 
 try:
     import omni_native as _raw
+    if not hasattr(_raw, "version"):        # an emptied package folder (uv sync removed the extension): not the core
+        raise ImportError("omni_native is installed without its extension module (uv sync removes it: use --inexact)")
     N = _Guarded(_raw)
 except ImportError as e:  # pragma: no cover - depends on the local build
     NATIVE_ERROR = str(e)

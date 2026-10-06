@@ -11,14 +11,14 @@ if errorlevel 1 (
   exit /b 1
 )
 
-uv sync --quiet
+uv sync --quiet --inexact
 if errorlevel 1 (
   echo [omni] uv sync a echoue.
   pause
   exit /b 1
 )
 
-uv run --no-sync python -c "import omni_native" >nul 2>nul
+uv run --no-sync python -c "import omni_native as m; m.version" >nul 2>nul
 if errorlevel 1 (
   where cargo >nul 2>nul
   if errorlevel 1 (

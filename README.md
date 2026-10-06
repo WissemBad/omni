@@ -37,10 +37,10 @@ The application itself holds no data. An older data folder is moved into the new
 Requirements: [uv](https://docs.astral.sh/uv/), [Bun](https://bun.sh), Rust (rustup) and a token with `read:packages` in your user `.npmrc` for `@wissem-industries/ui`.
 
 ```powershell
-uv sync
-uv run python -m omni native --build     # Rust core
+uv sync --inexact                        # --inexact keeps the Rust core that is installed next
+uv run --no-sync python -m omni native --build     # Rust core
 cd web; bun install; bun run build; cd ..
-.\Omni.cmd                               # or: uv run python -m omni app
+.\Omni.cmd                               # or: uv run --no-sync python -m omni app
 ```
 
 Checks:
@@ -61,7 +61,7 @@ Package locally with `uv run --no-sync pyinstaller packaging/omni.spec --noconfi
 Versions follow Semantic Versioning and changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ```powershell
-uv run python scripts/release.py <x.y.z>
+uv run --no-sync python scripts/release.py <x.y.z>
 ```
 
 Merge the `chore(release): vX.Y.Z` pull request, then push the `vX.Y.Z` tag: the pipeline builds the installer and publishes the release.

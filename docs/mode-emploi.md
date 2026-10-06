@@ -45,7 +45,7 @@ Un seul gros travail tourne à la fois, les autres attendent dans la file. Ferme
 
 ## En ligne de commande
 
-`Omni.exe <commande>` (depuis les sources : `uv run python -m omni <commande>`) :
+`Omni.exe <commande>` (depuis les sources : `uv run --no-sync python -m omni <commande>`) :
 
 ```powershell
 Omni.exe home                     # où sont mes fichiers

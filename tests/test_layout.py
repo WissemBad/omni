@@ -172,3 +172,36 @@ def test_lod_option_reaches_the_build_options():
     assert settings.DEFAULTS["props"]["lods"] is True
     assert make_options(apply_settings=False).lods is True
     assert make_options(apply_settings=False, lods=False).lods is False
+
+
+def test_data_reset_keeps_settings_library_tools_and_names(tmp_path):
+    from omni.core import reset
+    cfg = _cfg(tmp_path)
+    ws = cfg.workspace
+    keep = [ws / "config" / "settings.json", ws / "config" / "games.json", ws / "tools" / "studiomdl-ce" / "x.exe",
+            ws / "names" / "names.sqlite", ws / "games" / "g" / "state.json", ws / "state" / "jobs.sqlite"]
+    drop = [ws / "cache" / "memo.sqlite", ws / "preview" / "a.glb", ws / "sandbox" / "modelsrc" / "m.smd", ws / "reports" / "r.jsonl",
+            ws / "games" / "g" / "catalog.sqlite", ws / "games" / "g" / "textures.sqlite", ws / "games" / "g" / "characters.json",
+            cfg.addon_dir("g") / "models" / "a.mdl", cfg.gltf_dir("g") / "a.glb", cfg.sounds_dir("g") / "x.ogg"]
+    for f in keep + drop:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("x", encoding="utf-8")
+    res = reset.reset_data(cfg, exports=False)
+    assert res["failed"] == 0 and cfg.addon_dir("g").joinpath("models", "a.mdl").exists() and cfg.gltf_dir("g").joinpath("a.glb").exists()
+    assert not (ws / "cache").exists() and not (ws / "games" / "g" / "catalog.sqlite").exists()
+    res = reset.reset_data(cfg)
+    assert res["failed"] == 0 and cfg.addon_dir("g").is_dir() and not list(cfg.addon_dir("g").iterdir())
+    assert not cfg.gltf_dir("g").exists() and not cfg.sounds_dir("g").exists()
+    assert all(f.exists() for f in keep)
+
+
+def test_settings_reset_forgets_window_and_viewer_roots(tmp_path, monkeypatch):
+    from omni.core import reset, settings
+    cfg = _cfg(tmp_path)
+    monkeypatch.setattr(settings, "_file", lambda: cfg.settings_file)
+    monkeypatch.setattr(settings, "apply", lambda s=None: None)
+    cfg.config_dir.mkdir(parents=True)
+    for n in ("settings.json", "window.json", "viewer_roots.json", "games.json"):
+        (cfg.config_dir / n).write_text("{}", encoding="utf-8")
+    reset.reset_settings(cfg)
+    assert [p.name for p in cfg.config_dir.iterdir()] == ["games.json"]
