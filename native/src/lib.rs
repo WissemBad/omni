@@ -11,6 +11,7 @@
 pub mod aloc;
 pub mod audio;
 pub mod entity;
+pub mod eta;
 pub mod geom;
 pub mod lbs;
 pub mod skin;
@@ -32,6 +33,8 @@ pub mod unreal;
 mod py;
 #[cfg(feature = "python")]
 mod py_media;
+#[cfg(feature = "python")]
+mod py_eta;
 #[cfg(feature = "python")]
 mod py_unreal;
 #[cfg(feature = "python")]

@@ -232,6 +232,8 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
 
         def run(job):
             from ..pipeline import run_batch
+            st = jobs.stager(job, 1 + bool(blend) + bool(gltf))
+            st("Conversion pour GMod")
 
             def on_result(r):
                 jobs.result(job, {"key": r["key"], "status": r["status"], "model": r.get("model", ""),
@@ -239,15 +241,16 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
                                   "seconds": r.get("seconds", {}).get("total", 0)})
             stats = run_batch(sid, req.keys, workers, opts["physics"], on_result=on_result, collision=opts["collision"],
                               lossless_normals=opts["lossless_normals"], tex_quality=opts["tex_quality"],
-                              cancel=jobs.cancel_event(job))
+                              cancel=jobs.cancel_event(job), on_plan=lambda sizes, w: jobs.plan(job, sizes, w))
             if blend:
                 from ..targets.blender.export import export_blends
-                jobs.log(job, "Génération des .blend…")
-                stats["blends"] = len(export_blends(src, req.keys))
+                count = st("Préparation des .blend", len(req.keys))
+                stats["blends"] = len(export_blends(src, req.keys, progress=count,
+                                                    on_blender=lambda: st("Blender : écriture des .blend")))
             if gltf:
                 from ..targets.gltf.export import export_models
-                jobs.log(job, "Export glTF (.glb)…")
-                g = export_models(src, req.keys, cancel=jobs.cancel_event(job))
+                count = st("Export glTF (.glb)", len(req.keys))
+                g = export_models(src, req.keys, progress=count, cancel=jobs.cancel_event(job))
                 stats["gltf"], stats["gltf_folder"] = g["written"], g["folder"]
                 for k, e in g["failed"][:20]:
                     jobs.log(job, f"glTF {k}: {e}")
@@ -270,7 +273,9 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
 
         def run(job):
             from ..targets.gltf.export import export_models
-            g = export_models(src, req.keys, progress=lambda d, t: jobs.count(job, d, t), cancel=jobs.cancel_event(job))
+            count = jobs.stager(job, 1)("Export glTF (.glb)", len(req.keys))
+            g = export_models(src, req.keys, progress=lambda d, t: (jobs.count(job, d, t), count(d, t)),
+                              cancel=jobs.cancel_event(job))
             for k, e in g["failed"][:50]:
                 jobs.log(job, f"{k}: {e}")
             return {"écrits": g["written"], "échecs": len(g["failed"]), "dossier": g["folder"]}
@@ -472,6 +477,7 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
             # families are independent (own materials folder, own sandbox model; the registry is locked):
             # built side by side like props. A playermodel uses more memory than a prop: at most PM_WORKERS.
             workers = min(clamp_workers(st["props"]["workers"]), PM_WORKERS)
+            jobs.plan(job, {i: max(len(every[i].get("variants", [])), 1) for i in ids_}, min(workers, len(ids_)))
             run_pm_batch(sid, ids_, workers, {"max_tris": st["characters"]["max_tris"],
                                               "tex_quality": req.tex_quality or st["textures"]["quality"],
                                               "lossless_normals": st["textures"]["lossless_normals"]},

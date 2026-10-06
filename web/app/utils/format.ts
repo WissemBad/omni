@@ -19,6 +19,17 @@ export function fmtDuration(seconds: number | string): string {
   return m ? `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}` : `${s.toFixed(1)} s`
 }
 
+/** Remaining time, rounded the way people read it ("≈ 12 min restantes"). */
+export function fmtEta(seconds: number | null | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds)) return 'estimation en cours…'
+  if (seconds < 5) return 'quelques secondes'
+  if (seconds < 90) return `≈ ${Math.round(seconds / 5) * 5} s restantes`
+  if (seconds < 5400) return `≈ ${Math.round(seconds / 60)} min restantes`
+  const h = Math.floor(seconds / 3600)
+  const m = Math.round((seconds % 3600) / 600) * 10
+  return m === 60 ? `≈ ${h + 1} h restantes` : `≈ ${h} h ${String(m).padStart(2, '0')} restantes`
+}
+
 export const leaf = (path: string) => path.split('/').pop() ?? path
 export const parent = (path: string) => path.split('/').slice(0, -1).join('/')
 

@@ -108,11 +108,13 @@ def register(app: FastAPI, *, jobs, need) -> None:
         def run(job):
             from ..targets.audio.export import export_sounds
             say = lambda m: jobs.log(job, m)  # noqa: E731
+            st = jobs.stager(job, 3)
+            st("Liste des sons")
             refs = src.list_sounds(progress=say)
             return export_sounds(refs, root_of(sid, req.folder or fmt), fmt, req.workers or st["workers"], req.match, 0, progress=say,
                                  tags=st["tags"], skip_stubs=st["skip_stubs"], languages=req.languages or st["languages"],
                                  cancel=jobs.cancel_event(job), on_count=lambda d, t: jobs.count(job, d, t),
-                                 force=req.force, clean=req.clean)
+                                 force=req.force, clean=req.clean, stage=st)
         jobs.run(job, run)
         return {"job": job["id"]}
     jobs.starters["sounds"] = start_sounds

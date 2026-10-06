@@ -177,13 +177,15 @@ def _hash(ref: SoundRef):
 def export_sounds(refs: list[SoundRef], out: Path, fmt: str = "auto", workers: int | None = None,
                   match: str = "", limit: int = 0, progress=print, tags: bool = True, skip_stubs: bool = True,
                   languages: str = "all", cancel=None, on_count=None, force: bool = False,
-                  clean: bool = False) -> dict:
-    """``on_count(done, total)`` follows the conversion; ``cancel`` (threading.Event) stops it between files.
+                  clean: bool = False, stage=None) -> dict:
+    """``stage(label, total)`` (optional) opens a named step and returns its ``count(done, total)``; ``on_count(done,
+    total)`` follows the conversion; ``cancel`` (threading.Event) stops it between files.
     ``force`` rewrites files already exported (new tags, new names); ``clean`` then removes the audio files of
     the folder the new index does not list (left by an earlier naming)."""
     if fmt not in FORMATS:
         raise ValueError(f"format must be one of {FORMATS}")
     t0 = time.perf_counter()
+    step = stage or (lambda label, total=0: (lambda *a: None))
     if match:
         rx = re.compile(re.escape(match), re.I)
         refs = [r for r in refs if rx.search(r.path)]
@@ -198,8 +200,13 @@ def export_sounds(refs: list[SoundRef], out: Path, fmt: str = "auto", workers: i
     for r in refs:
         keys.setdefault((r.file, r.offset, r.size), r)
     progress(f"hashing {len(keys)} media...")
+    count = step("Empreintes des médias", len(keys))
+    digest = {}
     with ThreadPoolExecutor(min(32, workers * 2)) as ex:
-        digest = dict(zip(keys, ex.map(_hash, keys.values(), chunksize=64)))
+        for i, (k, d) in enumerate(zip(keys, ex.map(_hash, keys.values(), chunksize=64)), 1):
+            digest[k] = d
+            if i % 256 == 0 or i == len(keys):
+                count(i, len(keys))
     stubs = {k for k, (_sha, info) in digest.items() if skip_stubs and is_stub(info)}
     # media that are not audio (Wwise plugin data such as convolution impulse responses: "PLUG" blocks)
     other = {k for k, (_sha, info) in digest.items() if info is None}
@@ -228,6 +235,7 @@ def export_sounds(refs: list[SoundRef], out: Path, fmt: str = "auto", workers: i
     # 3 - convert
     # processes, not threads: each has its own core instance and nothing is serialised by the GIL
     progress(f"converting {len(plan)} sounds with {workers} processes (Rust core)")
+    count = step("Conversion des sons", len(plan))
     rows, errors, done = [], [], 0
     pool = ProcessPoolExecutor(workers)
     size = 64
@@ -259,6 +267,7 @@ def export_sounds(refs: list[SoundRef], out: Path, fmt: str = "auto", workers: i
                              "aliases": " | ".join(sorted({r.path for r in rs} - {rs[0].path})),
                              "title": m.get("title", ""), "album": m.get("album", ""), "genre": m.get("genre", ""),
                              "language": m.get("language", "")})
+            count(done, len(plan))
             if on_count:
                 on_count(done, len(plan))
             if done % 4096 < size or done == len(plan):

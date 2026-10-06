@@ -135,6 +135,11 @@ export interface Job {
   heavy?: boolean
   /** Place in the queue (1 = next) while the job is waiting. */
   position?: number
+  /** Current step of a multi-step job (own counter when `total` > 0, otherwise the job's). */
+  stage?: { label: string; index: number; of: number; done: number; total: number } | null
+  /** Seconds left in what the job is doing, as of `eta_at` (server epoch seconds); null while unknown. */
+  eta?: number | null
+  eta_at?: number
   done: number
   total: number
   error: string

@@ -146,13 +146,6 @@ async function exportProps() {
   )
 }
 const live = (kind: Job['kind']) => jobs.live(sid.value, kind)
-function eta(j: Job): string {
-  if (!j.total || !j.done) return 'estimation en cours…'
-  const left = ((Date.now() / 1000 - j.started) / j.done) * (j.total - j.done)
-  if (left < 90) return `≈ ${Math.round(left)} s restantes`
-  if (left < 5400) return `≈ ${Math.round(left / 60)} min restantes`
-  return `≈ ${(left / 3600).toFixed(1)} h restantes`
-}
 
 interface ExportCard {
   key: string
@@ -294,12 +287,8 @@ const rustLabel = computed(() => {
               </div>
               <div class="mt-auto space-y-2">
                 <template v-if="live(e.kind)">
-                  <UProgress size="sm" :model-value="live(e.kind)!.total ? live(e.kind)!.done : null" :max="live(e.kind)!.total || undefined" />
-                  <div class="flex items-center justify-between text-xs tabular-nums text-muted">
-                    <span>{{ n(live(e.kind)!.done) }}<template v-if="live(e.kind)!.total"> / {{ n(live(e.kind)!.total) }}</template></span>
-                    <span>{{ eta(live(e.kind)!) }}</span>
-                  </div>
-                  <p class="truncate text-xs text-muted">{{ live(e.kind)!.last }}</p>
+                  <OJobProgress :job="live(e.kind)!" />
+                  <p v-if="!live(e.kind)!.stage" class="truncate text-xs text-muted">{{ live(e.kind)!.last }}</p>
                   <UButton label="Annuler" icon="i-ri-stop-circle-line" size="xs" color="neutral" variant="outline" block @click="jobs.cancel(live(e.kind)!.id)" />
                 </template>
                 <template v-else>

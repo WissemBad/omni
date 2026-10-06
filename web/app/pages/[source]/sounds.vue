@@ -308,12 +308,11 @@ defineShortcuts({
       <USwitch v-if="status?.exported" v-model="format.force" label="Tout réécrire" description="Applique les nouveaux noms (musique, banques) et les tags aux fichiers déjà exportés ; retire les fichiers de l’ancien nommage." />
 
       <div v-if="running" class="space-y-2">
-        <UProgress size="sm" :model-value="running.total ? running.done : null" :max="running.total || undefined" />
-        <div class="flex items-center justify-between gap-2 text-xs tabular-nums text-muted">
-          <span>{{ running.total ? `${running.done.toLocaleString('fr-FR')} / ${running.total.toLocaleString('fr-FR')}` : 'Préparation…' }}</span>
+        <OJobProgress :job="running" />
+        <div class="flex justify-end">
           <UButton label="Annuler" icon="i-ri-stop-circle-line" size="xs" color="neutral" variant="outline" @click="jobs.cancel(running.id)" />
         </div>
-        <p class="truncate text-xs text-muted">{{ running.last || 'Démarrage…' }}</p>
+        <p v-if="!running.stage" class="truncate text-xs text-muted">{{ running.last || 'Démarrage…' }}</p>
       </div>
 
       <template #footer>

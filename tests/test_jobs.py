@@ -197,3 +197,33 @@ def test_remove_only_finished_jobs(jobs):
 ])
 def test_cause_names(error, cause):
     assert cause in cause_of({"errors": [error]})
+
+
+def test_view_carries_the_stage_and_a_remaining_time(jobs):
+    job = jobs.create("maintenance", "x", "s", 10, heavy=False)
+    st = jobs.stager(job, 2)
+    st("Premier")
+    jobs.plan(job, {str(i): 100.0 - i for i in range(10)}, 2)
+    for i in range(3):
+        jobs.result(job, {"key": str(i), "status": "OK", "seconds": 1.0})
+        time.sleep(0.05)
+    v = jobs.get(job["id"])
+    assert v["stage"] == {"label": "Premier", "index": 1, "of": 2, "done": 0, "total": 0}
+    assert "_eta" not in v and "_rate" not in v and v["eta_at"] > 0
+    count = st("Second", 50)
+    count(5, 50)
+    time.sleep(0.25)
+    count(10, 50)
+    v = jobs.get(job["id"])
+    assert v["stage"]["label"] == "Second" and v["stage"]["done"] == 10 and v["stage"]["total"] == 50
+    assert v["eta"] is not None and v["eta"] >= 0                   # the step's own speed, not the job's
+    jobs.finish(job)
+    assert "eta" not in jobs.get(job["id"])                          # nothing left to estimate once it is over
+
+
+def test_results_without_a_plan_still_estimate(jobs):
+    job = jobs.create("maintenance", "y", "s", 4, heavy=False)
+    for i in range(2):
+        jobs.result(job, {"key": str(i), "status": "OK"})
+        time.sleep(0.05)
+    assert jobs.get(job["id"])["eta"] is not None

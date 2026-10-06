@@ -43,6 +43,14 @@ All notable changes to this project are documented here. The format follows [Kee
   reported as missing (and fetched again), and a compiler that cannot start gives a clear error.
 - Playermodels of characters without toe bones failed to compile (hitbox on a bone studiomdl had removed).
 - Mappings text read from a cache could make the core panic on a malformed line (found by the new fuzz tests).
+- **Remaining-time estimates**: a batch that starts with its biggest items showed 40 hours, then dropped to minutes.
+  The estimator now lives in the Rust core (`native/src/eta.rs`): it learns while the batch runs what an item costs
+  from its weight (mesh size, number of variations) and prices what is left; checked on a real 27,686-prop
+  conversion, it stays within about +/-30 % from 3 % of progress on (a plain average was off by a factor of 15).
+  Counters without item weights use the speed of the last seconds instead of the average since the start.
+- Exports now show **what they are doing**: steps with their own counter and time left (`Étape 2/3 · Export glTF
+  (.glb)`), for the .blend and .glb exports that had no information, and for sounds (list, media fingerprints,
+  conversion). The same progress block is used on the game page, the sounds page and the jobs panel.
 
 ### Changed
 

@@ -27,6 +27,8 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
+from ..native import N
+
 log = logging.getLogger("omni.jobs")
 
 HEAVY_KINDS = {"props", "sounds", "setup", "textures", "maintenance"}
@@ -179,7 +181,7 @@ class Jobs:
                "phase": "queued" if heavy else "running", "done": 0, "total": total, "results": [], "log": [],
                "error": "", "summary": None, "started": time.time(), "ended": None, "cancellable": cancellable,
                "cancelling": False, "heavy": heavy, "request": request, "counts": {}, "models": 0, "model": "",
-               "_dedupe": dedupe}
+               "stage": None, "_eta": None, "_rate": None, "_stage_rate": None, "_dedupe": dedupe}
         with self.lock:
             if heavy:
                 twin = next((j for j in self.items.values() if j["heavy"] and j["phase"] in ("queued", "running")
@@ -210,12 +212,54 @@ class Jobs:
                 del job["log"][:100]
         self._touch(job)
 
+    def plan(self, job: dict, weights: dict | None = None, workers: int = 0) -> None:
+        """Tell the remaining-time estimate what the items weigh (mesh size, number of variations...) and how many
+        run side by side: a batch that starts with its biggest items is then estimated from the first results."""
+        with self.lock:
+            job["_eta"] = N.Eta(job["total"], {str(k): float(v) for k, v in (weights or {}).items()}, workers)
+
     def count(self, job: dict, done: int, total: int | None = None) -> None:
         with self.lock:
             job["done"] = done
             if total is not None:
                 job["total"] = total
+            if job["_rate"] is None:
+                job["_rate"] = N.Rate()
+            job["_rate"].update(float(done), None if total is None else float(total))
         self._touch(job)
+
+    def stage(self, job: dict, label: str, index: int = 0, of: int = 0, total: int = 0) -> None:
+        """A named step of the job (``index`` of ``of``) with its own counter (``stage_count``); with ``total`` 0 it
+        follows the job's own counter. The label is also the latest log line."""
+        with self.lock:
+            job["stage"] = {"label": label, "index": index, "of": of, "done": 0, "total": total}
+            job["_stage_rate"] = N.Rate() if total else None
+            job["log"].append(label)
+        self._touch(job)
+
+    def stage_count(self, job: dict, done: int, total: int | None = None) -> None:
+        with self.lock:
+            st = job.get("stage")
+            if not st:
+                return
+            st["done"] = done
+            if total is not None:
+                st["total"] = total
+            if job["_stage_rate"] is None:
+                job["_stage_rate"] = N.Rate()
+            job["_stage_rate"].update(float(done), float(st["total"]))
+        self._touch(job)
+
+    def stager(self, job: dict, of: int):
+        """``st = jobs.stager(job, 3)``; ``count = st("Hashing", total)`` opens the next step and returns its counter
+        (``count(done, total=None)``)."""
+        index = [0]
+
+        def open_stage(label: str, total: int = 0):
+            index[0] += 1
+            self.stage(job, label, index[0], of, total)
+            return lambda done, total=None: self.stage_count(job, done, total)
+        return open_stage
 
     def result(self, job: dict, r: dict) -> None:
         with self.lock:
@@ -227,11 +271,28 @@ class Jobs:
             if r.get("model") and status not in ("FAILED", "SKIPPED"):
                 job["models"] += 1
                 job["model"] = r["model"]
+            if job["_eta"] is None and job["total"]:
+                job["_eta"] = N.Eta(job["total"])
+            if job["_eta"] is not None:
+                secs = r.get("seconds")
+                secs = secs.get("total") if isinstance(secs, dict) else secs
+                job["_eta"].done(str(r.get("key", "")), float(secs) if isinstance(secs, (int, float)) and secs > 0 else None)
             self._pending.setdefault(job["id"], []).append((job["id"], seq, status, str(r.get("key", "")), json.dumps(r, default=str)))
             job["results"].append(r)
             if len(job["results"]) > 300:                  # the database has them all; memory keeps the recent ones
                 del job["results"][:100]
         self._touch(job)
+
+    def eta(self, job: dict) -> float | None:
+        """Seconds left in what the job is doing now (its current step when it has its own counter)."""
+        st = job.get("stage")
+        if st and st["total"] and job.get("_stage_rate") is not None:
+            return job["_stage_rate"].estimate()
+        if job.get("_eta") is not None:
+            return job["_eta"].estimate()
+        if job.get("_rate") is not None:
+            return job["_rate"].estimate()
+        return None
 
     def finish(self, job: dict, error: str = "", summary=None) -> None:
         with self.lock:
@@ -359,7 +420,11 @@ class Jobs:
 
     # ------------------------------------------------------------------------------------------ reading
     def _view(self, job: dict) -> dict:
-        v = {k: val for k, val in job.items() if k not in ("results", "log", "_seq", "_dedupe", "request", "started_run")}
+        v = {k: val for k, val in job.items() if k not in ("results", "log", "_seq", "_dedupe", "request", "started_run",
+                                                              "_eta", "_rate", "_stage_rate")}
+        if job["phase"] == "running":
+            left = self.eta(job)
+            v["eta"], v["eta_at"] = (None if left is None else round(left)), time.time()
         v["last"] = job["log"][-1] if job["log"] else ""
         v["failed"] = job["counts"].get("FAILED", 0)
         v["has_request"] = bool(job.get("request"))

@@ -283,9 +283,9 @@ async function wipe() {
             </template>
           </UCollapsible>
 
-          <UProgress v-if="j.phase === 'running'" class="mt-3" size="sm" :model-value="j.total ? j.done : null" :max="j.total || undefined" aria-label="Progression du travail" />
+          <OJobProgress v-if="j.phase === 'running'" class="mt-3" :job="j" />
           <div v-if="active(j)" class="mt-1 flex items-center justify-between gap-2">
-            <p class="text-xs tabular-nums text-muted">{{ j.phase === 'queued' ? 'en attente…' : j.total ? `${j.done.toLocaleString('fr-FR')} / ${j.total.toLocaleString('fr-FR')}` : 'en cours…' }}</p>
+            <p class="text-xs tabular-nums text-muted">{{ j.phase === 'queued' ? 'en attente…' : '' }}</p>
             <div class="flex gap-1">
               <UButton v-if="j.phase === 'queued' && (j.position ?? 0) > 1" label="En premier" icon="i-ri-arrow-up-line" size="xs" color="neutral" variant="ghost" @click="front(j.id)" />
               <UButton v-if="j.cancellable || j.phase === 'queued'" :label="j.cancelling ? 'Annulation…' : 'Annuler'" icon="i-ri-stop-circle-line" size="xs" color="neutral" variant="ghost" :disabled="j.cancelling" @click="stop(j)" />

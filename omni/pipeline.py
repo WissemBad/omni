@@ -136,28 +136,37 @@ def _kill(ex: ProcessPoolExecutor) -> None:
 
 def run_batch(source_name: str, keys: list[str], workers: int = 4, physics: bool = True, report: Path | None = None,
               on_result=None, collision: str = "game", lossless_normals: bool = False,
-              tex_quality: str = "max", cancel=None) -> dict:
-    """Convert the props ``keys`` in worker processes (see run_pool)."""
+              tex_quality: str = "max", cancel=None, on_plan=None) -> dict:
+    """Convert the props ``keys`` in worker processes (see run_pool). ``on_plan(sizes, workers)`` receives the mesh
+    size of each prop (what the remaining-time estimate weighs them by) once the order is known."""
     kw = dict(physics=physics, collision=collision, lossless_normals=lossless_normals, tex_quality=tex_quality)
-    return run_pool(source_name, biggest_first(source_name, keys), _work, kw, workers, report=report,
-                    on_result=on_result, cancel=cancel)
+    sizes: dict = {}
+    ordered = biggest_first(source_name, keys, sizes)
+    if on_plan:
+        on_plan(sizes, clamp_workers(min(workers, len(keys)) if keys else workers))
+    return run_pool(source_name, ordered, _work, kw, workers, report=report, on_result=on_result, cancel=cancel)
 
 
-def biggest_first(source_name: str, keys: list[str]) -> list[str]:
+def biggest_first(source_name: str, keys: list[str], sizes: dict | None = None) -> list[str]:
     """Order props by mesh file size, largest first: a big model started last kept one worker busy for minutes
-    while the others had nothing left to do (half the CPU idle at the end of a batch)."""
+    while the others had nothing left to do (half the CPU idle at the end of a batch). ``sizes`` (optional) is filled
+    with {key: size}."""
     try:
         from .cli import _source
         src = _source(source_name)
         if not hasattr(src, "archive"):                 # sources without extracted files: catalog sizes
             from .core.catalog import Catalog
-            sizes = {r["key"]: r["size"] for r in Catalog(src).search(limit=10 ** 6, named_only=False)}
-            return sorted(keys, key=lambda k: -sizes.get(k, 0))
+            by_key = {r["key"]: r["size"] for r in Catalog(src).search(limit=10 ** 6, named_only=False)}
+            if sizes is not None:
+                sizes.update({k: by_key.get(k, 0) for k in keys})
+            return sorted(keys, key=lambda k: -by_key.get(k, 0))
         archive = src.archive
         size = {}
         for k in keys:
             p = archive.find("PRIM", int(k, 16))
             size[k] = p.stat().st_size if p is not None else 0
+        if sizes is not None:
+            sizes.update(size)
         return sorted(keys, key=lambda k: -size[k])
     except Exception as e:  # noqa: BLE001 - an optimisation only
         log.warning("batch order unchanged: %s", e)

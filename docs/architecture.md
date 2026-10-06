@@ -41,6 +41,8 @@ Modules: textures (TEXT/TEXD, BCn, mips, DXT, VTF, PNG), audio (Wwise Vorbis to 
 
 ## Extraction
 
+`native/src/eta.rs` holds the remaining-time estimators (`N.Eta`: items with weights, cost model learnt from the finished ones; `N.Rate`: speed of the last seconds); `ui/jobs.py` feeds them (`plan`, `result`, `count`, `stage`/`stager`) and puts `eta`, `eta_at` and the current `stage` in each running job's view.
+
 `native/src/rpkg.rs` reads RPKG v1 (`GKPR`) and v2 (`2KPR`) packages and their patches: offset table, resource headers (with or without the "states size" field, detected by the table size), references, XOR scrambling and LZ4. It writes the layout `sources/glacier/meta.py` reads and keeps existing files of the right size, so an interrupted extraction resumes. Only the resource types listed in `omni/core/setup.py` (`NEEDED_TYPES`) are written.
 
 ## Sources

@@ -37,14 +37,18 @@ def _dump_texture(source, key: str, role: str, out: Path, size: int) -> bool:
 
 
 def export_blends(source, keys: list[str], out_dir: Path | None = None, tex_size: int = 2048,
-                  blender: Path | None = None) -> list[Path]:
+                  blender: Path | None = None, progress=None, on_blender=None) -> list[Path]:
+    """``progress(done, total)`` follows the preparation of the models; ``on_blender()`` is called when Blender,
+    which then writes every .blend in one run, starts."""
     blender = blender or CONFIG.blender_exe()
     if blender is None:
         raise RuntimeError("Blender est introuvable : renseigne son chemin dans Réglages (ou installe-le), "
                            "ou décoche « Produire aussi un .blend ».")
     out_dir = out_dir or CONFIG.workspace / "blend" / source.id
     jobs = []
-    for k in keys:
+    for i, k in enumerate(keys):
+        if progress:
+            progress(i, len(keys))
         model, mats = source.load_model(int(k, 16))
         rel = model.name
         glb = out_dir / "_glb" / f"{k}.glb"
@@ -62,6 +66,10 @@ def export_blends(source, keys: list[str], out_dir: Path | None = None, tex_size
         jobs.append({"glb": str(glb), "blend": str(out_dir / f"{rel}.blend"), "name": rel, "materials": materials})
     jf = out_dir / "jobs.json"
     jf.write_text(json.dumps(jobs), encoding="utf-8")
+    if progress:
+        progress(len(keys), len(keys))
+    if on_blender:
+        on_blender()
     script = Path(__file__).with_name("blender_script.py")
     r = subprocess.run([str(blender), "-b", "--factory-startup", "--python", str(script), "--", str(jf)],
                        capture_output=True, text=True, errors="replace", creationflags=NOWINDOW)
