@@ -212,19 +212,30 @@ def from_game(coll: dict, max_parts: int = MAX_HULLS):
     return hulls, float(sum(h[2] for h in hulls))
 
 
+COACD_PARAMS = dict(threshold=0.2, max_convex_hull=8, max_ch_vertex=48, preprocess_resolution=25,
+                    mcts_iterations=20, mcts_max_depth=2, mcts_nodes=8)
+
+
 def decompose(verts: np.ndarray, tris: np.ndarray) -> list:
-    """CoACD convex decomposition -> [(vertices, triangles, volume)]."""
+    """CoACD convex decomposition -> [(vertices, triangles, volume)]. Results are cached on disk by mesh content
+    (CoACD costs ~1 s per shape and a third of the props have one; the same shape comes back in every rebuild and
+    in every prop that shares it)."""
+    from .hullcache import HULLS
+    verts = np.ascontiguousarray(verts, np.float64)
+    tris = np.ascontiguousarray(tris, np.int32)
+    key = HULLS.key("coacd", verts, tris, COACD_PARAMS)
+    hit = HULLS.get(key)
+    if hit is not None:
+        return hit
     import coacd
     coacd.set_log_level("error")
-    parts = coacd.run_coacd(
-        coacd.Mesh(verts, tris), threshold=0.2, max_convex_hull=8, max_ch_vertex=48,
-        preprocess_resolution=25, mcts_iterations=20, mcts_max_depth=2, mcts_nodes=8,
-    )
+    parts = coacd.run_coacd(coacd.Mesh(verts, tris), **COACD_PARAMS)
     out = []
     for v, _f in parts:
         h = convex_hull(np.asarray(v))
         if h:
             out.append(h)
+    HULLS.put(key, out)
     return out
 
 

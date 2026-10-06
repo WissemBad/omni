@@ -31,6 +31,7 @@ import numpy as np
 from ...core.config import CONFIG, Config
 from ...core.naming import slug
 from . import playermodel as pm
+from .build import deploy_file
 from .compile import compile_qc
 from .materials import TextureCache, convert_material
 from .pm_build import PMResult, register, _VISIBLE
@@ -429,11 +430,12 @@ def _compile_plan(plan: Plan, res: PMResult, title: str = "") -> None:
         f.unlink(missing_ok=True)
     copied = 0
     for f in outdir.glob(Path(plan.mpath).name + ".*"):
-        shutil.copy2(f, dest / f.name)
+        deploy_file(f, dest / f.name)
         copied += 1
     if not copied:
         res.errors.append("compiler produced no files")
         return
+    shutil.rmtree(work, ignore_errors=True)            # SMD sources are only kept when a build fails
     (dest / f"{Path(plan.mpath).name}.json").write_text(json.dumps(plan.meta(), indent=1), encoding="utf-8")
     res.model = f"models/{plan.mpath}.mdl"
     res.status = "OK"

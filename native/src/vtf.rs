@@ -228,13 +228,41 @@ pub fn vtf_bytes(fmt: u32, mips: &[(usize, usize, Vec<u8>)], flags: u32, refl: [
 
 pub fn write_vtf(path: &Path, fmt: u32, mips: &[(usize, usize, Vec<u8>)], flags: u32, refl: [f32; 3]) -> Result<(), String> {
     let data = vtf_bytes(fmt, mips, flags, refl);
+    write_atomic(path, &data)
+}
+
+static TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Write `data` to `path` through a temporary file renamed over it: parallel workers may produce the same shared
+/// texture at the same time, and readers never see half a file. On Windows the rename is refused while another
+/// process has the destination open (a worker reading its header, GMod): retried for up to ~2 s, and when it still
+/// fails but the file exists, the other writer's identical result is kept.
+pub fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {
     if let Some(d) = path.parent() {
         fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }
-    // atomic: parallel workers may write the same shared texture at the same time
-    let tmp = path.with_extension(format!("{}.tmp", std::process::id()));
-    fs::write(&tmp, &data).map_err(|e| e.to_string())?;
-    fs::rename(&tmp, path).map_err(|e| e.to_string())
+    let seq = TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp = path.with_extension(format!("{}.{}.tmp", std::process::id(), seq));
+    fs::write(&tmp, data).map_err(|e| e.to_string())?;
+    let mut last = String::new();
+    for attempt in 0..40u64 {
+        match fs::rename(&tmp, path) {
+            Ok(()) => return Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                last = e.to_string();
+                std::thread::sleep(std::time::Duration::from_millis(10 + attempt * 2));
+            }
+            Err(e) => {
+                let _ = fs::remove_file(&tmp);
+                return Err(e.to_string());
+            }
+        }
+    }
+    let _ = fs::remove_file(&tmp);
+    if path.is_file() {
+        return Ok(());
+    }
+    Err(last)
 }
 
 /// Build the mip chain of `rgba`, encode it and write the VTF. `format`: dxt1 | dxt5 | bgra8888.
@@ -252,12 +280,7 @@ pub fn encode_vtf(
     coverage: f32,
 ) -> Result<(usize, usize), String> {
     let (data, tw, th) = encode_vtf_bytes(rgba, w, h, format, kind, max_size, flags, quality, coverage)?;
-    if let Some(d) = path.parent() {
-        fs::create_dir_all(d).map_err(|e| e.to_string())?;
-    }
-    let tmp = path.with_extension(format!("{}.tmp", std::process::id()));
-    fs::write(&tmp, &data).map_err(|e| e.to_string())?;
-    fs::rename(&tmp, path).map_err(|e| e.to_string())?;
+    write_atomic(path, &data)?;
     Ok((tw, th))
 }
 

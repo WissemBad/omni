@@ -16,11 +16,13 @@ import threading
 import time
 from pathlib import Path
 
+from ...core.memo import DiskMemo
 from ...native import N
 from .outfit import TARGETS_PROP, OutfitResolver
 
 MAX_PRIMS_PER_TEMPLATE = 64        # larger templates are level scenes: per-instance tweaks, not variants
 MAX_VARIANTS = 31                  # + the mesh's own materials = Source's 32 skins
+_MEMO = DiskMemo("prop_variants", "1")     # bump when the resolution below changes
 
 
 class PropVariants:
@@ -31,6 +33,7 @@ class PropVariants:
         self.archive = source.archive
         self.db_path = Path(cache_dir) / f"templates_{source.id}.sqlite"
         self.resolver = OutfitResolver(source)
+        self._sig = None
 
     # ---- index ----------------------------------------------------------------------
     def ensure(self) -> None:
@@ -89,7 +92,19 @@ class PropVariants:
 
     # ---- resolution -----------------------------------------------------------------
     def variants(self, prim: int) -> list[dict]:
-        """[{slot MATI: (final MATI, {param: value})}] - only templates that change something, deduplicated."""
+        """[{slot MATI: (final MATI, {param: value})}] - only templates that change something, deduplicated.
+        Memoised on disk (resolving the templates reads thousands of files): the key holds the game data's
+        signature, so a game update recomputes it."""
+        if self._sig is None:
+            self._sig = [self.archive._signature(k) for k in ("TEMP", "TBLU", "MATI", "MATT", "ASET", "PRIM")]
+        key = _MEMO.key(prim, self._sig, str(self.archive.root))
+        hit = _MEMO.get(key)
+        if hit is None:
+            hit = self._variants(prim)
+            _MEMO.put(key, hit)
+        return hit
+
+    def _variants(self, prim: int) -> list[dict]:
         slots = self.resolver.slot_mati(prim)
         if not slots:
             return []

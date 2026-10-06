@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 import struct
 from pathlib import Path
 
@@ -31,4 +32,19 @@ def write_vtf(path: Path, fmt: int, mips: list, flags: int = 0, reflectivity=(0.
     # atomic: parallel workers may produce the same shared texture at the same time
     tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     tmp.write_bytes(hdr + body)
-    os.replace(tmp, path)
+    replace_retry(tmp, path)
+
+
+def replace_retry(tmp: Path, path: Path, tries: int = 40) -> None:
+    """``os.replace`` that waits while another process holds ``path`` open (Windows refuses the rename then: a
+    worker reading the header of the same shared texture, GMod). If it never frees up but the file exists, the other
+    writer's identical result is kept."""
+    for i in range(tries):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            time.sleep(0.01 + i * 0.002)
+    tmp.unlink(missing_ok=True)
+    if not path.is_file():
+        raise PermissionError(f"cannot replace {path} (file locked)")

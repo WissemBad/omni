@@ -1,6 +1,7 @@
 """Build one source model into a GMod addon folder: materials -> SMD/QC -> studiomdl -> addon."""
 from __future__ import annotations
 
+import os
 import shutil
 import time
 from dataclasses import dataclass, field
@@ -149,6 +150,15 @@ def _variant_skins(source, h: int, model, names: dict, dropped: set, cache, addo
     return qc
 
 
+def deploy_file(src: Path, dst: Path) -> None:
+    """Move a compiled file from the sandbox into the addon (same disk: a rename, no copy); copy if it cannot be
+    moved (other volume, file held by GMod...)."""
+    try:
+        os.replace(src, dst)
+    except OSError:
+        shutil.copy2(src, dst)
+
+
 def build_model(source, key: str, cfg: Config = CONFIG, opts: BuildOptions | None = None) -> BuildResult:
     opts = opts or BuildOptions()
     res = BuildResult(key=key)
@@ -294,11 +304,12 @@ def build_model(source, key: str, cfg: Config = CONFIG, opts: BuildOptions | Non
         clear(dest)                                     # a .phy of an earlier build must not outlive its model
         copied = 0
         for f in outdir.glob(stem + ".*"):
-            shutil.copy2(f, dest / f.name)
+            deploy_file(f, dest / f.name)
             copied += 1
         if not copied:
             res.errors.append("compiler produced no files")
             return res
+        shutil.rmtree(work, ignore_errors=True)         # SMD sources (MBs each) are only kept when a build fails
         res.model = f"models/{mpath}.mdl"
         res.status = "PARTIAL" if (res.unknown_slots or cr.warnings) else "OK"
         if cr.warnings:

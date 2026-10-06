@@ -65,7 +65,9 @@ def compile_qc(qc: Path, sandbox: Path | None = None, studiomdl: Path | None = N
     except subprocess.TimeoutExpired:
         return CompileResult(False, "", [], [f"studiomdl timed out after {timeout}s"], [], timed_out=True)
     log = (p.stdout or "") + (p.stderr or "")
-    errors = [l.strip() for l in log.splitlines() if re.search(r"\bERROR\b", l, re.I)]
+    # "WARNING: Error with convex elements of phys.smd, building single convex" is a warning (studiomdl recovers)
+    errors = [l.strip() for l in log.splitlines()
+              if re.search(r"\bERROR\b", l, re.I) and not l.lstrip().upper().startswith("WARNING")]
     warnings = [w.strip() for w in re.findall(r"WARNING:[^\n]*", log)
                 if "Collision building" not in w and "no any vertex animations" not in w
                 and "fastest tracing" not in w and "2-dimensional geometry" not in w

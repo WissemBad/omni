@@ -56,6 +56,9 @@ def parse_ioi(name: str) -> tuple[list[str], str, str]:
     return [p for p in joined.split("/") if p], container, leaf
 
 
+_MISSING = object()
+
+
 class Names:
     """hash -> (type, ioi name) lookup, backed by a SQLite cache built once from hash_list.txt."""
 
@@ -63,6 +66,7 @@ class Names:
         self.hash_list, self.db_path = hash_list, db_path
         self._db: sqlite3.Connection | None = None
         self._lock = threading.RLock()      # one connection shared by the web server's and the exporters' threads
+        self._memo: dict[int, tuple[str, str] | None] = {}   # a conversion asks for the same names thousands of times
 
     def close(self) -> None:
         """Release the database file (it is about to be replaced) without deleting it."""
@@ -70,6 +74,7 @@ class Names:
             if self._db is not None:
                 self._db.close()
                 self._db = None
+            self._memo = {}
 
     def reset(self) -> None:
         """Forget the database (a new hash list was downloaded): it is rebuilt at the next lookup."""
@@ -77,6 +82,7 @@ class Names:
             if self._db is not None:
                 self._db.close()
                 self._db = None
+            self._memo = {}
             self.db_path.unlink(missing_ok=True)
 
     def _connect(self) -> sqlite3.Connection:
@@ -150,10 +156,17 @@ class Names:
         db.commit()
 
     def get(self, h: int) -> tuple[str, str] | None:
+        hit = self._memo.get(h, _MISSING)
+        if hit is not _MISSING:
+            return hit
         # hash_list stores the name keyed by the 64-bit hash; sqlite ints are signed 64-bit
         with self._lock:
             row = self._connect().execute("SELECT t,n FROM names WHERE h=?", (_s64(h),)).fetchone()
-        return (row[0], row[1]) if row else None
+            r = (row[0], row[1]) if row else None
+            if len(self._memo) >= 500_000:
+                self._memo = {}
+            self._memo[h] = r
+        return r
 
     def name(self, h: int) -> str:
         r = self.get(h)

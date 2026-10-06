@@ -4,6 +4,30 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- **Playermodel batches run in parallel** (8 worker processes, the same crash-proof pool as props) instead of one
+  family after another inside the server: about 7x faster (48 families in 57 s instead of 7 min). The registry
+  and the Lua list are updated under a cross-process lock.
+- **Faster prop batches**, same output: CoACD convex decompositions and prop variants (template resolution) are
+  memoised on disk (`cache/memo_*.sqlite`, keyed by content and by the game data's signature), the largest models
+  are started first (no more single big model running alone at the end), numpy's OpenBLAS is limited to the
+  worker's share of the cores (16 workers x 16 threads made studiomdl up to 5x slower), name lookups and parsed
+  materials are cached per process, sRGB decoding uses a table, archive indexes keep string paths. Measured on 300
+  props (16 workers): first conversion 1.49 -> 2.12 props/s, reconversion 3.56 props/s (8.4 props/s without the
+  one 80 s model).
+- Compiled models are moved (not copied) from the sandbox into the addon and the SMD sources of a successful build
+  are deleted (they reached 21 GB); they are kept when a build fails.
+
+### Fixed
+
+- Cancelling a batch ended the job in error (`'NoneType' object has no attribute 'values'`), and the studiomdl
+  of a killed worker kept running: each worker now holds its children in a Windows job object closed with it.
+- studiomdl's "WARNING: Error with convex elements..." (it then builds a single hull) was taken for an error: the
+  playermodel failed, or the prop lost its collision and was compiled twice.
+- Two workers writing the same shared texture at once failed with "Access is denied": the rename is retried while
+  the other process holds the file, and a reader waits for a file being replaced.
+
 ### Removed
 
 - The WebAssembly core and every pure-Python fallback: the Rust module is required (the packaged app ships it), one

@@ -4,6 +4,7 @@ Everything here is read-only on the extracted ``Assets/Sorted`` tree.
 """
 from __future__ import annotations
 
+import copy
 import re
 from dataclasses import dataclass
 
@@ -214,6 +215,18 @@ class GlacierSource(Source):
         return f"{base}_{h & 0xFFFFFF:06x}"
 
     def load_material(self, h: int) -> Material:
+        """The material instance ``h`` (a fresh copy: callers modify it). Parsed once per process: playermodel
+        variants and prop skins ask for the same instances thousands of times."""
+        memo = self.__dict__.setdefault("_mat_memo", {})
+        hit = memo.get(h)
+        if hit is None:
+            hit = self._load_material(h)
+            if len(memo) >= 20000:
+                memo.clear()
+            memo[h] = hit
+        return copy.deepcopy(hit)
+
+    def _load_material(self, h: int) -> Material:
         path = self.archive.find("MATI", h)
         mat = Material(key="%016X" % h, name=self.material_name(h), source_name=self.names.name(h))
         if path is None:

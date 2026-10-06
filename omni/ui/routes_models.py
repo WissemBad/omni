@@ -19,6 +19,8 @@ from pydantic import BaseModel
 from ..core import settings
 from ..core.config import CONFIG, Config
 
+PM_WORKERS = 8          # parallel playermodel builds (each holds a whole family: ~1 GB at peak)
+
 
 class PropFilter(BaseModel):
     """The catalog filter of the props list: convert "everything that matches" without shipping 50,000 keys."""
@@ -404,26 +406,26 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
                                    "body": {**req.model_dump(), "ids": ids_, "skip_built": False}})
 
         def run(job):
-            from ..pipeline import apply_quality
-            from ..targets.source.pm_build import PMOptions
-            from ..targets.source.pm_outfit import build_outfit_pm
+            from ..pipeline import clamp_workers, run_pm_batch
             settings.apply(st)
-            stop = jobs.cancel_event(job)
-            ok = failed = 0
-            for cid in ids_:
-                if stop.is_set():
-                    break
-                c = every[cid]
-                jobs.log(job, f"{c['title']} ({len(c['variants'])} variations)")
-                o = PMOptions(max_tris=st["characters"]["max_tris"])
-                apply_quality(o.mat, req.tex_quality or st["textures"]["quality"])
-                r = build_outfit_pm(src, [int(v["key"], 16) for v in c["variants"]], o, CONFIG, cid.replace("outfit_", ""), "")
-                jobs.result(job, {"key": cid, "status": r.status, "model": r.model, "errors": r.errors[:1],
-                                  "notes": r.notes[:2], "seconds": r.seconds})
-                ok += r.status == "OK"
-                failed += r.status != "OK"
+            n = {"ok": 0, "failed": 0}
+
+            def on_result(r):
+                c = every.get(r["key"], {})
+                jobs.log(job, f"{c.get('title', r['key'])} ({len(c.get('variants', []))} variations)")
+                jobs.result(job, {"key": r["key"], "status": r["status"], "model": r.get("model", ""),
+                                  "errors": r.get("errors", [])[:1], "notes": r.get("notes", [])[:2],
+                                  "seconds": r.get("seconds", 0)})
+                n["ok" if r["status"] == "OK" else "failed"] += 1
+            # families are independent (own materials folder, own sandbox model; the registry is locked):
+            # built side by side like props. A playermodel uses more memory than a prop: at most PM_WORKERS.
+            workers = min(clamp_workers(st["props"]["workers"]), PM_WORKERS)
+            run_pm_batch(sid, ids_, workers, {"max_tris": st["characters"]["max_tris"],
+                                              "tex_quality": req.tex_quality or st["textures"]["quality"],
+                                              "lossless_normals": st["textures"]["lossless_normals"]},
+                         on_result=on_result, cancel=jobs.cancel_event(job))
             conv_reset(sid)
-            return {"built": ok, "failed": failed, "remaining": len(ids_) - ok - failed}
+            return {"built": n["ok"], "failed": n["failed"], "remaining": len(ids_) - n["ok"] - n["failed"]}
         jobs.run(job, run)
         return {"job": job["id"]}
     jobs.starters["characters"] = start_characters

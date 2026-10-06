@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -155,10 +156,16 @@ def _is_grey_pattern(tex) -> bool:
 def _fresh(path: Path, alpha: bool = False, size: int = 0) -> bool:
     """An already converted texture can be reused, unless the material now needs an alpha channel that the
     file does not have, or it was written at another quality setting (``size``: largest side expected)."""
-    if not path.exists():
-        return False
-    with open(path, "rb") as f:
-        head = f.read(56)
+    head = b""
+    for i in range(20):
+        try:
+            with open(path, "rb") as f:
+                head = f.read(56)
+            break
+        except FileNotFoundError:
+            return False
+        except PermissionError:            # another worker is replacing it right now (Windows): wait for it
+            time.sleep(0.01 + i * 0.005)
     if len(head) < 56:
         return False
     if alpha and int.from_bytes(head[52:56], "little", signed=True) == vtf.DXT1:
@@ -201,6 +208,9 @@ def _lin(c):
     return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
 
 
+_LIN8 = _lin(np.arange(256, dtype=np.float32) / 255.0).astype(np.float32)
+
+
 def _srgb(c):
     c = np.clip(np.asarray(c, np.float32), 0.0, None)
     return np.where(c <= 0.0031308, c * 12.92, 1.055 * np.power(c, 1.0 / 2.4) - 0.055)
@@ -220,7 +230,7 @@ class ColourModel:
         return self.kind, tuple(round(float(x), 4) for x in self.factor), self.normalise, self.ao
 
     def apply(self, rgba: np.ndarray, keep_alpha: bool) -> np.ndarray:
-        lin = _lin(rgba[..., :3].astype(np.float32) / 255.0)
+        lin = _LIN8[rgba[..., :3]]                 # sRGB -> linear of 8-bit values: a table, not a power per pixel
         if self.normalise:
             small = lin[:: max(1, lin.shape[0] // 64), :: max(1, lin.shape[1] // 64)]
             lin = lin / max(float(small.mean()), 0.02)

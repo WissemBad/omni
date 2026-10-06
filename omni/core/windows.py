@@ -112,3 +112,50 @@ def pick_folder(title: str = "Choisir un dossier") -> str:
     if r.returncode != 0:
         raise RuntimeError((r.stderr or "folder dialog failed").strip())
     return r.stdout.strip()
+
+
+_JOB = None
+
+
+def tie_children_to_this_process() -> bool:
+    """Put this process in a Job Object that kills every process of the job when its last handle closes: the
+    processes it starts (studiomdl) then die with it, even when it is killed (a cancelled or crashed batch worker
+    left studiomdl running, sometimes for ever on a hull it cannot build). Windows only; False if not possible."""
+    global _JOB
+    if os.name != "nt" or _JOB is not None:
+        return _JOB is not None
+    import ctypes
+    from ctypes import wintypes
+
+    class _Basic(ctypes.Structure):
+        _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                    ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                    ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                    ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
+                    ("SchedulingClass", wintypes.DWORD)]
+
+    class _IoCounters(ctypes.Structure):
+        _fields_ = [(n, ctypes.c_uint64) for n in ("ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+                                                   "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
+
+    class _Extended(ctypes.Structure):
+        _fields_ = [("BasicLimitInformation", _Basic), ("IoInfo", _IoCounters),
+                    ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                    ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateJobObjectW.restype = wintypes.HANDLE
+    k32.GetCurrentProcess.restype = wintypes.HANDLE
+    k32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+    k32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+    job = k32.CreateJobObjectW(None, None)
+    if not job:
+        return False
+    info = _Extended()
+    info.BasicLimitInformation.LimitFlags = 0x2000                 # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    if not k32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)) \
+            or not k32.AssignProcessToJobObject(job, k32.GetCurrentProcess()):
+        k32.CloseHandle(job)
+        return False
+    _JOB = job                                                     # kept open for the life of the process
+    return True

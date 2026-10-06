@@ -22,6 +22,24 @@ def _chunk_order(p: Path) -> tuple[int, str]:
     return (int(digits) if digits else 1 << 30, p.name)
 
 
+class _Index(dict):
+    """hash -> path of one resource type. Paths are kept as strings (a type holds up to 250 000 entries: building
+    as many Path objects took seconds in every worker) and handed out as Path."""
+
+    def get(self, key, default=None):
+        v = dict.get(self, key)
+        return default if v is None else Path(v)
+
+    def __getitem__(self, key):
+        return Path(dict.__getitem__(self, key))
+
+    def items(self):
+        return ((k, Path(v)) for k, v in dict.items(self))
+
+    def values(self):
+        return (Path(v) for v in dict.values(self))
+
+
 class Archive:
     def __init__(self, sorted_root: Path, cache_dir: Path | None = None):
         self.root = sorted_root
@@ -50,11 +68,13 @@ class Archive:
             try:
                 data = json.loads(cache.read_text(encoding="utf-8"))
                 if data["sig"] == sig and data["root"] == str(self.root):
-                    idx = {int(h, 16): self.root / c / kind / f"{h}.{kind}" for c, hs in data["items"].items() for h in hs}
+                    root, sep = str(self.root), os.sep
+                    idx = _Index((int(h, 16), f"{root}{sep}{c}{sep}{kind}{sep}{h}.{kind}")
+                                 for c, hs in data["items"].items() for h in hs)
             except (OSError, ValueError, KeyError):
                 idx = None
         if idx is None:
-            idx = {}
+            idx = _Index()
             per_chunk: dict[str, list[str]] = {}
             for chunk in self.chunks:
                 d = chunk / kind
@@ -71,7 +91,7 @@ class Archive:
                             except ValueError:
                                 continue
                             if h not in idx:
-                                idx[h] = Path(e.path)
+                                dict.__setitem__(idx, h, e.path)
                                 names.append(n[:16])
             if cache is not None:
                 try:

@@ -31,6 +31,8 @@ def _worker_init(source_name: str, threads: int = 0):
     from .core import log as logs
     from .core import settings
     logs.setup(f"worker-{os.getpid()}")
+    from .core.windows import tie_children_to_this_process
+    tie_children_to_this_process()          # a killed worker (cancel, crash) takes its studiomdl with it
     settings.apply()
     _src = _source(source_name)
 
@@ -85,15 +87,37 @@ def _work(key: str, opt_kw: dict):
     return asdict(build_model(_src, key, CONFIG, make_options(apply_settings=False, **opt_kw)))
 
 
+def _work_pm(cid: str, kw: dict):
+    """One playermodel family (all its variations) in a worker process."""
+    from .targets.source.pm_build import PMOptions
+    from .targets.source.pm_outfit import build_outfit_pm
+    c = _src.character(cid)
+    if c is None:
+        return {"key": cid, "status": "FAILED", "model": "", "errors": [f"unknown character {cid}"], "notes": [],
+                "seconds": 0}
+    o = PMOptions(max_tris=kw["max_tris"])
+    apply_quality(o.mat, kw["tex_quality"])
+    o.mat.lossless_normals = kw.get("lossless_normals", False)
+    r = build_outfit_pm(_src, [int(v["key"], 16) for v in c["variants"]], o, CONFIG, cid.replace("outfit_", ""), "")
+    return {"key": cid, "status": r.status, "model": r.model, "errors": r.errors, "notes": r.notes,
+            "seconds": r.seconds}
+
+
 def _pool(workers: int, source_name: str) -> ProcessPoolExecutor:
-    return ProcessPoolExecutor(workers, initializer=_worker_init,
-                               initargs=(source_name, max(1, (os.cpu_count() or 4) // max(1, workers))))
+    threads = max(1, (os.cpu_count() or 4) // max(1, workers))
+    # numpy's OpenBLAS starts one thread per core in every worker: N workers x all cores oversubscribed the CPU
+    # (studiomdl ran up to 5x slower inside a batch). Read when numpy loads, so it must be in the environment the
+    # workers are spawned with (the parent's own numpy is already loaded: unaffected).
+    for var in ("OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "OMP_NUM_THREADS"):
+        os.environ[var] = str(threads)
+    return ProcessPoolExecutor(workers, initializer=_worker_init, initargs=(source_name, threads))
 
 
 def _kill(ex: ProcessPoolExecutor) -> None:
     """Stop a pool now, workers and the studiomdl they started included (a cancelled batch must not keep going)."""
+    procs = list((getattr(ex, "_processes", None) or {}).values())     # shutdown() sets it to None
     ex.shutdown(wait=False, cancel_futures=True)
-    for p in list(getattr(ex, "_processes", {}).values()):
+    for p in procs:
         try:
             if os.name == "nt":
                 subprocess.run(["taskkill", "/F", "/T", "/PID", str(p.pid)], capture_output=True, creationflags=NOWINDOW)
@@ -106,16 +130,47 @@ def _kill(ex: ProcessPoolExecutor) -> None:
 def run_batch(source_name: str, keys: list[str], workers: int = 4, physics: bool = True, report: Path | None = None,
               on_result=None, collision: str = "game", lossless_normals: bool = False,
               tex_quality: str = "max", cancel=None) -> dict:
-    """Convert ``keys`` in worker processes. A worker that dies (native crash) does not take the batch with it:
-    the assets that were in flight are replayed one by one in a fresh pool, and the one that kills it is FAILED."""
+    """Convert the props ``keys`` in worker processes (see run_pool)."""
+    kw = dict(physics=physics, collision=collision, lossless_normals=lossless_normals, tex_quality=tex_quality)
+    return run_pool(source_name, biggest_first(source_name, keys), _work, kw, workers, report=report,
+                    on_result=on_result, cancel=cancel)
+
+
+def biggest_first(source_name: str, keys: list[str]) -> list[str]:
+    """Order props by mesh file size, largest first: a big model started last kept one worker busy for minutes
+    while the others had nothing left to do (half the CPU idle at the end of a batch)."""
+    try:
+        from .cli import _source
+        archive = _source(source_name).archive
+        size = {}
+        for k in keys:
+            p = archive.find("PRIM", int(k, 16))
+            size[k] = os.stat(p).st_size if p is not None else 0
+        return sorted(keys, key=lambda k: -size[k])
+    except Exception as e:  # noqa: BLE001 - an optimisation only
+        log.warning("batch order unchanged: %s", e)
+        return list(keys)
+
+
+def run_pm_batch(source_name: str, ids: list[str], workers: int, kw: dict, on_result=None, cancel=None) -> dict:
+    """Build the playermodel families ``ids`` in worker processes (see run_pool). ``kw``: max_tris, tex_quality,
+    lossless_normals."""
+    return run_pool(source_name, ids, _work_pm, kw, workers, on_result=on_result, cancel=cancel,
+                    report=CONFIG.workspace / "reports" / time.strftime("pm_%Y%m%d_%H%M%S.jsonl"))
+
+
+def run_pool(source_name: str, keys: list[str], work, kw: dict, workers: int = 4, report: Path | None = None,
+             on_result=None, cancel=None) -> dict:
+    """Run ``work(key, kw)`` for every key in worker processes. A worker that dies (native crash) does not take the
+    batch with it: the items that were in flight are replayed one by one in a fresh pool, and the one that kills it
+    is FAILED."""
     t0 = time.perf_counter()
-    workers = clamp_workers(workers)
+    workers = clamp_workers(min(workers, len(keys)) if keys else workers)
     report = report or CONFIG.workspace / "reports" / time.strftime("run_%Y%m%d_%H%M%S.jsonl")
     report.parent.mkdir(parents=True, exist_ok=True)
     stats = {"OK": 0, "PARTIAL": 0, "FAILED": 0, "SKIPPED": 0}
     from .cli import _source
     warm_up(_source(source_name))
-    kw = dict(physics=physics, collision=collision, lossless_normals=lossless_normals, tex_quality=tex_quality)
     queue = deque(keys)
     inflight: dict = {}
     ex = _pool(workers, source_name)
@@ -140,7 +195,7 @@ def run_batch(source_name: str, keys: list[str], workers: int = 4, physics: bool
                     break
                 while queue and len(inflight) < window:
                     key = queue.popleft()
-                    inflight[ex.submit(_work, key, kw)] = key
+                    inflight[ex.submit(work, key, kw)] = key
                 done, _ = wait(inflight, timeout=0.5, return_when=FIRST_COMPLETED)
                 broken = []
                 for fut in done:
@@ -161,7 +216,7 @@ def run_batch(source_name: str, keys: list[str], workers: int = 4, physics: bool
                             cancelled = True
                             break
                         try:
-                            record(ex.submit(_work, key, kw).result())
+                            record(ex.submit(work, key, kw).result())
                         except BrokenProcessPool:
                             record(failed(key, "the conversion process crashed on this asset"))
                             _kill(ex)
