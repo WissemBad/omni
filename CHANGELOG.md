@@ -4,6 +4,44 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- **Unreal Engine 5 games** (any UE 5.x game with IoStore containers; validated on *Bronzebeard's Tavern*, UE 5.1):
+  props (static meshes, skeletal meshes as statues), characters (humanoid skeletal meshes as playermodels),
+  textures and sounds, all read in place from the game's `.utoc`/`.ucas` by the Rust core: IoStore containers
+  (Oodle, Zlib, LZ4, optional AES), zen packages, **property layouts read statically from the game's executable**
+  (no injection, no third-party mappings: 4,074 classes/structs and 724 enums in 30 ms), unversioned properties,
+  Texture2D (BCn kept, other formats converted), StaticMesh/SkeletalMesh render data (LODs, sections, tangents,
+  UVs, colours, skin weights, reference skeleton), MaterialInstance chains (texture roles from parameter and texture
+  names, ORM / roughness / metallic maps, blend mode, two-sided) and **Bink Audio decoded natively** (port of
+  vgmstream's decoder, bit-identical within 1 LSB). Bronzebeard's Tavern: 679/679 game props converted (0 failure,
+  78 s), 15/15 characters built as playermodels, 337 sounds exported in 9 s.
+- **HITMAN World of Assassination** source: the game's `.rpkg` packages are read in place (patch priority,
+  deletions, LZ4/XOR) by a new native package store, names from glacier-modding/Hitman-Hashes, HM3 PRIM / MATI /
+  TEXT decoders (layouts of the open-source RPKG-Tool), outfits offered as playermodels. Written without a copy of
+  the game: covered by synthetic tests, to be validated on the real data.
+- **One-folder setup for every game**: add a game folder (or one Steam found) on the *Jeux* page and omni prepares
+  everything else in a background job: Oodle (pinned SHA-256), the game's structures, names, indexes, catalogs,
+  the shared model compiler. A game updated since its preparation is indexed again at launch. Games stay separate
+  (own caches under `workspace/games/<id>`, own addon `omni_<id>`); each game's pages open once it is ready.
+- **007 First Light read in place** when the game is installed and nothing was extracted (the extracted
+  `Assets/Sorted` tree stays supported and is used first): no 40 GB extraction. Verified identical (models,
+  materials, textures, previews) on real resources repacked into packages.
+- **glTF 2.0 target**: one `.glb` per model for Blender and other tools (PBR metal/roughness rebuilt from ORM/SRM
+  maps, occlusion, alpha mode, skeleton and skin weights for skinned models), as a conversion option, from the prop
+  inspector, or with `POST /api/<game>/models/gltf`. Output passes the Khronos validator without warning.
+- Generic playermodel builder for sources without outfit templates: humanoid bones recognised in any rig (Unreal
+  mannequin, Mixamo, 3ds Max Biped and CAT, Rigify...) and mapped onto ValveBiped, characters turned to face
+  forward; 3D preview of the posed character.
+
+### Fixed
+
+- The model compiler downloaded by the setup lacked `celfbxsdk.dll`: `cestudiomdl.exe` exited silently and every
+  conversion failed with an empty error. The file is now part of the pinned download, an incomplete compiler is
+  reported as missing (and fetched again), and a compiler that cannot start gives a clear error.
+- Playermodels of characters without toe bones failed to compile (hitbox on a bone studiomdl had removed).
+- Mappings text read from a cache could make the core panic on a malformed line (found by the new fuzz tests).
+
 ### Changed
 
 - **Playermodel batches run in parallel** (8 worker processes, the same crash-proof pool as props) instead of one

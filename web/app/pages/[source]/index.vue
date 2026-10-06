@@ -69,7 +69,7 @@ const benches = computed<Bench[]>(() => {
       icon: 'i-ri-user-3-line',
       to: `/${sid.value}/models?tab=characters`,
       value: n(o.characters.total),
-      detail: 'familles de tenues',
+      detail: sid.value === '007fl' ? 'familles de tenues' : 'personnages jouables',
       progress: pct(o.characters.built, o.characters.total),
       progressLabel: `${n(o.characters.built)} playermodels créés`,
     })
@@ -184,7 +184,7 @@ const exports = computed<ExportCard[]>(() => {
       kind: 'character',
       icon: 'i-ri-user-3-line',
       title: 'Tous les playermodels',
-      text: 'Chaque famille de tenues devient un playermodel (variations en bodygroups et skins). Ceux déjà créés sont sautés.',
+      text: sid.value === '007fl' ? 'Chaque famille de tenues devient un playermodel (variations en bodygroups et skins). Ceux déjà créés sont sautés.' : 'Chaque personnage devient un playermodel sur le squelette de GMod. Ceux déjà créés sont sautés.',
       label: 'Créer tout',
       action: () =>
         run(
@@ -201,7 +201,7 @@ const exports = computed<ExportCard[]>(() => {
       kind: 'sounds',
       icon: 'i-ri-music-2-line',
       title: 'Tous les sons',
-      text: 'Conversion par le cœur Rust, sans doublons, avec les noms des événements, de la musique et des dialogues.',
+      text: sid.value === '007fl' || sid.value === 'hitman3' ? 'Conversion par le cœur Rust, sans doublons, avec les noms des événements, de la musique et des dialogues.' : 'Conversion par le cœur Rust (Bink Audio, Ogg…), sans doublons, rangés comme dans le jeu.',
       label: 'Exporter',
       action: () =>
         run('sounds', `/${sid.value}/sounds/export`, {

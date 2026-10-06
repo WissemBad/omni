@@ -8,7 +8,7 @@ Converts the assets of a game into Garry's Mod content: props, player models, te
 
 omni reads the resources of **your own copy** of a game, on your PC, and writes a ready-to-use Garry's Mod addon (MDL, VMT, VTF) plus audio files (Ogg, FLAC, MP3). Nothing is uploaded and no game file is shipped with omni.
 
-The first source is *007 First Light* (Glacier engine). Sources are plugins: Hitman (same engine) and others can be added without touching the interface.
+Supported games: *007 First Light* and *HITMAN World of Assassination* (Glacier engine), and **Unreal Engine 5 games** in general (validated on *Bronzebeard's Tavern*). You only give omni the game's folder: it identifies the engine and fetches or derives everything else (decompressor, the game's structures, names, catalogs). Besides the Garry's Mod addon, every model can be exported to glTF (`.glb`) for Blender.
 
 Built with Python, Rust (native core), Nuxt 4, Nuxt UI 4 and [Wissem UI](https://github.com/Wissem-Industries/ui). The window is the system's Edge WebView2, not a bundled browser.
 
@@ -16,14 +16,16 @@ Built with Python, Rust (native core), Nuxt 4, Nuxt UI 4 and [Wissem UI](https:/
 
 Download `Omni-Setup-x.y.z.exe` (or the portable `Omni-x.y.z-windows.zip`) from the [releases](https://github.com/Wissem-Industries/omni/releases) and start Omni.
 
-The first launch opens the setup:
+Add a game on the **Jeux** page (pick its folder, or take one detected in Steam): omni prepares it in the background and opens it when ready. For Unreal Engine 5 and Hitman, nothing is extracted: the game's files are read in place.
 
-1. **Game**: omni finds the game in your Steam libraries (or you pick its folder) and extracts only the resources it uses into its own data folder.
+*007 First Light* keeps its first-run setup:
+
+1. **Game**: omni finds the game in your Steam libraries (or you pick its folder) and reads its packages in place (an already extracted `Assets/Sorted` folder is used too).
 2. **Names**: the readable resource paths come from [Bond-Hashes](https://github.com/glacier-modding/Bond-Hashes) (MIT), downloaded once.
 3. **Garry's Mod**: detected in Steam; its player animations and addons folder are used.
 4. **Compiler**: [StudioMDL-CE](https://github.com/DeadZoneLuna/StudioMDL-CE) is downloaded and verified against pinned SHA-256 sums.
 
-Requirements: Windows 10 or 11 with the WebView2 runtime (included in Windows 11), a copy of the game, Garry's Mod for model conversion, and roughly 40 GB of free space for the extracted resources. [ffmpeg](https://ffmpeg.org) is only needed for MP3 and for re-encoding non-Vorbis sounds to Ogg.
+Requirements: Windows 10 or 11 with the WebView2 runtime (included in Windows 11), a copy of the game, Garry's Mod for model conversion, and some free space for caches and exports (an optional 007 extraction needs about 40 GB). [ffmpeg](https://ffmpeg.org) is only needed for MP3 and for re-encoding non-Vorbis sounds to Ogg.
 
 Closing the window while a job runs keeps omni working in the notification area (toast when it ends); omni checks GitHub for a newer release at launch (a read token is needed while the repository is private).
 

@@ -2,10 +2,12 @@
 
 ```
 omni/sources/base.py     contract of a source (capabilities props, characters, textures, sounds)
-omni/sources/glacier     007 First Light (Hitman: same engine, other profile)  ->  omni/core/ir.py (neutral)
+omni/sources/glacier     007 First Light, HITMAN 3 (hitman.py, hm3.py; store.py reads .rpkg in place) -> core/ir.py
+omni/sources/unreal      any Unreal Engine 5 game (game.py: Oodle + mappings, adapter.py, prepare.py)
 omni/core/               config, settings, setup, catalogs (props, textures), naming, Windows helpers
 omni/targets/source      VMT/VTF, SMD/QC, collision, StudioMDL, playermodels, deployment
 omni/targets/audio       sound export (Rust core), index, tags
+omni/targets/gltf        glTF 2.0 (.glb) per model: PBR, skeleton, skin weights
 omni/ui/                 FastAPI: routes_models, routes_textures, routes_sounds, routes_setup, output (viewer), jobs
 omni/app.py              the desktop window (pywebview / WebView2): splash, one instance, remembered geometry, tray
 omni/games.py            game library: identify a game from its folder (engine, profile, version)
@@ -75,3 +77,23 @@ tracebacks and native crashes go to `<workspace>/logs` (`GET /api/diagnostic` bu
 A model's output path comes from its game path (`AssetInfo.rel_path`); paths shared by several resources (truncated
 names, `^…_dynamic` variants, same leaf in two folders) get the end of their hash (`GlacierSource.rel_path`), so two
 assets never write the same file. The catalog (`core/catalog.py`, versioned by `user_version`) stores the final path.
+
+## Games and preparation
+
+`omni/games.py` identifies a folder (Glacier: `Runtime/chunk*.rpkg` + the executable name; Unreal: `<Project>/Content/Paks`
+with `.utoc` and a `*-Shipping.exe`, engine version read from it) and keeps the library (`workspace/games.json`).
+`sources/registry.py` turns every supported library game into a source (`ENGINES`), 007 stays built-in. Adding a game
+starts a *preparation* job (`games.prepare` -> `sources/unreal/prepare.py` or `sources/glacier/hitman_prepare.py`); its
+state (`workspace/games/<id>/state.json`) carries the signature of the game files, so an update is detected and the
+game prepared again at launch. `/api/sources` reports `ready` per game; the interface opens a game's pages only then.
+
+## Unreal Engine 5 (native/src/unreal)
+
+`iostore.rs` (TOC, blocks, partitions, directory index, container header), `oodle.rs` (the DLL is loaded at run time),
+`zen.rs` (zen packages, script objects), `reflect.rs` (property layouts read from the executable: UHT registration
+tables -> `Z_Construct_*` -> `FClassParams` / `FStructParams` / `FEnumParams`, type-specific pointer offset calibrated
+per executable; own properties first, then the super's), `props.rs` (unversioned properties, native structs),
+`assets.rs` (bulk data, Texture2D, SoundWave), `mesh.rs` / `skel.rs` (render data), `../binka.rs` (Bink Audio).
+`py_unreal.rs` exposes `UnrealGame`. Geometry stays in Unreal units; `sources/unreal/adapter.py` mirrors Y (left- to
+right-handed), converts to metres and turns characters to face +Y. Humanoid bones of any rig get canonical names in
+`targets/source/humanoid.py`.

@@ -42,7 +42,7 @@ _ROLE_WORDS = [
     ("normal", r"normal|nrm|nmap|bump"),
     ("orm", r"occ.*rough|rough.*metal|metal.*rough|^orm|orm$|^arm$|arm$|aorm|^rma|rma$|^mra|mra$|packed|maskrgb"),
     ("emissive", r"emiss|emit|glow|illum"),
-    ("rough", r"rough|gloss"),
+    ("rough", r"rough|roug$|gloss"),
     ("metal", r"metal"),
     ("ao", r"ambientocclusion|occlusion|^ao$|cavity"),
     ("alpha", r"opacity|alpha|transparen"),
@@ -74,8 +74,10 @@ def role_of(param: str, texture_path: str, fmt: str = "") -> str:
     if m and m.group(1).lower() in _SUFFIX_ROLE:
         r = _SUFFIX_ROLE[m.group(1).lower()]
         return "normal" if r == "base" and fmt == "BC5" else r
-    last = re.split(r"[_\s-]", leaf)[-1] if leaf else ""
-    for text in (param, last):
+    words = [w for w in re.split(r"[_\s-]", leaf) if w] if leaf else []
+    last = words[-1] if words else ""
+    last2 = "".join(words[-2:]) if len(words) > 1 else ""
+    for text in (param, last, last2):
         f = _flat(text)
         if not f:
             continue
@@ -469,8 +471,8 @@ class UnrealSource(Source):
                 continue                    # the instance already sets this role
             if role in taken and role in ("base", "normal", "orm"):
                 role = "detail_normal" if role == "normal" else "other"
-            if role == "other":
-                mat.unknown_slots.append(slot)
+            if role == "other" and not default:
+                mat.unknown_slots.append(slot)       # a base material's own sampler defaults are not slots
             taken.add(role)
             orm_slot = slot
             if role == "orm":
