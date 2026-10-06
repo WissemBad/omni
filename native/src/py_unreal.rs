@@ -36,6 +36,17 @@ fn unreal_mappings(py: Python<'_>, exe: &str) -> PyResult<(String, usize, usize)
     })
 }
 
+/// unreal_usmap(path) -> the same text, from community mappings (`.usmap`; Oodle must be loaded if compressed).
+#[pyfunction]
+fn unreal_usmap(py: Python<'_>, path: &str) -> PyResult<(String, usize, usize)> {
+    let path = path.to_string();
+    py.allow_threads(move || {
+        let data = std::fs::read(&path).map_err(err)?;
+        let s = reflect::from_usmap(&data).map_err(err)?;
+        Ok((s.to_text(), s.structs.len(), s.enums.len()))
+    })
+}
+
 #[pyclass(frozen)]
 pub struct UnrealGame {
     game: Arc<Game>,
@@ -377,6 +388,7 @@ fn binka_decode<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(u16, u32, Bound<
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(oodle_load, m)?)?;
     m.add_function(wrap_pyfunction!(unreal_mappings, m)?)?;
+    m.add_function(wrap_pyfunction!(unreal_usmap, m)?)?;
     m.add_function(wrap_pyfunction!(binka_decode, m)?)?;
     m.add_class::<UnrealGame>()?;
     Ok(())

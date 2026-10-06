@@ -241,6 +241,40 @@ fn unreal_parsers_survive_garbage() {
     fuzz("reflect::Schema::from_text", SCHEMA.as_bytes(), |b| {
         let _ = reflect::Schema::from_text(&String::from_utf8_lossy(b));
     });
+    // .usmap: names, one enum, one struct with nested types (array, enum, map, struct)
+    let mut body = Vec::new();
+    let names = ["E", "E::A", "S", "P", "Q", "V"];
+    body.extend((names.len() as u32).to_le_bytes());
+    for n in names {
+        body.extend((n.len() as u16).to_le_bytes());
+        body.extend(n.as_bytes());
+    }
+    body.extend(1u32.to_le_bytes());
+    body.extend(0i32.to_le_bytes());
+    body.extend(1u16.to_le_bytes());
+    body.extend(3u64.to_le_bytes());
+    body.extend(1i32.to_le_bytes());
+    body.extend(1u32.to_le_bytes());
+    body.extend(2i32.to_le_bytes());
+    body.extend((-1i32).to_le_bytes());
+    body.extend(3u16.to_le_bytes());
+    body.extend(2u16.to_le_bytes());
+    body.extend([0, 0, 1]);
+    body.extend(3i32.to_le_bytes());
+    body.extend([8, 26, 0]);
+    body.extend(0i32.to_le_bytes());
+    body.extend([1, 0, 1]);
+    body.extend(4i32.to_le_bytes());
+    body.extend([24, 5, 9]);
+    body.extend(5i32.to_le_bytes());
+    let mut usmap = vec![0xC4, 0x30, 4, 0, 0, 0, 0, 0];
+    usmap.extend((body.len() as u32).to_le_bytes());
+    usmap.extend((body.len() as u32).to_le_bytes());
+    usmap.extend(&body);
+    assert_eq!(reflect::from_usmap(&usmap).unwrap().structs["S"].props.len(), 3);
+    fuzz("reflect::from_usmap", &usmap, |b| {
+        let _ = reflect::from_usmap(b);
+    });
     let schema = reflect::Schema::from_text(SCHEMA).unwrap();
     let names: Vec<String> = ["None", "A", "B"].iter().map(|s| s.to_string()).collect();
     let game = empty_game();

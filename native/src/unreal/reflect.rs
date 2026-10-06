@@ -656,3 +656,150 @@ pub fn extract(exe: &[u8]) -> Result<Schema> {
     }
     Ok(schema)
 }
+
+// ------------------------------------------------------------------------------------------------- usmap
+/// Community mappings (`.usmap`, the format of UE4SS / Dumper-7 / FModel): the fallback when the executable cannot
+/// be read. Versions 0-5, uncompressed or Oodle-compressed.
+pub fn from_usmap(data: &[u8]) -> Result<Schema> {
+    use super::reader::Reader;
+    let mut r = Reader::new(data);
+    if r.u16()? != 0x30C4 {
+        return err("not a .usmap file");
+    }
+    let version = r.u8()?;
+    if version > 5 {
+        return err(format!("usmap version {version} not supported"));
+    }
+    if version >= 1 && r.u32()? != 0 {
+        if version >= 5 {
+            r.skip(2 + 2 + 2 + 4)?;
+            r.fstring()?;
+        }
+        r.skip(8)?;
+        let n = r.count(20)?;
+        r.skip(n * 20)?;
+        r.u32()?;
+    }
+    let method = r.u8()?;
+    let comp = r.u32()? as usize;
+    let size = r.u32()? as usize;
+    if size > 1 << 30 {
+        return err("usmap too large");
+    }
+    let raw = r.bytes(comp)?;
+    let body: Vec<u8> = match method {
+        0 => raw.to_vec(),
+        1 => {
+            let mut out = vec![0u8; size];
+            super::oodle::decompress(raw, &mut out)?;
+            out
+        }
+        m => return err(format!("usmap compression {m} not supported (Brotli/Zstandard)")),
+    };
+    let mut r = Reader::new(&body);
+    let nn = r.count(1)?;
+    let mut names = Vec::with_capacity(nn);
+    for _ in 0..nn {
+        let len = if version >= 2 { r.u16()? as usize } else { r.u8()? as usize };
+        names.push(String::from_utf8_lossy(r.bytes(len)?).into_owned());
+    }
+    let name = |r: &mut Reader| -> Result<Option<String>> {
+        let i = r.i32()?;
+        Ok(if i < 0 { None } else { names.get(i as usize).cloned() })
+    };
+    let mut schema = Schema::default();
+    let ne = r.count(5)?;
+    for _ in 0..ne {
+        let en = name(&mut r)?.unwrap_or_default();
+        let n = if version >= 3 { r.u16()? as usize } else { r.u8()? as usize };
+        let mut vals = Vec::with_capacity(n);
+        for j in 0..n {
+            if version >= 4 {
+                let v = r.u64()? as i64;
+                let nm = name(&mut r)?.unwrap_or_default();
+                vals.push((nm.rsplit("::").next().unwrap_or(&nm).to_string(), v));
+            } else {
+                let nm = name(&mut r)?.unwrap_or_default();
+                vals.push((nm.rsplit("::").next().unwrap_or(&nm).to_string(), j as i64));
+            }
+        }
+        schema.enums.entry(en).or_insert(vals);
+    }
+    fn ty(r: &mut Reader, name: &dyn Fn(&mut Reader) -> Result<Option<String>>, depth: usize) -> Result<Ty> {
+        if depth > 16 {
+            return err("usmap type too deep");
+        }
+        Ok(match r.u8()? {
+            0 => Ty::Byte(None),
+            1 => Ty::Bool,
+            2 => Ty::Int,
+            3 => Ty::Float,
+            4 | 31 => Ty::Object,
+            5 => Ty::Name,
+            6 => Ty::Delegate,
+            7 => Ty::Double,
+            8 => Ty::Array(Box::new(ty(r, name, depth + 1)?)),
+            9 => Ty::Struct(name(r)?.unwrap_or_default()),
+            10 | 29 | 30 => Ty::Str,
+            11 => Ty::Text,
+            12 => Ty::Interface,
+            13 | 32 => Ty::MulticastInline,
+            14 => Ty::WeakObject,
+            15 => Ty::LazyObject,
+            16 | 17 | 33 => Ty::SoftObject,
+            18 => Ty::UInt64,
+            19 => Ty::UInt32,
+            20 => Ty::UInt16,
+            21 => Ty::Int64,
+            22 => Ty::Int16,
+            23 => Ty::Int8,
+            24 => {
+                let k = ty(r, name, depth + 1)?;
+                let v = ty(r, name, depth + 1)?;
+                Ty::Map(Box::new(k), Box::new(v))
+            }
+            25 => Ty::Set(Box::new(ty(r, name, depth + 1)?)),
+            26 => {
+                let inner = ty(r, name, depth + 1)?;
+                Ty::Enum(name(r)?.unwrap_or_default(), Box::new(inner))
+            }
+            27 => Ty::FieldPath,
+            28 => Ty::Optional(Box::new(ty(r, name, depth + 1)?)),
+            x => Ty::Unknown(x),
+        })
+    }
+    let ns = r.count(8)?;
+    for _ in 0..ns {
+        let sname = name(&mut r)?.unwrap_or_default();
+        let sup = name(&mut r)?;
+        let count = r.u16()? as usize;
+        let nser = r.u16()? as usize;
+        let mut slots: Vec<Option<Prop>> = vec![None; count];
+        for _ in 0..nser {
+            let idx = r.u16()? as usize;
+            let dim = r.u8()?.max(1) as u16;
+            let pname = name(&mut r)?.unwrap_or_default();
+            let t = ty(&mut r, &name, 0)?;
+            if idx < slots.len() {
+                slots[idx] = Some(Prop { name: pname, array_dim: dim, ty: t });
+            }
+        }
+        // the schema walks properties by cumulative array dims: holes (not serialised) keep their width
+        let mut props = Vec::new();
+        let mut i = 0;
+        while i < slots.len() {
+            match slots[i].take() {
+                Some(p) => {
+                    i += p.array_dim as usize;
+                    props.push(p);
+                }
+                None => {
+                    props.push(Prop { name: format!("_unused{i}"), array_dim: 1, ty: Ty::Unknown(0xFF) });
+                    i += 1;
+                }
+            }
+        }
+        schema.structs.insert(sname.clone(), StructDef { name: sname, super_name: sup, props });
+    }
+    Ok(schema)
+}

@@ -13,7 +13,7 @@ import time
 
 from . import game as ue
 
-STEPS = [("oodle", "Décompresseur Oodle"), ("mappings", "Structures du jeu (exécutable)"),
+STEPS = [("oodle", "Décompresseur Oodle"), ("mappings", "Structures du jeu (exécutable ou .usmap)"),
          ("index", "Index des ressources"), ("catalog", "Catalogue des modèles et personnages")]
 
 
@@ -70,7 +70,7 @@ def run(info: dict, say=print, count=None, cancel=None) -> dict:
     ue.ensure_oodle(say, cancel)
     step(1, "Lecture des structures du jeu")
     ue.forget(info["id"])
-    ue.mappings(info, say)
+    ue.mappings(info, say, cancel)
     step(2, "Ouverture des conteneurs et index des ressources")
     registry.reset()
     src = registry.get_source(info["id"])

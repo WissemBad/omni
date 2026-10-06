@@ -92,7 +92,9 @@ game prepared again at launch. `/api/sources` reports `ready` per game; the inte
 `iostore.rs` (TOC, blocks, partitions, directory index, container header), `oodle.rs` (the DLL is loaded at run time),
 `zen.rs` (zen packages, script objects), `reflect.rs` (property layouts read from the executable: UHT registration
 tables -> `Z_Construct_*` -> `FClassParams` / `FStructParams` / `FEnumParams`, type-specific pointer offset calibrated
-per executable; own properties first, then the super's), `props.rs` (unversioned properties, native structs),
+per executable; own properties first, then the super's; `from_usmap` reads community `.usmap` files, the fallback
+used by `sources/unreal/game.py` when the executable yields nothing: a local `.usmap`, else the matching folder of
+TheNaeem/Unreal-Mappings-Archive), `props.rs` (unversioned properties, native structs),
 `assets.rs` (bulk data, Texture2D, SoundWave), `mesh.rs` / `skel.rs` (render data), `../binka.rs` (Bink Audio).
 `py_unreal.rs` exposes `UnrealGame`. Geometry stays in Unreal units; `sources/unreal/adapter.py` mirrors Y (left- to
 right-handed), converts to metres and turns characters to face +Y. Humanoid bones of any rig get canonical names in

@@ -10,7 +10,9 @@ All notable changes to this project are documented here. The format follows [Kee
   props (static meshes, skeletal meshes as statues), characters (humanoid skeletal meshes as playermodels),
   textures and sounds, all read in place from the game's `.utoc`/`.ucas` by the Rust core: IoStore containers
   (Oodle, Zlib, LZ4, optional AES), zen packages, **property layouts read statically from the game's executable**
-  (no injection, no third-party mappings: 4,074 classes/structs and 724 enums in 30 ms), unversioned properties,
+  (no injection, no third-party mappings: 4,074 classes/structs and 724 enums in 30 ms; when an executable cannot be
+  read, a `.usmap` placed next to the game or fetched from the community Unreal-Mappings-Archive is used instead),
+  unversioned properties,
   Texture2D (BCn kept, other formats converted), StaticMesh/SkeletalMesh render data (LODs, sections, tangents,
   UVs, colours, skin weights, reference skeleton), MaterialInstance chains (texture roles from parameter and texture
   names, ORM / roughness / metallic maps, blend mode, two-sided) and **Bink Audio decoded natively** (port of
