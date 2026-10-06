@@ -13,6 +13,7 @@ const opts = reactive({
   tex_quality: 'max',
   lossless_normals: false,
   blend: false,
+  gltf: false,
   workers: 8,
 })
 const busy = ref(false)
@@ -27,6 +28,7 @@ watch(open, async (v) => {
       tex_quality: s.textures.quality,
       lossless_normals: s.textures.lossless_normals,
       blend: s.props.blend,
+      gltf: s.props.gltf ?? false,
       workers: s.props.workers,
     })
   if (!system.value) loadSystem()
@@ -75,6 +77,7 @@ async function start() {
         physics: opts.physics,
         collision: opts.collision,
         blend: opts.blend,
+        gltf: opts.gltf,
         workers: opts.workers,
       },
       textures: { quality: opts.tex_quality, lossless_normals: opts.lossless_normals },
@@ -111,6 +114,7 @@ async function start() {
         <div class="space-y-3">
           <USwitch v-model="opts.lossless_normals" label="Normales sans compression" description="Évite les artefacts de bloc DXT, au prix de textures 4× plus lourdes." />
           <USwitch v-model="opts.blend" label="Produire aussi un .blend" description="Un fichier Blender par modèle, matériaux déjà liés aux textures (facultatif)." />
+          <USwitch v-model="opts.gltf" label="Produire aussi un .glb (glTF)" description="Un fichier glTF par modèle pour Blender et les autres outils : matériaux PBR, squelette des modèles animés." />
         </div>
 
         <UFormField :label="`Traitements en parallèle : ${opts.workers}`" :description="`Autant que de cœurs libres (${system?.cpus ?? '?'} sur ce PC).`">

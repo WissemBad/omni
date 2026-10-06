@@ -16,6 +16,21 @@ const emit = defineEmits<{
 }>()
 const tab = defineModel<string>('tab', { default: 'summary' })
 const sid = useSourceId()
+const toast = useToast()
+
+/** The prop as a glTF .glb (Blender and other tools), written in the game's exports folder by a job. */
+async function exportGltf() {
+  try {
+    await api(`/${sid.value}/models/gltf`, { method: 'POST', body: { keys: [props.info.key] } })
+    toast.add({
+      title: 'Export glTF lancé',
+      description: 'Le .glb sera dans exports/gltf du jeu.',
+      icon: 'i-ri-shape-2-line',
+    })
+  } catch (e) {
+    toast.add({ title: 'Export glTF impossible', description: apiError(e), color: 'error' })
+  }
+}
 
 const ALL = [
   { label: 'Résumé', value: 'summary', icon: 'i-ri-dashboard-line' },
@@ -91,6 +106,7 @@ const textures = computed(() => {
           />
           <UButton icon="i-ri-file-copy-line" label="Copier le chemin GMod" color="neutral" variant="ghost" class="justify-start" @click="copy(gmodPath, 'Chemin du modèle copié')" />
           <UButton icon="i-ri-terminal-box-line" label="Copier la commande de spawn" color="neutral" variant="ghost" class="justify-start" @click="copy(spawnCommand(gmodPath), 'Commande copiée (console GMod)')" />
+          <UButton icon="i-ri-shape-2-line" label="Exporter en .glb (Blender)" color="neutral" variant="ghost" class="justify-start" @click="exportGltf" />
           <UButton v-if="out.converted" icon="i-ri-folder-open-line" label="Afficher dans l’Explorateur" color="neutral" variant="ghost" class="justify-start" @click="reveal(sid, out.path)" />
         </div>
       </div>

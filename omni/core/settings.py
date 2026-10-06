@@ -38,6 +38,7 @@ DEFAULTS: dict = {
         "collision": "game",         # game | parts | hull | coacd
         "workers": max(1, min(16, CPUS // 2)),
         "blend": False,
+        "gltf": False,               # also a .glb per model (exports/<game>/gltf)
     },
     "characters": {
         "max_tris": 60000,

@@ -261,6 +261,7 @@ const MAINTENANCE = computed(() => [
               <USlider v-model="s.props.workers" :min="1" :max="Math.max(4, system?.cpus ?? 16)" :step="1" />
             </UFormField>
             <USwitch v-model="s.props.blend" label="Produire aussi un .blend" description="Un fichier Blender par modèle (nécessite Blender)." />
+            <USwitch v-model="s.props.gltf" label="Produire aussi un .glb (glTF)" description="Un fichier glTF par modèle (Blender, Godot, Unity…), sans logiciel externe." />
           </UCard>
 
           <UCard :ui="{ body: 'space-y-5 p-4 sm:p-4' }">

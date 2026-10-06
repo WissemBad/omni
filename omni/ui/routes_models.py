@@ -38,6 +38,7 @@ class ConvertRequest(BaseModel):
     tex_quality: str | None = None        # max | high | balanced | light
     lossless_normals: bool | None = None
     blend: bool | None = None
+    gltf: bool | None = None              # also write a .glb per model (Blender, any glTF tool)
     workers: int | None = None
 
 
@@ -225,6 +226,7 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
         from ..pipeline import clamp_workers
         workers = clamp_workers(req.workers or st["props"]["workers"])
         blend = req.blend if req.blend is not None else st["props"]["blend"]
+        gltf = req.gltf if req.gltf is not None else st["props"]["gltf"]
         job = jobs.create("props", f"{len(req.keys)} prop(s)", sid, len(req.keys),
                           request={"op": "props", "sid": sid, "body": body, "field": "keys"})
 
@@ -242,11 +244,38 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
                 from ..targets.blender.export import export_blends
                 jobs.log(job, "Génération des .blend…")
                 stats["blends"] = len(export_blends(src, req.keys))
+            if gltf:
+                from ..targets.gltf.export import export_models
+                jobs.log(job, "Export glTF (.glb)…")
+                g = export_models(src, req.keys, cancel=jobs.cancel_event(job))
+                stats["gltf"], stats["gltf_folder"] = g["written"], g["folder"]
+                for k, e in g["failed"][:20]:
+                    jobs.log(job, f"glTF {k}: {e}")
             conv_reset(sid)
             return stats
         jobs.run(job, run)
         return {"job": job["id"]}
     jobs.starters["props"] = start_props
+
+    @app.post("/api/{sid}/models/gltf")
+    def models_gltf(sid: str, req: ConvertRequest):
+        """Export models (props, statues, characters' meshes) to glTF .glb only, without the GMod build."""
+        src = need(sid, "props")
+        if not req.keys and req.filter is not None:
+            f = req.filter
+            req.keys = catalog_of(sid).keys(f.q, f.cat, f.skinned, f.named_only, limit=200000)
+        if not req.keys:
+            raise HTTPException(400, "Aucun modèle à exporter")
+        job = jobs.create("maintenance", f"glTF : {len(req.keys)} modèle(s)", sid, len(req.keys))
+
+        def run(job):
+            from ..targets.gltf.export import export_models
+            g = export_models(src, req.keys, progress=lambda d, t: jobs.count(job, d, t), cancel=jobs.cancel_event(job))
+            for k, e in g["failed"][:50]:
+                jobs.log(job, f"{k}: {e}")
+            return {"écrits": g["written"], "échecs": len(g["failed"]), "dossier": g["folder"]}
+        jobs.run(job, run)
+        return {"job": job["id"]}
 
     @app.post("/api/{sid}/props/convert")
     def prop_convert(sid: str, req: ConvertRequest):
