@@ -42,6 +42,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 
+- Player model bodygroups follow the game's own catalogue: a part is filed by the folder of its part template
+  (`upperbody_l01` shirts, `upperbody_l02` outerwear, `lowerbody`, `footwear`, `handwear`, `body/body_parts`...) and, for
+  outfit kits, by the garment word of its name. The old name-matching put pants in *Torso* and produced *Torso 2* to
+  *Torso 7*; bodygroups are now Head, Hair, Headwear, Shirt, Outerwear, Vest, Arms, Gloves, Pants, Legs skin, Shoes...
 - The viewer reported every material of an Unreal game as missing when the game has a content folder named `Materials`
   (it took that folder for the addon root).
 - Starting a sound export failed with "'function' object is not subscriptable".
