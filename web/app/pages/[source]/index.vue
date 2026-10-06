@@ -371,6 +371,8 @@ const rustLabel = computed(() => {
           </ul>
         </UCard>
       </div>
+
+      <OSystemMonitor />
     </div>
   </div>
 </template>

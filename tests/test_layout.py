@@ -205,3 +205,10 @@ def test_settings_reset_forgets_window_and_viewer_roots(tmp_path, monkeypatch):
         (cfg.config_dir / n).write_text("{}", encoding="utf-8")
     reset.reset_settings(cfg)
     assert [p.name for p in cfg.config_dir.iterdir()] == ["games.json"]
+
+
+def test_monitor_sample_has_the_fields_the_home_page_draws():
+    from omni.core import monitor
+    s = monitor.sample()
+    assert 0 <= s["cpu"] <= 100 and 0 < s["memory"]["percent"] <= 100 and s["memory"]["used"] <= s["memory"]["total"]
+    assert s["gpu"] is None or {"name", "load", "temp", "mem_used", "mem_total", "power"} <= set(s["gpu"])

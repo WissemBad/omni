@@ -465,6 +465,12 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         cfgmod.cancel_home_request()
         return home_view()
 
+    @app.get("/api/monitor")
+    def monitor():
+        """CPU, memory and GPU load right now (the home page polls it every couple of seconds)."""
+        from ..core import monitor as mon
+        return mon.sample()
+
     @app.post("/api/reveal")
     def reveal_folder(body: dict):
         """Show the Omni folder, the exports or the workspace in Explorer."""

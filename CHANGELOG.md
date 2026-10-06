@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- System monitor on the home page: live CPU, memory, and NVIDIA GPU load and temperature (when `nvidia-smi` is there),
+  one minute of history.
 - Two separate resets in the settings: *Réinitialiser les réglages* (settings, window, viewer folders) and *Réinitialiser
   les données* (exports, conversions, previews, caches, catalogs; the game library, tools and names are kept).
 - Option to turn the levels of detail off (Settings, `--no-lods` on the command line): only the highest level of the
