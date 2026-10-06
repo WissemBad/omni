@@ -18,12 +18,14 @@ pub mod smd;
 pub mod texture;
 pub mod vtf;
 pub mod flac;
+pub mod binka;
 pub mod ww2ogg;
 pub mod wwise;
 pub mod par;
 #[cfg(test)]
 mod fuzz;
 pub mod rpkg;
+pub mod unreal;
 
 #[cfg(feature = "python")]
 mod py;
