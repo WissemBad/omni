@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- Animations in the viewer: the sequences of a model and of the models it includes are listed and played on its
+  skeleton (play/pause, scrub, speed, loop on by default). A player model starts on Garry's Mod's own idle
+  (`idle_all_01`), *Aucune* shows the reference pose again. The Source animation files (`.mdl` and `.ani`, raw and
+  run-length encoded bones, sections, external blocks) are read by the Rust core; Garry's Mod's `m_anm`, `f_anm` and
+  `z_anm` are extracted once from its VPK into the cache. The viewer GLB is skinned for models whose vertices follow
+  several bones.
 - System monitor on the home page: live CPU, memory, and NVIDIA GPU load and temperature (when `nvidia-smi` is there),
   one minute of history.
 - Two separate resets in the settings: *Réinitialiser les réglages* (settings, window, viewer folders) and *Réinitialiser

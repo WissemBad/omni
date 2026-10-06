@@ -305,6 +305,7 @@ pub fn omni_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::py_media::register(m)?;
     crate::py_eta::register(m)?;
     crate::py_gltf::register(m)?;
+    crate::py_anim::register(m)?;
     crate::py_unreal::register(m)?;
     crate::py_glacier::register(m)?;
     Ok(())

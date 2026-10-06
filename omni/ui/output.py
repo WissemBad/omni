@@ -450,6 +450,26 @@ def _describe(sid: str, root: str, external: bool, rel: str, mtime: float, sourc
 
 
 # --------------------------------------------------------------------------------------------------- glb
+def _pad4(a: np.ndarray) -> np.ndarray:
+    out = np.zeros((len(a), 4), a.dtype)
+    out[:, :a.shape[1]] = a
+    return out
+
+
+def _skeleton(mdl: bytes, geo) -> tuple | None:
+    """(names, parents, world matrices in metres) of a model whose vertices follow more than one bone, else None."""
+    if geo.bone_ids is None:
+        return None
+    from ..targets.source.mdlread import read_mdl, world_transforms
+    info = read_mdl(mdl)
+    used = np.unique(geo.bone_ids[geo.bone_w > 0])
+    if len(info.bones) < 2 or len(used) < 2:
+        return None
+    world = np.array(world_transforms(info.bones))
+    world[:, :3, 3] /= studio.UNITS_PER_METER
+    return [b.name for b in info.bones], [int(b.parent) for b in info.bones], np.ascontiguousarray(world, np.float64)
+
+
 def build_glb(root: str, rel: str, lod: int, out: Path) -> None:
     """GLB of a compiled model: one node per mesh (``bodypart|model|mesh|skinref``) and one glTF material per
     texture entry of the skin table, textured with the converted VTFs."""
@@ -476,13 +496,15 @@ def build_glb(root: str, rel: str, lod: int, out: Path) -> None:
                           "base": str(addon / base["path"]) if base else None,
                           "normal": "n:" + str(addon / norm["path"]) if norm else None})
     row0 = d["skins"][0] if d["skins"] else []
+    skeleton = _skeleton(mdl, geo)
     nodes = []
     for me in geo.meshes:
         uniq, inv = np.unique(me["idx"], return_inverse=True)
         ti = row0[me["skinref"]] if me["skinref"] < len(row0) else 0
         nodes.append({"name": f"{me['b']}|{me['m']}|{me['k']}|{me['skinref']}",
                       "positions": geo.pos[uniq] / studio.UNITS_PER_METER, "normals": geo.nrm[uniq],
-                      "uvs": geo.uv[uniq], "indices": inv.astype(np.uint32), "material": index_of.get(ti, 0)})
+                      "uvs": geo.uv[uniq], "indices": inv.astype(np.uint32), "material": index_of.get(ti, 0)}
+                     | ({"joints": _pad4(geo.bone_ids[uniq]), "weights": _pad4(geo.bone_w[uniq])} if skeleton else {}))
     if not nodes:
         raise HTTPException(404, "Le modèle n’a pas de géométrie")
 
@@ -493,7 +515,7 @@ def build_glb(root: str, rel: str, lod: int, out: Path) -> None:
             a = a.copy()
             a[..., 1] = 255 - a[..., 1]
         return a
-    export_scene(nodes, materials, out, size, read_texture)
+    export_scene(nodes, materials, out, size, read_texture, skeleton)
 
 
 # ----------------------------------------------------------------------------------------------- routes
@@ -630,7 +652,7 @@ def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: 
     @app.get("/api/{sid}/output/glb")
     def output_glb(sid: str, path: str, lod: int = 0, root: str = ""):
         r, f = model_file(sid, root, path)
-        key = hashlib.sha1(f"{r.id}|{path}".encode()).hexdigest()[:12]
+        key = hashlib.sha1(f"skin2|{r.id}|{path}".encode()).hexdigest()[:12]
         out = cache_dir(sid) / f"{key}_{lod}_{int(f.stat().st_mtime)}.glb"
         if not out.exists():
             for old in out.parent.glob(f"{key}_*"):
@@ -643,6 +665,33 @@ def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: 
             except Exception as e:  # noqa: BLE001
                 raise HTTPException(422, f"Rendu impossible : {type(e).__name__}: {e}")
         return FileResponse(out, media_type="model/gltf-binary")
+
+    def _anim_inputs(sid: str, root: str, path: str):
+        r, f = model_file(sid, root, path)
+        ani = f.with_suffix(".ani")
+        return f.read_bytes(), ani.read_bytes() if ani.is_file() else None, _asset_base(r.path, path)
+
+    @app.get("/api/{sid}/output/animations")
+    def output_animations(sid: str, path: str, root: str = ""):
+        """The sequences the model can play: its own and those of the models it includes (Garry's Mod's ``m_anm``...)."""
+        from . import animation
+        mdl, ani, addon = _anim_inputs(sid, root, path)
+        try:
+            return animation.catalog(mdl, ani, addon)
+        except (ValueError, OSError) as e:
+            raise HTTPException(422, f"Animations illisibles : {e}")
+
+    @app.get("/api/{sid}/output/animation")
+    def output_animation(sid: str, path: str, source: str, seq: int, root: str = ""):
+        """The bone transforms of one sequence, one entry per frame, on the model's skeleton (viewer frame)."""
+        from . import animation
+        mdl, ani, addon = _anim_inputs(sid, root, path)
+        try:
+            return animation.sample(mdl, ani, addon, source, seq)
+        except KeyError as e:
+            raise HTTPException(404, str(e.args[0]))
+        except (ValueError, OSError) as e:
+            raise HTTPException(422, f"Animation illisible : {e}")
 
     @app.get("/api/{sid}/output/collision")
     def output_collision(sid: str, path: str, root: str = ""):

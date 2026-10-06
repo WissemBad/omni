@@ -56,6 +56,10 @@ Modules: textures (TEXT/TEXD, BCn, mips, DXT, VTF, PNG, JPEG), audio (Wwise Vorb
 
 `native/src/rpkg.rs` reads RPKG v1 (`GKPR`) and v2 (`2KPR`) packages and their patches: offset table, resource headers (with or without the "states size" field, detected by the table size), references, XOR scrambling and LZ4. It writes the layout `sources/glacier/meta.py` reads and keeps existing files of the right size, so an interrupted extraction resumes. Only the resource types listed in `omni/core/setup.py` (`NEEDED_TYPES`) are written.
 
+## Animations in the viewer
+
+`native/src/source_anim.rs` reads compiled Source models (v44-49) and their `.ani`: skeleton, sequences and the per-frame bone transforms of one animation (raw 48/64-bit quaternions, half-float positions, run-length encoded streams scaled per bone, sections and external animation blocks). `ui/animation.py` lists the playable sequences of a model and of the models it includes (`targets/source/gmodanim.py` extracts `m_anm`, `f_anm`, `z_anm` once from Garry's Mod's VPK into `workspace/cache/gmod_anims`) and retargets a sequence onto the viewed skeleton by bone name: rotations on top of the model's own rest pose, only the pelvis moves, scaled by the height ratio; a movement sequence plays its most dynamic blend. `/api/<game>/output/animations` and `/animation` feed `OViewer.vue`, which drives the bones of the skinned GLB (`ui/output.build_glb` skins models whose vertices follow several bones).
+
 ## Sources
 
 A source subclasses `Source`, declares its `capabilities` and is registered in `omni/sources/registry.py`. The API reads nothing else about it: `/api/sources` lists the workbenches, the pages show only those.

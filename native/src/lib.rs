@@ -25,6 +25,7 @@ pub mod ww2ogg;
 pub mod wwise;
 pub mod par;
 pub mod scan;
+pub mod source_anim;
 #[cfg(test)]
 mod fuzz;
 pub mod rpkg;
@@ -37,6 +38,8 @@ mod py;
 mod py_media;
 #[cfg(feature = "python")]
 mod py_eta;
+#[cfg(feature = "python")]
+mod py_anim;
 #[cfg(feature = "python")]
 mod py_gltf;
 #[cfg(feature = "python")]

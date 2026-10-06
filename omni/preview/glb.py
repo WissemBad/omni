@@ -66,12 +66,15 @@ def export_glb(source, model: Model, materials: dict[str, Material], out: Path, 
     g.save(out)
 
 
-def export_scene(nodes: list[dict], materials: list[dict], out: Path, tex_size: int, read_texture) -> None:
+def export_scene(nodes: list[dict], materials: list[dict], out: Path, tex_size: int, read_texture, skeleton=None) -> None:
     """Generic scene export for the previews that need named nodes (bodygroup options) and materials that no
     node uses yet (other skins).  ``nodes``: {name, positions (Z-up metres), normals, uvs, indices, material}.
     ``materials``: {name, base: path|None, normal: path|None, alpha: OPAQUE|MASK|BLEND}; ``read_texture(path,
-    max_size)`` returns RGBA. Textures shared by several materials are stored once; opaque colour maps are JPEG."""
+    max_size)`` returns RGBA. Textures shared by several materials are stored once; opaque colour maps are JPEG.
+    ``skeleton`` = (bone names, parents, world matrices (n,4,4) with metres): the nodes that carry ``joints`` (n,4) and
+    ``weights`` (n,4) are skinned to it, so the viewer can play animations."""
     g = N.Glb("viewer")
+    skin = g.skeleton(*skeleton) if skeleton is not None else None
     cache: dict[tuple, int | None] = {}
 
     def texture(path, keep_alpha: bool) -> int | None:
@@ -92,5 +95,9 @@ def export_scene(nodes: list[dict], materials: list[dict], out: Path, tex_size: 
         prim = {"positions": np.asarray(n["positions"], np.float32), "normals": np.asarray(n["normals"], np.float32),
                 "uvs": np.asarray(n["uvs"], np.float32), "indices": np.ascontiguousarray(n["indices"], np.uint32),
                 "material": n["material"]}
-        g.node(n["name"], g.mesh(n["name"], [prim]))
+        skinned = skin is not None and n.get("joints") is not None
+        if skinned:
+            prim["joints"] = np.ascontiguousarray(n["joints"], np.uint16)
+            prim["weights"] = np.ascontiguousarray(n["weights"], np.float32)
+        g.node(n["name"], g.mesh(n["name"], [prim]), skin if skinned else None)
     g.save(out)

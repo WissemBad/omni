@@ -154,6 +154,8 @@ class Geometry:
     nrm: np.ndarray
     uv: np.ndarray
     meshes: list[dict]         # {b, m, k, skinref, idx: flat triangle list of global vertex ids}
+    bone_ids: np.ndarray | None = None   # (N,3) int, the bones that move each vertex (.vvd, up to three)
+    bone_w: np.ndarray | None = None     # (N,3) float, their weights (one bone: 1, 0, 0)
 
 
 def vtx_lods(vtx: bytes) -> tuple[int, list[float]]:
@@ -224,6 +226,14 @@ def read_geometry(mdl: bytes, vvd: bytes, vtx: bytes, lod: int = 0) -> Geometry:
     else:
         order = np.arange(nlodverts[0])
     pos, nrm, uv = raw["p"][order].astype(np.float64), raw["nr"][order].astype(np.float64), raw["uv"][order]
+    ids = raw["b"][order][:, :3].astype(np.int64)
+    nbones = raw["b"][order][:, 3].astype(np.int64)
+    weights = raw["w"][order].astype(np.float64)
+                                                         # a vertex bound to one bone: the file may leave the weights empty
+    unused = nbones[:, None] <= np.arange(3)[None, :]
+    ids[unused] = 0
+    weights[unused] = 0.0
+    weights[nbones <= 1, 0] = 1.0
 
     nbp, bpidx = struct.unpack_from("<2i", mdl, 232)
     offset: dict[tuple, tuple[int, int]] = {}
@@ -261,7 +271,7 @@ def read_geometry(mdl: bytes, vvd: bytes, vtx: bytes, lod: int = 0) -> Geometry:
     if disagree > agree:
         for me in meshes:
             me["idx"] = me["idx"].reshape(-1, 3)[:, ::-1].reshape(-1)
-    return Geometry(pos, nrm, uv, meshes)
+    return Geometry(pos, nrm, uv, meshes, ids, weights)
 
 
 # ---------------------------------------------------------------------------------------------------- .vmt

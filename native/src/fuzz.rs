@@ -323,4 +323,14 @@ fn unreal_parsers_survive_garbage() {
             let _ = crate::gltf::encode_image(b, w, h, 0, 80);
         }
     });
+
+    let mdl = crate::source_anim::tests::model();
+    fuzz("source_anim", &mdl, |b| {
+        if let Ok(info) = crate::source_anim::parse(b) {
+            for i in 0..info.anims.min(3) {
+                let _ = crate::source_anim::sample(b, Some(b), i);
+            }
+        }
+        let _ = crate::source_anim::sample(b, None, 0);
+    });
 }

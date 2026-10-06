@@ -549,3 +549,28 @@ export interface SetupStatus {
   data_dir: string
   free_bytes: number
 }
+
+/** One animation of a model's skeleton: per frame and bone, position (3) then quaternion (4), local, viewer frame. */
+export interface Clip {
+  frames: number
+  fps: number
+  loop: boolean
+  bones: number
+  data: Float32Array
+}
+
+export interface AnimSequence {
+  index: number
+  name: string
+  activity: string
+  frames: number
+  fps: number
+  loop: boolean
+  seconds: number
+}
+
+export interface AnimCatalog {
+  sources: { id: string; label: string; available: boolean; sequences: AnimSequence[] }[]
+  default: { source: string; index: number } | null
+  bones: number
+}

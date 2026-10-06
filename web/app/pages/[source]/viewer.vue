@@ -3,7 +3,9 @@ import type * as THREE from 'three'
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js'
 import type { LayerName } from '~/utils/overlays'
 import type {
+  AnimCatalog,
   Category,
+  Clip,
   OutputItem,
   OutputModel,
   OutputPage,
@@ -59,6 +61,14 @@ const viewer = useTemplateRef<{
   sync: () => void
   getScene: () => THREE.Scene
   getBox: () => THREE.Box3
+  setAnimation: (clip: Clip | null, autoplay?: boolean) => void
+  seek: (t: number) => void
+  hasSkeleton: boolean
+  playing: boolean
+  speed: number
+  loopAnim: boolean
+  clipTime: number
+  clipLength: number
 }>('viewer')
 
 let seq = 0
@@ -347,7 +357,109 @@ async function onLoaded() {
   showLayers()
   if (layers.collision) await loadCollision()
   moveMarker()
+  loadAnimations()
 }
+
+// ---- animations: the model's own sequences and those it includes (Garry's Mod's m_anm...), played on its skeleton
+const anims = ref<AnimCatalog | null>(null)
+const animChoice = ref('none')
+const animLoading = ref(false)
+let animToken = 0
+
+const animItems = computed(() => {
+  const out: (
+    | { label: string; value: string; icon?: string }
+    | { type: 'label'; label: string }
+  )[] = [{ label: 'Aucune (pose de référence)', value: 'none', icon: 'i-ri-user-line' }]
+  for (const s of anims.value?.sources ?? []) {
+    if (!s.sequences.length) continue
+    out.push({ type: 'label', label: s.id === 'self' ? 'Modèle' : `${s.label} · Garry’s Mod` })
+    for (const q of s.sequences)
+      out.push({
+        label: q.seconds ? `${q.name} · ${q.seconds} s` : q.name,
+        value: `${s.id}::${q.index}`,
+      })
+  }
+  return out
+})
+const playable = computed(() => animItems.value.length > 1)
+const SPEEDS = [0.25, 0.5, 1, 1.5, 2].map((v) => ({ label: `${v} ×`, value: v }))
+const speed = computed({
+  get: () => viewer.value?.speed ?? 1,
+  set: (v: number) => {
+    if (viewer.value) viewer.value.speed = v
+  },
+})
+const animTime = computed(() => viewer.value?.clipTime ?? 0)
+function togglePlay() {
+  const v = viewer.value
+  if (!v) return
+  if (!v.playing && v.clipTime >= v.clipLength - 0.001) v.seek(0) // finished without looping: play again from the start
+  v.playing = !v.playing
+}
+
+async function loadAnimations() {
+  const v = viewer.value
+  const m = model.value
+  const mine = ++animToken
+  anims.value = null
+  animChoice.value = 'none'
+  v?.setAnimation(null)
+  if (!m || !v?.hasSkeleton) return
+  try {
+    const c = await api<AnimCatalog>(
+      `/${sid.value}/output/animations?path=${encodeURIComponent(m.path)}&root=${root.value}`,
+    )
+    if (mine !== animToken) return
+    anims.value = c
+    // a player model starts on the stock idle, the way it stands in the game
+    if (c.default) animChoice.value = `${c.default.source}::${c.default.index}`
+  } catch {
+    if (mine === animToken) anims.value = null
+  }
+}
+
+async function playChoice() {
+  const v = viewer.value
+  const m = model.value
+  if (!v || !m) return
+  const mine = ++animToken
+  if (animChoice.value === 'none') {
+    v.setAnimation(null)
+    return
+  }
+  const cut = animChoice.value.lastIndexOf('::')
+  const source = animChoice.value.slice(0, cut)
+  const index = animChoice.value.slice(cut + 2)
+  animLoading.value = true
+  try {
+    const r = await api<{
+      frames: number
+      fps: number
+      loop: boolean
+      bones: number
+      data: string
+    }>(
+      `/${sid.value}/output/animation?path=${encodeURIComponent(m.path)}&source=${encodeURIComponent(source)}&seq=${index}&root=${root.value}`,
+    )
+    if (mine !== animToken) return
+    const bin = atob(r.data)
+    const bytes = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+    v.setAnimation({
+      frames: r.frames,
+      fps: r.fps,
+      loop: r.loop,
+      bones: r.bones,
+      data: new Float32Array(bytes.buffer),
+    })
+  } catch (e) {
+    toast.add({ title: 'Animation impossible', description: apiError(e), color: 'error' })
+  } finally {
+    if (mine === animToken) animLoading.value = false
+  }
+}
+watch(animChoice, playChoice)
 
 async function loadCollision() {
   const m = model.value
@@ -673,6 +785,19 @@ defineShortcuts({
               <UBadge :label="`${(model.lods[lod]?.triangles ?? model.triangles).toLocaleString('fr-FR')} tri`" color="neutral" variant="subtle" size="sm" />
               <UBadge v-if="dims" :label="dims" color="neutral" variant="subtle" size="sm" />
               <UBadge v-if="model.lods.length > 1" :label="`LOD ${lod}/${model.lods.length - 1}`" color="neutral" variant="outline" size="sm" />
+            </div>
+          </WGlassCard>
+          <WGlassCard v-if="active && playable" :halo="false" class="mt-2 max-w-md" body-class="flex flex-col gap-2 p-3 sm:p-3">
+            <div class="flex items-center gap-2">
+              <UIcon :name="animLoading ? 'i-ri-loader-4-line' : 'i-ri-movie-2-line'" class="size-4 shrink-0 text-muted" :class="animLoading && 'animate-spin'" />
+              <USelectMenu :model-value="animChoice as never" :items="animItems as never" value-key="value" size="sm" class="min-w-0 flex-1" placeholder="Animation" @update:model-value="(v: unknown) => (animChoice = String(v))" />
+            </div>
+            <div v-if="animChoice !== 'none' && viewer" class="flex items-center gap-2">
+              <UButton :icon="viewer.playing ? 'i-ri-pause-fill' : 'i-ri-play-fill'" size="sm" color="neutral" variant="soft" :aria-label="viewer.playing ? 'Pause' : 'Lecture'" @click="togglePlay" />
+              <UTooltip text="Boucle"><UButton icon="i-ri-repeat-line" size="sm" :color="viewer.loopAnim ? 'primary' : 'neutral'" :variant="viewer.loopAnim ? 'soft' : 'ghost'" aria-label="Boucle" @click="viewer.loopAnim = !viewer.loopAnim" /></UTooltip>
+              <USlider class="min-w-0 flex-1" size="sm" :model-value="animTime" :min="0" :max="viewer.clipLength || 1" :step="0.01" @update:model-value="(t) => viewer?.seek(Number(t))" />
+              <span class="w-16 shrink-0 text-right text-xs tabular-nums text-muted">{{ animTime.toFixed(1) }} / {{ viewer.clipLength.toFixed(1) }} s</span>
+              <USelectMenu v-model="speed" :items="SPEEDS" value-key="value" :search-input="false" size="sm" class="w-24 shrink-0" />
             </div>
           </WGlassCard>
         </template>

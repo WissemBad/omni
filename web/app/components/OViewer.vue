@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { type GLTF, GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import type { Clip } from '~/utils/types'
 
 type Shading = 'textured' | 'clay' | 'normals' | 'checker'
 
@@ -41,6 +42,108 @@ const error = ref('')
 const wire = ref(false)
 const grid = ref(true)
 const spin = ref(false)
+
+// ---- skeleton animation (the clip drives the bones of the skinned meshes)
+let skin: { bones: THREE.Bone[]; rest: { p: THREE.Vector3; q: THREE.Quaternion }[] } | null = null
+let clip: Clip | null = null
+let lastTick = 0
+const qa = new THREE.Quaternion()
+const qb = new THREE.Quaternion()
+const hasSkeleton = ref(false)
+const playing = ref(true)
+const speed = ref(1)
+const loopAnim = ref(true) // looping is on by default, whatever the sequence itself says
+const clipTime = ref(0)
+const clipLength = ref(0)
+
+function findSkeleton(scene3: THREE.Object3D) {
+  skin = null
+  scene3.traverse((o) => {
+    const mesh = o as THREE.SkinnedMesh
+    if (!mesh.isSkinnedMesh) return
+    mesh.frustumCulled = false // the rest-pose bounds would cull a moving model
+    if (!skin)
+      skin = {
+        bones: mesh.skeleton.bones,
+        rest: mesh.skeleton.bones.map((b) => ({ p: b.position.clone(), q: b.quaternion.clone() })),
+      }
+  })
+  hasSkeleton.value = !!skin
+}
+
+function restPose() {
+  if (!skin) return
+  skin.bones.forEach((b, i) => {
+    b.position.copy(skin!.rest[i]!.p)
+    b.quaternion.copy(skin!.rest[i]!.q)
+  })
+}
+
+function applyClip(t: number) {
+  if (!clip || !skin) return
+  const n = clip.frames
+  let f = t * clip.fps
+  let i0: number
+  let i1: number
+  if (loopAnim.value) {
+    f = ((f % n) + n) % n
+    i0 = Math.floor(f)
+    i1 = (i0 + 1) % n
+  } else {
+    f = Math.min(Math.max(f, 0), n - 1)
+    i0 = Math.floor(f)
+    i1 = Math.min(i0 + 1, n - 1)
+  }
+  const a = f - i0
+  const B = clip.bones
+  const d = clip.data
+  for (let b = 0; b < Math.min(B, skin.bones.length); b++) {
+    const o0 = (i0 * B + b) * 7
+    const o1 = (i1 * B + b) * 7
+    const bone = skin.bones[b]!
+    bone.position.set(
+      d[o0]! + (d[o1]! - d[o0]!) * a,
+      d[o0 + 1]! + (d[o1 + 1]! - d[o0 + 1]!) * a,
+      d[o0 + 2]! + (d[o1 + 2]! - d[o0 + 2]!) * a,
+    )
+    qa.set(d[o0 + 3]!, d[o0 + 4]!, d[o0 + 5]!, d[o0 + 6]!)
+    qb.set(d[o1 + 3]!, d[o1 + 4]!, d[o1 + 5]!, d[o1 + 6]!)
+    bone.quaternion.copy(qa).slerp(qb, a)
+  }
+}
+
+/** Plays a clip on the loaded skeleton, or shows the rest pose again with `null`. */
+function setAnimation(c: Clip | null, autoplay = true) {
+  clip = c
+  clipTime.value = 0
+  clipLength.value = c ? c.frames / c.fps : 0
+  if (c) {
+    playing.value = autoplay
+    applyClip(0)
+  } else restPose()
+  requestRender()
+}
+
+function seek(t: number) {
+  clipTime.value = Math.min(Math.max(t, 0), clipLength.value)
+  applyClip(clipTime.value)
+  requestRender()
+}
+
+function tickAnimation(now: number) {
+  const dt = lastTick ? Math.min((now - lastTick) / 1000, 0.1) : 0
+  lastTick = now
+  if (!clip || !playing.value || !clipLength.value) return
+  let t = clipTime.value + dt * speed.value
+  if (loopAnim.value) t %= clipLength.value
+  else if (t >= clipLength.value) {
+    t = clipLength.value
+    playing.value = false
+  }
+  clipTime.value = t
+  applyClip(t)
+  dirty = true
+}
 
 let renderer: THREE.WebGLRenderer
 let scene: THREE.Scene
@@ -162,8 +265,10 @@ async function load(url?: string) {
       return
     }
     disposeRoot()
+    clip = null
     root.value = gltf.scene
     parser.value = gltf.parser
+    findSkeleton(gltf.scene)
     scene.add(gltf.scene)
     box.setFromObject(gltf.scene)
     box.getCenter(center)
@@ -346,7 +451,8 @@ onMounted(() => {
   observer.observe(el)
   resize()
 
-  renderer.setAnimationLoop(() => {
+  renderer.setAnimationLoop((now: number) => {
+    tickAnimation(now)
     controls.autoRotate = spin.value
     const moved = controls.update()
     if (moved || dirty) {
@@ -398,6 +504,14 @@ defineExpose({
   view,
   getScene: () => scene,
   getBox: () => box.clone(),
+  setAnimation,
+  seek,
+  hasSkeleton,
+  playing,
+  speed,
+  loopAnim,
+  clipTime,
+  clipLength,
 })
 
 let dragging = false
