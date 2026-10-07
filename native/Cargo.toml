@@ -1,6 +1,6 @@
 [package]
 name = "omni_native"
-version = "0.4.0"
+version = "1.0.0"
 edition = "2021"
 description = "Native core of omni: textures (decode, mips, DXT, VTF, PNG), audio (Wwise -> Ogg/FLAC/WAV), game collision, skinning"
 

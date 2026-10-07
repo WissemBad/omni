@@ -8,6 +8,7 @@ from __future__ import annotations
 import datetime
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -41,7 +42,11 @@ def main(version: str) -> None:
     today = datetime.date.today().isoformat()
     s = s.replace("## [Unreleased]", f"## [Unreleased]\n\n## [{version}] - {today}", 1)
     log.write_text(s, encoding="utf-8", newline="\n")
-    print(f"omni {version}: pyproject.toml, omni/__init__.py, native/Cargo.toml, web/package.json, CHANGELOG.md")
+    subprocess.run(["uv", "lock"], cwd=ROOT, check=True)
+    subprocess.run(["cargo", "update", "-p", "omni_native", "--offline", "--manifest-path", "native/Cargo.toml"],
+                   cwd=ROOT, check=True)
+    print(f"omni {version}: pyproject.toml, omni/__init__.py, native/Cargo.toml, web/package.json, CHANGELOG.md, "
+          "uv.lock, native/Cargo.lock")
     print("next: commit as 'chore(release): v" + version + "', open the pull request, then push the tag v" + version)
 
 

@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-08
+
 ### Added
 
 - 007 First Light: omni checks its reading of the game's entities against the game's own class schemas (`CPPT`, with the

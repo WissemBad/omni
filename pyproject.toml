@@ -1,6 +1,6 @@
 [project]
 name = "omni"
-version = "0.4.0"
+version = "1.0.0"
 description = "Converts the assets of a game into Garry's Mod content and glTF"
 requires-python = ">=3.12"
 dependencies = [
