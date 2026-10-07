@@ -72,7 +72,7 @@ const stats = computed(() => {
     { label: 'Os', value: String(m.value.model.bones.length), icon: 'i-ri-node-tree' },
     {
       label: 'Dimensions',
-      value: cm ? cm.map((v) => Math.round(v)).join(' × ') + ' cm' : '—',
+      value: cm ? `${cm.map((v) => Math.round(v)).join(' × ')} cm` : '—',
       icon: 'i-ri-ruler-line',
     },
     {

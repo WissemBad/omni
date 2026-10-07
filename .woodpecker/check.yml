@@ -11,6 +11,7 @@ steps:
       - printf '//npm.pkg.github.com/:_authToken=%s\n' "$${GITHUB_PACKAGES_TOKEN}" > /root/.npmrc
       - cd web
       - bun install --frozen-lockfile
+      - rm -f /root/.npmrc
 
   - name: web-check
     image: oven/bun:alpine
@@ -30,5 +31,6 @@ steps:
   - name: python-lint
     image: ghcr.io/astral-sh/uv:python3.12-bookworm
     commands:
+      - uv lock --check
       - uv sync --locked
       - uv run --no-sync ruff check

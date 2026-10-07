@@ -1,30 +1,5 @@
 <script setup lang="ts">
-import type { Channel } from '~/utils/textures'
-
-/** One texture the viewer can show: a game texture (before conversion) or a converted VTF. */
-export interface TexEntry {
-  id: string
-  /** What the texture is for ("Couleur", "Normale"...). */
-  label: string
-  /** File / texture name. */
-  name: string
-  material?: string
-  width?: number
-  height?: number
-  /** URL of the image for a channel and a size. */
-  src: (channel: Channel, size: number) => string
-  /** Facts shown in the side panel. */
-  info: [string, string | number][]
-  flags?: string[]
-  /** UV layout of the model drawn over the texture, when it is known. */
-  uv?: string | null
-  /** Game texture key: link to the Textures workbench. */
-  gameKey?: string
-  /** Converted file path (copy / show in Explorer). */
-  path?: string
-  /** Full-resolution download URL. */
-  download?: string
-}
+import type { Channel, TexEntry } from '~/utils/textures'
 
 /**
  * Full-size look at a texture: zoom and pan, colour channels, size, background and the model's UV layout over it.

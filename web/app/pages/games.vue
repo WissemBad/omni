@@ -65,7 +65,7 @@ function preparing(id: string) {
 watch(
   () => games.value.map((g) => !!preparing(g.id)).join(),
   async (now, before) => {
-    if (before && before.includes('true') && !now.includes('true')) {
+    if (before?.includes('true') && !now.includes('true')) {
       await load()
       await loadSources(true).catch(() => [])
     }

@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import type { TexEntry } from '~/components/OTextureViewer.vue'
-import type { Channel } from '~/utils/textures'
+import type { Channel, TexEntry } from '~/utils/textures'
 import type { Category, GameTexture, TextureDetail, TexturePage } from '~/utils/types'
 
 definePageMeta({ key: (r) => `${r.params.source}/textures` })

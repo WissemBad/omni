@@ -73,7 +73,7 @@ export function outputTitle(m: { title?: string; name: string; kind?: string }):
 /** Dimensions in cm in the order the props page uses: depth x width x height (Source axes). */
 export function dimsCm(m: Pick<OutputModel, 'extent'>): string | null {
   if (!m.extent) return null
-  return m.extent.map((v) => Math.round((v / 39.37) * 100)).join(' × ') + ' cm'
+  return `${m.extent.map((v) => Math.round((v / 39.37) * 100)).join(' × ')} cm`
 }
 
 /** GMod console command that puts a converted player model on the local player. */

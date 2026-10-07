@@ -1,5 +1,4 @@
-import type { TexEntry } from '~/components/OTextureViewer.vue'
-import type { Channel } from '~/utils/textures'
+import type { Channel, TexEntry } from '~/utils/textures'
 import type { OutputMaterial, SourceMaterial } from '~/utils/types'
 
 /** Texture-viewer entries of game materials (props, characters, origin of a converted model). */

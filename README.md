@@ -17,7 +17,7 @@ The parsers, texture codecs, audio converters, glTF writer and bulk readers are 
 
 ## Install
 
-Download the installer or the portable archive from the [releases](https://github.com/Wissem-Industries/omni/releases), start Omni, then add a game on the **Jeux** page. A short guide in French is in [docs/mode-emploi.md](docs/mode-emploi.md).
+Download `Omni-Setup-<version>.exe` (installer) or `Omni-<version>-windows.zip` (portable) from the [releases](https://github.com/Wissem-Industries/omni/releases), start Omni, then add a game on the **Jeux** page. `SHA256SUMS.txt` lists the checksums of both files. A short guide in French is in [docs/mode-emploi.md](docs/mode-emploi.md).
 
 Requirements: Windows 10 or 11 with the WebView2 runtime, a copy of the game, Garry's Mod for the model conversion.
 

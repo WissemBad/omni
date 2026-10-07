@@ -404,7 +404,7 @@ function renderFrame() {
 
 function resize() {
   const el = host.value
-  if (!el || !el.clientWidth) return
+  if (!el?.clientWidth) return
   renderer.setSize(el.clientWidth, el.clientHeight, false)
   camera.aspect = el.clientWidth / el.clientHeight
   camera.updateProjectionMatrix()

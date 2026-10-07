@@ -18,7 +18,6 @@ All notable changes to this project are documented here. The format follows [Kee
   them once a key is given (Settings, *Clé des textes du jeu*). The texts of 007 First Light are enciphered with a key
   that is not the one of the earlier Hitman games, so they stay unreadable until that key is known; the display names of
   outfits therefore remain the game's internal names for now.
-
 - 007 First Light: the role of a texture (colour, emissive, mask, specular...) now comes from the material class itself
   (its `.materialclass` resource lists what each generic slot means in that class) instead of the slot position and the
   texture's file name. About one texture in ten of the materials checked changes role or is dropped: the class's black and
@@ -38,40 +37,6 @@ All notable changes to this project are documented here. The format follows [Kee
   game's model is kept, without `$lod` models.
 - The folder of the models and materials inside the addon is a free setting (`omni`, `wissem/omni`, `import/wissem`...):
   `models/<folder>/<game>/` and `materials/<folder>/<game>/`. Models converted earlier must be converted again.
-
-### Changed
-
-- **One Omni folder, two parts.** Everything omni writes goes to `Documents\Omni` (movable with `omni home set <folder>`):
-  `exports\<game>\` holds what you take away (the Garry's Mod addon, glTF models, sounds, textures, Blender files, the
-  `.gma` archive) and `workspace\` what omni manages (settings, queue, catalogs, caches, tools, logs). The application
-  itself holds no data. Data of the earlier layouts moves over without deleting or overwriting anything
-  (`omni migrate <old folder>`), and the Garry's Mod link follows the addon. The exports folder can also be set apart
-  in the settings.
-- The glTF writer is part of the Rust core: arrays are validated before writing, images are encoded without the GIL
-  and a native crash while exporting costs one model instead of the batch. Props are exported by worker processes.
-- The prop catalog (11 s instead of 4 minutes), the texture catalog (12 s instead of 2.5 minutes), the sound list
-  (25 s instead of 5 minutes) and the hashing of sounds before an export read the game's files in parallel in the Rust
-  core. The VTF writer is the core's too.
-
-### Fixed
-
-- Player model bodygroups follow the game's own catalogue: a part is filed by the folder of its part template
-  (`upperbody_l01` shirts, `upperbody_l02` outerwear, `lowerbody`, `footwear`, `handwear`, `body/body_parts`...) and, for
-  outfit kits, by the garment word of its name. The old name-matching put pants in *Torso* and produced *Torso 2* to
-  *Torso 7*; bodygroups are now Head, Hair, Headwear, Shirt, Outerwear, Vest, Arms, Gloves, Pants, Legs skin, Shoes...
-- The viewer reported every material of an Unreal game as missing when the game has a content folder named `Materials`
-  (it took that folder for the addon root).
-- Starting a sound export failed with "'function' object is not subscriptable".
-- `uv sync` / `uv run` removed the Rust core installed by maturin and left an empty package that made the Rust badge
-  and `/api/system` fail. The launcher uses `uv sync --inexact`, an incomplete module is reported as absent.
-
-### Removed
-
-- The pure-Python texture fallback (`quicktex`), the `pygltflib` runtime dependency and the community files that the
-  other repositories do not carry (issue and pull request templates, `CODEOWNERS`, `CONTRIBUTING.md`, `SECURITY.md`).
-
-### Added
-
 - **Unreal Engine 5 games** (any UE 5.x game with IoStore containers; validated on *Bronzebeard's Tavern*, UE 5.1):
   props (static meshes, skeletal meshes as statues), characters (humanoid skeletal meshes as playermodels),
   textures and sounds, all read in place from the game's `.utoc`/`.ucas` by the Rust core: IoStore containers
@@ -102,24 +67,19 @@ All notable changes to this project are documented here. The format follows [Kee
   mannequin, Mixamo, 3ds Max Biped and CAT, Rigify...) and mapped onto ValveBiped, characters turned to face
   forward; 3D preview of the posed character.
 
-### Fixed
-
-- The model compiler downloaded by the setup lacked `celfbxsdk.dll`: `cestudiomdl.exe` exited silently and every
-  conversion failed with an empty error. The file is now part of the pinned download, an incomplete compiler is
-  reported as missing (and fetched again), and a compiler that cannot start gives a clear error.
-- Playermodels of characters without toe bones failed to compile (hitbox on a bone studiomdl had removed).
-- Mappings text read from a cache could make the core panic on a malformed line (found by the new fuzz tests).
-- **Remaining-time estimates**: a batch that starts with its biggest items showed 40 hours, then dropped to minutes.
-  The estimator now lives in the Rust core (`native/src/eta.rs`): it learns while the batch runs what an item costs
-  from its weight (mesh size, number of variations) and prices what is left; checked on a real 27,686-prop
-  conversion, it stays within about +/-30 % from 3 % of progress on (a plain average was off by a factor of 15).
-  Counters without item weights use the speed of the last seconds instead of the average since the start.
-- Exports now show **what they are doing**: steps with their own counter and time left (`Étape 2/3 · Export glTF
-  (.glb)`), for the .blend and .glb exports that had no information, and for sounds (list, media fingerprints,
-  conversion). The same progress block is used on the game page, the sounds page and the jobs panel.
-
 ### Changed
 
+- **One Omni folder, two parts.** Everything omni writes goes to `Documents\Omni` (movable with `omni home set <folder>`):
+  `exports\<game>\` holds what you take away (the Garry's Mod addon, glTF models, sounds, textures, Blender files, the
+  `.gma` archive) and `workspace\` what omni manages (settings, queue, catalogs, caches, tools, logs). The application
+  itself holds no data. Data of the earlier layouts moves over without deleting or overwriting anything
+  (`omni migrate <old folder>`), and the Garry's Mod link follows the addon. The exports folder can also be set apart
+  in the settings.
+- The glTF writer is part of the Rust core: arrays are validated before writing, images are encoded without the GIL
+  and a native crash while exporting costs one model instead of the batch. Props are exported by worker processes.
+- The prop catalog (11 s instead of 4 minutes), the texture catalog (12 s instead of 2.5 minutes), the sound list
+  (25 s instead of 5 minutes) and the hashing of sounds before an export read the game's files in parallel in the Rust
+  core. The VTF writer is the core's too.
 - **Playermodel batches run in parallel** (8 worker processes, the same crash-proof pool as props) instead of one
   family after another inside the server: about 7x faster (48 families in 57 s instead of 7 min). The registry
   and the Lua list are updated under a cross-process lock.
@@ -135,23 +95,44 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 
+- Player model bodygroups follow the game's own catalogue: a part is filed by the folder of its part template
+  (`upperbody_l01` shirts, `upperbody_l02` outerwear, `lowerbody`, `footwear`, `handwear`, `body/body_parts`...) and, for
+  outfit kits, by the garment word of its name. The old name-matching put pants in *Torso* and produced *Torso 2* to
+  *Torso 7*; bodygroups are now Head, Hair, Headwear, Shirt, Outerwear, Vest, Arms, Gloves, Pants, Legs skin, Shoes...
+- The viewer reported every material of an Unreal game as missing when the game has a content folder named `Materials`
+  (it took that folder for the addon root).
+- Starting a sound export failed with "'function' object is not subscriptable".
+- `uv sync` / `uv run` removed the Rust core installed by maturin and left an empty package that made the Rust badge
+  and `/api/system` fail. The launcher uses `uv sync --inexact`, an incomplete module is reported as absent.
+- The model compiler downloaded by the setup lacked `celfbxsdk.dll`: `cestudiomdl.exe` exited silently and every
+  conversion failed with an empty error. The file is now part of the pinned download, an incomplete compiler is
+  reported as missing (and fetched again), and a compiler that cannot start gives a clear error.
+- Playermodels of characters without toe bones failed to compile (hitbox on a bone studiomdl had removed).
+- Mappings text read from a cache could make the core panic on a malformed line (found by the new fuzz tests).
+- **Remaining-time estimates**: a batch that starts with its biggest items showed 40 hours, then dropped to minutes.
+  The estimator now lives in the Rust core (`native/src/eta.rs`): it learns while the batch runs what an item costs
+  from its weight (mesh size, number of variations) and prices what is left; checked on a real 27,686-prop
+  conversion, it stays within about +/-30 % from 3 % of progress on (a plain average was off by a factor of 15).
+  Counters without item weights use the speed of the last seconds instead of the average since the start.
+- Exports now show **what they are doing**: steps with their own counter and time left (`Étape 2/3 · Export glTF
+  (.glb)`), for the .blend and .glb exports that had no information, and for sounds (list, media fingerprints,
+  conversion). The same progress block is used on the game page, the sounds page and the jobs panel.
 - Cancelling a batch ended the job in error (`'NoneType' object has no attribute 'values'`), and the studiomdl
   of a killed worker kept running: each worker now holds its children in a Windows job object closed with it.
 - studiomdl's "WARNING: Error with convex elements..." (it then builds a single hull) was taken for an error: the
   playermodel failed, or the prop lost its collision and was compiled twice.
 - Two workers writing the same shared texture at once failed with "Access is denied": the rename is retried while
   the other process holds the file, and a reader waits for a file being replaced.
+- Command-line commands now apply the saved settings (asset folder, GMod, compiler).
+- The character and sound lists are never cached empty, and are rebuilt when the names change.
 
 ### Removed
 
+- The pure-Python texture fallback (`quicktex`), the `pygltflib` runtime dependency and the community files that the
+  other repositories do not carry (issue and pull request templates, `CODEOWNERS`, `CONTRIBUTING.md`, `SECURITY.md`).
 - The WebAssembly core and every pure-Python fallback: the Rust module is required (the packaged app ships it), one
   code path for textures, SMD, collisions, skinning and sounds. `wasmtime` and `texture2ddecoder` are no longer
   dependencies; obsolete investigation scripts and dead code are gone.
-
-### Fixed
-
-- Command-line commands now apply the saved settings (asset folder, GMod, compiler).
-- The character and sound lists are never cached empty, and are rebuilt when the names change.
 
 ## [0.4.0] - 2026-10-05
 

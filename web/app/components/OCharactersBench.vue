@@ -252,7 +252,7 @@ const presetTip = (i: number) => {
   const p = m?.presets[i]
   if (!m || !p) return ''
   const parts = m.groups.map(
-    (g, gi) => `${g.name} : ${g.options[p.bodygroups[g.name] ?? 0] ?? '—'}`,
+    (g, _gi) => `${g.name} : ${g.options[p.bodygroups[g.name] ?? 0] ?? '—'}`,
   )
   return [`Variation ${p.variant} · skin ${p.skin}`, ...parts].join('\n')
 }
