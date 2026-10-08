@@ -11,7 +11,7 @@ fn err(e: impl std::fmt::Display) -> PyErr {
 }
 
 fn info_dict<'py>(py: Python<'py>, i: &audio::WemInfo) -> PyResult<Bound<'py, PyDict>> {
-    let d = PyDict::new_bound(py);
+    let d = PyDict::new(py);
     d.set_item("codec", i.codec)?;
     d.set_item("channels", i.channels)?;
     d.set_item("rate", i.rate)?;
@@ -32,8 +32,8 @@ fn wem_info<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Option<Bound<'py, PyD
 #[pyfunction]
 #[pyo3(signature = (data, fmt="auto", tags=vec![]))]
 fn convert_wem<'py>(py: Python<'py>, data: &[u8], fmt: &str, tags: Vec<(String, String)>) -> PyResult<(String, Bound<'py, PyBytes>, Bound<'py, PyDict>)> {
-    let c = py.allow_threads(|| audio::convert(data, fmt, &tags)).map_err(err)?;
-    Ok((c.ext.to_string(), PyBytes::new_bound(py, &c.bytes), info_dict(py, &c.info)?))
+    let c = py.detach(|| audio::convert(data, fmt, &tags)).map_err(err)?;
+    Ok((c.ext.to_string(), PyBytes::new(py, &c.bytes), info_dict(py, &c.info)?))
 }
 
 fn pool(threads: usize) -> PyResult<rayon::ThreadPool> {
@@ -43,13 +43,13 @@ fn pool(threads: usize) -> PyResult<rayon::ThreadPool> {
 /// scan_media([(file, offset, size)], threads=0) -> [(sha1, info | None, error)] (one read per media, parallel)
 #[pyfunction]
 #[pyo3(signature = (items, threads=0))]
-fn scan_media(py: Python<'_>, items: Vec<(String, u64, i64)>, threads: usize) -> PyResult<Vec<(String, Option<PyObject>, String)>> {
+fn scan_media(py: Python<'_>, items: Vec<(String, u64, i64)>, threads: usize) -> PyResult<Vec<(String, Option<Py<PyAny>>, String)>> {
     let p = pool(threads)?;
-    let res = py.allow_threads(|| p.install(|| audio::scan(&items)));
+    let res = py.detach(|| p.install(|| audio::scan(&items)));
     res.into_iter()
         .map(|s| {
             let info = match s.info {
-                Some(i) => Some(info_dict(py, &i)?.into_py(py)),
+                Some(i) => Some(info_dict(py, &i)?.into_pyobject(py)?.into_any().unbind()),
                 None => None,
             };
             Ok((s.sha1, info, s.error))
@@ -64,7 +64,7 @@ type Links = (Vec<(u64, u32)>, Vec<(u64, Vec<u32>)>, Vec<(u32, Vec<(u32, Vec<u32
 ///   -> ([(hash, bank id)], [(hash, [embedded media])], [(media, [(event id, [switch ids])])], [sourced media], events)
 #[pyfunction]
 fn bank_links(py: Python<'_>, banks: Vec<(u64, pyo3::pybacked::PyBackedBytes)>, known: Vec<u32>) -> PyResult<Links> {
-    Ok(py.allow_threads(|| {
+    Ok(py.detach(|| {
         let parsed: Vec<(u64, wwise::Bank)> = banks.iter().filter_map(|(h, d)| wwise::parse_bank(d.as_ref()).map(|b| (*h, b))).collect();
         let known: std::collections::HashSet<u32> = known.into_iter().collect();
         let ids = parsed.iter().map(|(h, b)| (*h, b.bank_id)).collect();
@@ -100,7 +100,7 @@ fn encode_vtf<'py>(py: Python<'py>, path: &str, rgba: PyReadonlyArray3<'py, u8>,
     let k = vtf::Kind::parse(kind).map_err(err)?;
     let mut owned = Vec::new();
     let (data, w, h) = rgba_slice(&rgba, &mut owned)?;
-    py.allow_threads(|| vtf::encode_vtf(std::path::Path::new(path), data, w, h, format, k, max_size, flags, quality, coverage)).map_err(err)
+    py.detach(|| vtf::encode_vtf(std::path::Path::new(path), data, w, h, format, k, max_size, flags, quality, coverage)).map_err(err)
 }
 
 /// write_vtf(path, format code, [(w, h, bytes)] largest first, flags=0, reflectivity=(.5,.5,.5)): raw blocks
@@ -112,7 +112,7 @@ fn write_vtf(py: Python<'_>, path: &str, fmt: u32, mips: Vec<(usize, usize, pyo3
     if mips.is_empty() {
         return Err(err("no mip"));
     }
-    py.allow_threads(|| vtf::write_vtf(std::path::Path::new(path), fmt, &mips, flags, [reflectivity.0, reflectivity.1, reflectivity.2])).map_err(err)
+    py.detach(|| vtf::write_vtf(std::path::Path::new(path), fmt, &mips, flags, [reflectivity.0, reflectivity.1, reflectivity.2])).map_err(err)
 }
 
 /// normal_map(rgba (h,w,4), rebuild_z, flip_y) -> uint8 (h, w, 4): a decoded normal map made ready for a
@@ -122,16 +122,16 @@ fn normal_map<'py>(py: Python<'py>, rgba: PyReadonlyArray3<'py, u8>, rebuild_z: 
     let mut owned = Vec::new();
     let (data, w, h) = rgba_slice(&rgba, &mut owned)?;
     let mut px = data.to_vec();
-    py.allow_threads(|| texture::normal_map(&mut px, rebuild_z, flip_y));
-    Ok(numpy::ndarray::Array3::from_shape_vec((h, w, 4), px).map_err(err)?.into_pyarray_bound(py))
+    py.detach(|| texture::normal_map(&mut px, rebuild_z, flip_y));
+    Ok(numpy::ndarray::Array3::from_shape_vec((h, w, 4), px).map_err(err)?.into_pyarray(py))
 }
 
 /// decode_vtf(bytes, max_dim=1024) -> uint8 (h, w, 4)
 #[pyfunction]
 #[pyo3(signature = (data, max_dim=1024))]
 fn decode_vtf<'py>(py: Python<'py>, data: &[u8], max_dim: usize) -> PyResult<Bound<'py, PyArray3<u8>>> {
-    let (w, h, px) = py.allow_threads(|| vtf::decode_vtf(data, max_dim)).map_err(err)?;
-    Ok(numpy::ndarray::Array3::from_shape_vec((h, w, 4), px).map_err(err)?.into_pyarray_bound(py))
+    let (w, h, px) = py.detach(|| vtf::decode_vtf(data, max_dim)).map_err(err)?;
+    Ok(numpy::ndarray::Array3::from_shape_vec((h, w, 4), px).map_err(err)?.into_pyarray(py))
 }
 
 /// png_rgba(rgba (h,w,4), channel="rgb", max_dim=0) -> PNG bytes
@@ -140,8 +140,8 @@ fn decode_vtf<'py>(py: Python<'py>, data: &[u8], max_dim: usize) -> PyResult<Bou
 fn png_rgba<'py>(py: Python<'py>, rgba: PyReadonlyArray3<'py, u8>, channel: &str, max_dim: usize) -> PyResult<Bound<'py, PyBytes>> {
     let mut owned = Vec::new();
     let (data, w, h) = rgba_slice(&rgba, &mut owned)?;
-    let out = py.allow_threads(|| vtf::png(data, w, h, channel, max_dim)).map_err(err)?;
-    Ok(PyBytes::new_bound(py, &out))
+    let out = py.detach(|| vtf::png(data, w, h, channel, max_dim)).map_err(err)?;
+    Ok(PyBytes::new(py, &out))
 }
 
 
@@ -151,12 +151,12 @@ fn png_rgba<'py>(py: Python<'py>, rgba: PyReadonlyArray3<'py, u8>, channel: &str
 #[pyo3(signature = (text, texd=None, channel="rgb", max_dim=1024, normal=false))]
 fn texture_png<'py>(py: Python<'py>, text: &[u8], texd: Option<&[u8]>, channel: &str, max_dim: usize, normal: bool) -> PyResult<(Bound<'py, PyBytes>, (usize, usize))> {
     let (png, wh) = py
-        .allow_threads(|| -> Result<(Vec<u8>, (usize, usize)), String> {
+        .detach(|| -> Result<(Vec<u8>, (usize, usize)), String> {
             let (w, h, px) = texture::top_rgba(text, texd, max_dim, normal)?;
             Ok((vtf::png(&px, w, h, channel, max_dim)?, (w, h)))
         })
         .map_err(err)?;
-    Ok((PyBytes::new_bound(py, &png), wh))
+    Ok((PyBytes::new(py, &png), wh))
 }
 
 
@@ -164,7 +164,7 @@ fn texture_png<'py>(py: Python<'py>, text: &[u8], texd: Option<&[u8]>, channel: 
 #[pyfunction]
 fn texture_headers(py: Python<'_>, paths: Vec<String>) -> Vec<Option<(u32, u32, String, u32, u64)>> {
     use rayon::prelude::*;
-    py.allow_threads(|| {
+    py.detach(|| {
         paths
             .par_iter()
             .map(|p| {
@@ -182,8 +182,8 @@ fn texture_headers(py: Python<'_>, paths: Vec<String>) -> Vec<Option<(u32, u32, 
 /// rpkg_info(path) -> {version, chunk, patch, files, unneeded, types: {TYPE: count}}
 #[pyfunction]
 fn rpkg_info<'py>(py: Python<'py>, path: &str) -> PyResult<Bound<'py, PyDict>> {
-    let pkg = py.allow_threads(|| rpkg::open(std::path::Path::new(path))).map_err(err)?;
-    let d = PyDict::new_bound(py);
+    let pkg = py.detach(|| rpkg::open(std::path::Path::new(path))).map_err(err)?;
+    let d = PyDict::new(py);
     let mut types: std::collections::BTreeMap<String, u64> = Default::default();
     let mut bytes: std::collections::BTreeMap<String, u64> = Default::default();
     for e in &pkg.entries {
@@ -209,8 +209,8 @@ fn rpkg_extract<'py>(py: Python<'py>, paths: Vec<String>, root: &str, types: Vec
     let paths: Vec<std::path::PathBuf> = paths.into_iter().map(Into::into).collect();
     let set: std::collections::HashSet<String> = types.into_iter().collect();
     let root = std::path::PathBuf::from(root);
-    let st = py.allow_threads(|| p.install(|| rpkg::extract(&paths, &root, &set))).map_err(err)?;
-    let d = PyDict::new_bound(py);
+    let st = py.detach(|| p.install(|| rpkg::extract(&paths, &root, &set))).map_err(err)?;
+    let d = PyDict::new(py);
     d.set_item("written", st.written)?;
     d.set_item("skipped", st.skipped)?;
     d.set_item("removed", st.removed)?;

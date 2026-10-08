@@ -22,6 +22,11 @@ All notable changes to this project are documented here. The format follows [Kee
 - Materials that tile their base maps (`gm_mBaseCoords`, about 4 % of sub-meshes) show the game's repetition instead
   of one stretched copy; a material without a base map takes its constant colour instead of an unrelated texture.
 
+### Security
+
+- The Rust core moves to PyO3 0.29 (from 0.22), which fixes three published advisories: an out-of-bounds read in list and
+  tuple iterators (high), a missing `Sync` bound on closures (medium) and a buffer overflow in `PyString::from_object` (low).
+
 ### Changed
 
 - The repository is public at [WissemBad/omni](https://github.com/WissemBad/omni); update checks follow it and no longer need

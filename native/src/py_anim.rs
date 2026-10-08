@@ -15,12 +15,12 @@ fn err(e: impl std::fmt::Display) -> PyErr {
 /// frames, anim_flags}], includes: [str], animations, needs_ani}
 #[pyfunction]
 fn mdl_info<'py>(py: Python<'py>, mdl: &[u8]) -> PyResult<Bound<'py, PyDict>> {
-    let info = py.allow_threads(|| sa::parse(mdl)).map_err(err)?;
-    let d = PyDict::new_bound(py);
+    let info = py.detach(|| sa::parse(mdl)).map_err(err)?;
+    let d = PyDict::new(py);
     d.set_item("name", &info.name)?;
-    let bones = PyList::empty_bound(py);
+    let bones = PyList::empty(py);
     for b in &info.bones {
-        let e = PyDict::new_bound(py);
+        let e = PyDict::new(py);
         e.set_item("name", &b.name)?;
         e.set_item("parent", b.parent)?;
         e.set_item("pos", b.pos.to_vec())?;
@@ -28,9 +28,9 @@ fn mdl_info<'py>(py: Python<'py>, mdl: &[u8]) -> PyResult<Bound<'py, PyDict>> {
         bones.append(e)?;
     }
     d.set_item("bones", bones)?;
-    let seqs = PyList::empty_bound(py);
+    let seqs = PyList::empty(py);
     for s in &info.seqs {
-        let e = PyDict::new_bound(py);
+        let e = PyDict::new(py);
         e.set_item("name", &s.name)?;
         e.set_item("activity", &s.activity)?;
         e.set_item("flags", s.flags)?;
@@ -53,9 +53,9 @@ fn mdl_info<'py>(py: Python<'py>, mdl: &[u8]) -> PyResult<Bound<'py, PyDict>> {
 #[pyfunction]
 #[pyo3(signature = (mdl, ani=None, anim=0))]
 fn mdl_sample<'py>(py: Python<'py>, mdl: &[u8], ani: Option<&[u8]>, anim: usize) -> PyResult<(f32, i32, Bound<'py, PyArray3<f32>>)> {
-    let s = py.allow_threads(|| sa::sample(mdl, ani, anim)).map_err(err)?;
+    let s = py.detach(|| sa::sample(mdl, ani, anim)).map_err(err)?;
     let arr = numpy::ndarray::Array3::from_shape_vec((s.frames, s.bones, 7), s.data).map_err(err)?;
-    Ok((s.fps, s.flags, arr.into_pyarray_bound(py)))
+    Ok((s.fps, s.flags, arr.into_pyarray(py)))
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
