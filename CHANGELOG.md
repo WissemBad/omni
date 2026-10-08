@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-08
+
 ### Fixed
 
 - Garry's Mod: normal maps had their relief lit from the wrong side. The game's maps point green up (OpenGL) and

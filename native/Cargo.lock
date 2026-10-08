@@ -278,7 +278,7 @@ dependencies = [
 
 [[package]]
 name = "omni_native"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "aes",
  "jpeg-encoder",
