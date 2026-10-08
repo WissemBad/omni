@@ -58,13 +58,15 @@ Package locally with `uv run --no-sync pyinstaller packaging/omni.spec --noconfi
 
 ## Release
 
-Versions follow Semantic Versioning and changes are listed in [CHANGELOG.md](CHANGELOG.md).
+Versions follow Semantic Versioning and changes are listed in [CHANGELOG.md](CHANGELOG.md). CI (Woodpecker, Linux) runs the checks; the Windows installer is built on a Windows machine with [scripts/build_release.ps1](scripts/build_release.ps1).
 
 ```powershell
-uv run --no-sync python scripts/release.py <x.y.z>
+uv run --no-sync python scripts/release.py <x.y.z>      # version bump, in a chore(release) pull request
+git tag -a vX.Y.Z -m vX.Y.Z; git push origin vX.Y.Z    # once that pull request is merged
+.\scripts\build_release.ps1 <x.y.z> -Publish           # installer, archive, checksums and the GitHub release
 ```
 
-Merge the `chore(release): vX.Y.Z` pull request, then push the `vX.Y.Z` tag: the pipeline builds the installer and publishes the release.
+It needs the tools listed at the top of the script (Bun, Rust with the MSVC toolchain, Inno Setup 6, the GitHub CLI).
 
 ## Contributing
 

@@ -34,3 +34,15 @@ steps:
       - uv lock --check
       - uv sync --locked
       - uv run --no-sync ruff check
+
+  - name: python-test
+    image: rust:1-bookworm
+    environment:
+      UV_PROJECT_ENVIRONMENT: /tmp/venv
+      VIRTUAL_ENV: /tmp/venv
+    commands:
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$HOME/.local/bin:$PATH"
+      - uv sync --locked --inexact
+      - uvx maturin develop --release -m native/Cargo.toml --uv
+      - uv run --no-sync pytest -q

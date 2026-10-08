@@ -29,6 +29,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- CI runs only on Woodpecker (the Python tests now run there too, on Linux). GitHub Actions is gone: releases are built
+  on Windows with `scripts/build_release.ps1`, which also publishes them.
 - The repository is public at [WissemBad/omni](https://github.com/WissemBad/omni); update checks follow it and no longer need
   a token.
 - Garry's Mod textures carry the anisotropic filtering flag: surfaces seen at an angle keep their sharp mips whatever
