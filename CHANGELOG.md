@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-10-08
+
 ### Added
 
 - Targeted extraction ("Sélection" tab, `omni subset <list.txt> <addon folder>`): give a text file with one GMod `.mdl` per
