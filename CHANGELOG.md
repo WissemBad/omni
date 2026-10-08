@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-08
+
 ### Fixed
 
 - 007 First Light: the current build of the game stores two more words in each sub-mesh of a model, so almost every
