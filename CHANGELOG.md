@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-10-08
+
 ### Fixed
 
 - Unreal Engine games still failed to prepare in the installed app ("No module named omni.sources.unreal.adapter"): the
