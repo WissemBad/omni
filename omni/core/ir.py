@@ -27,6 +27,8 @@ class TextureRef:
     role: str                         # base | normal | srm | alpha | emissive | ao | detail_normal | other
     slot: str                         # original slot name in the source material
     key: str                          # source-specific texture id (hash for Glacier)
+    channels: str = ""                # packed surface map: one letter per RGBA channel (S specular level,
+                                      # R roughness, G gloss, M metallic, O occlusion, _ other); "" = role default
 
 
 @dataclass

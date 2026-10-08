@@ -58,17 +58,47 @@ _LEAF_ROLE = [
 ]
 
 
+# what a packed map keeps in one channel, from the word the class uses for it
+_CHANNEL_WORDS = {
+    "specularlevel": "S", "specular": "S", "spec": "S", "roughness": "R", "gloss": "G", "glossiness": "G",
+    "metal": "M", "metallic": "M", "metalness": "M", "ao": "O", "occlusion": "O", "ambientocclusion": "O",
+    "emissive": "E", "colormask": "C",
+}
+_CHANNEL_RX = re.compile(r"(?:^map|_)([RGBA])_+([A-Za-z]+)")
+
+
+def packed_channels(meaning: str) -> str:
+    """Channel layout of a packed surface map, from the name its class gives the slot
+    (``mapSpecular_R_SpecularLevel_G_Roughness_B_Metallic`` -> ``SRM_``, ``mapR_Specular_G_Gloss_B_Emissive`` ->
+    ``SGE_``, ``mapSpecular_R_Metal_G_Roughness_B_AO`` -> ``MRO_``): one letter per RGBA channel among S specular
+    level, R roughness, G gloss, M metallic, O occlusion, E emissive, C colour mask, ``_`` anything else.
+    Empty when the name describes no specular, roughness/gloss or metal channel."""
+    out = ["_"] * 4
+    for ch, word in _CHANNEL_RX.findall(meaning):
+        out["RGBA".index(ch)] = _CHANNEL_WORDS.get(word.lower(), "_")   # SpecularCavity, RoughnessGrease: modulators
+    layout = "".join(out)
+    return layout if sum(c in layout for c in "SRGM") >= 2 else ""
+
+
 def semantic_role(slot: str, meaning: str) -> str:
     """Role of a texture from what its material class calls the slot (``mapSpecular``, ``mapEmissive``,
     ``mapSpecular_R_SpecularLevel_G_Roughness_B_Metallic``...): the class is the authority for the generic slot
     names, whose meaning changes from one class to the next."""
     s = meaning.lower()
-    if "specular_r_specularlevel_g_roughness_b_metallic" in s:
+    if packed_channels(meaning):
         return "srm"
-    if "normal" in s and "detail" not in s:
-        return "normal"
     if "compoundnormal" in slot.lower() and "detail" in s:
         return "detail_normal"
+    if s.startswith("mapdetail"):                     # tiled detail layers: DetailNormal, DetailR_BaseColorG_Dirt...
+        return "detail_normal" if "normal" in s else "detail"
+    if "normal" in s and "detail" not in s:
+        return "normal"
+    if "specularocclusion" in s:
+        return "other"
+    if "diffuseid" in s:
+        return "mask"
+    if any(k in s for k in ("basecolor", "diffuse", "albedo")):
+        return "base"                                 # before the height and alpha a colour map may carry in A
     if "mask" in s or "lut" in s:
         return "mask"
     if "emissive" in s or "emmisve" in s:
@@ -77,11 +107,9 @@ def semantic_role(slot: str, meaning: str) -> str:
         return "translucency"
     if "height" in s and "wind" not in s:
         return "height"
-    if any(k in s for k in ("basecolor", "diffuse", "albedo")):
-        return "base"
     if "detail" in s:
         return "detail"
-    if "occlusion" in s and "spec" not in s:
+    if re.search(r"(^map|_)ao(_|$)", s) or ("occlusion" in s and "spec" not in s):
         return "ao"
     if "specular" in s:
         return "spec"

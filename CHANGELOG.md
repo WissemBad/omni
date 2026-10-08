@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+
+- Garry's Mod: normal maps had their relief lit from the wrong side. The game's maps point green up (OpenGL) and
+  Source 1 reads green down; omni now flips green for the Source export (97 of 105 measured maps are green up).
+- 007 First Light: 903 models (2.7 %) whose header flags full-precision positions came out as a shattered cloud of
+  triangles; their unquantised sub-meshes are read as 32-bit floats.
+- 007 First Light: a fifth of the materials use a material class missing from the hash list; the class is now found
+  by its type, so its slot meanings apply instead of guesses (a packed detail map was shown as a purple base colour).
+- Packed surface maps follow the channel layout their class declares (`SRM`, metal-roughness-AO, specular-gloss);
+  diffuse maps carrying height in alpha, detail normals and AO maps get their right role.
+- glTF and Blender exports now read materials exactly like the Garry's Mod export: colour constants and colour-mask
+  tints, specular/gloss maps, roughness range, emissive maps, alpha meaning, and opaque decal layers left out (they
+  painted black patches over the surface).
+- Materials that tile their base maps (`gm_mBaseCoords`, about 4 % of sub-meshes) show the game's repetition instead
+  of one stretched copy; a material without a base map takes its constant colour instead of an unrelated texture.
+
+### Changed
+
+- Garry's Mod textures carry the anisotropic filtering flag: surfaces seen at an angle keep their sharp mips whatever
+  the player's filtering setting. Textures written by an older version are rewritten on the next conversion.
+
 ## [1.0.1] - 2026-10-08
 
 ### Fixed

@@ -56,12 +56,13 @@ impl Glb {
     }
 
     /// material(name, base=None, normal=None, metal_rough=None, occlusion=None, alpha="OPAQUE", cutoff=0.5,
-    /// double_sided=True, metallic=1.0, roughness=1.0) -> material index (textures are indices of `texture`).
-    #[pyo3(signature = (name, base=None, normal=None, metal_rough=None, occlusion=None, alpha="OPAQUE", cutoff=0.5, double_sided=true, metallic=1.0, roughness=1.0))]
+    /// double_sided=True, metallic=1.0, roughness=1.0, emissive=None) -> material index (textures are indices of
+    /// `texture`).
+    #[pyo3(signature = (name, base=None, normal=None, metal_rough=None, occlusion=None, alpha="OPAQUE", cutoff=0.5, double_sided=true, metallic=1.0, roughness=1.0, emissive=None))]
     #[allow(clippy::too_many_arguments)]
-    fn material(&mut self, name: &str, base: Option<usize>, normal: Option<usize>, metal_rough: Option<usize>, occlusion: Option<usize>, alpha: &str, cutoff: f64, double_sided: bool, metallic: f64, roughness: f64) -> PyResult<usize> {
+    fn material(&mut self, name: &str, base: Option<usize>, normal: Option<usize>, metal_rough: Option<usize>, occlusion: Option<usize>, alpha: &str, cutoff: f64, double_sided: bool, metallic: f64, roughness: f64, emissive: Option<usize>) -> PyResult<usize> {
         self.inner
-            .add_material(&MaterialSpec { name: name.into(), base, normal, metal_rough, occlusion, alpha: alpha.into(), cutoff, double_sided, metallic, roughness })
+            .add_material(&MaterialSpec { name: name.into(), base, normal, metal_rough, occlusion, emissive, alpha: alpha.into(), cutoff, double_sided, metallic, roughness })
             .map_err(err)
     }
 

@@ -3,7 +3,7 @@
 Every VMT key written here is derived from the source material's data; nothing is added "just in case":
 
   $basetexture               base colour. BC1/BC3 copied byte-for-byte; BC7 re-encoded (Source cannot read BC7).
-  $bumpmap                   normal map (BC5 -> RGB with Z rebuilt).
+  $bumpmap                   normal map (BC5 -> RGB with Z rebuilt, green flipped to Source's DirectX convention).
   $phong                     only when the material has specular data (SRM or spec map).
   $phongexponenttexture      R = Blinn-Phong exponent converted from PBR roughness, G = metallic
                              (drives $phongalbedotint per pixel).
@@ -17,20 +17,11 @@ Every VMT key written here is derived from the source material's data; nothing i
   $translucent               glass and blended decals.
   $decal                     overlay layers (game z-bias > 0): depth offset, removes z-fighting flicker.
 
-Colour rules taken from the source shaders (details in colour_model):
-  * fabric / grey-pattern materials: the base map is a neutral grey (its RGB only carries a faint variation),
-    the colour comes from BaseColor x the weave colours; their base alpha is a baked ambient occlusion
-    (applied with the material's AmbientOcclusion strength), not an opacity.
-  * colour constants are sRGB-encoded, combined in linear space; multipliers are neutral at 0.5.
-  * outfits (game entity templates) override these constants per character: see sources/glacier/outfit.py.
-  * hair (Glacier hair shader): the base alpha is the strand coverage -> alpha test, coverage-preserving mips.
-  * eyes (eye shader): the base alpha is the iris mask of the cornea shader, not an opacity -> opaque.
-  * no specular map but specular constants (fabric Specular_Color + Roughness, hair RoughnessMin/Max, eye
-    cornea): one constant phong lobe built from those numbers.
+How the game's material is read (colour constants, alpha meaning, packed maps, normal convention) is
+shared with the other targets: see ``targets/shading.py``.
 """
 from __future__ import annotations
 
-import hashlib
 import re
 import time
 from dataclasses import dataclass, field
@@ -38,9 +29,13 @@ from pathlib import Path
 
 import numpy as np
 
-from ...core.ir import Material, TextureData
+from ...core.ir import Material
+from .. import shading as sh
+from ..shading import TextureCache
 from . import textures as tx
 from . import vtf
+
+__all__ = ["MatResult", "Options", "TextureCache", "convert_material", "guess_surfaceprop"]
 
 
 @dataclass
@@ -102,37 +97,6 @@ def guess_surfaceprop(*texts: str) -> str:
     return "default"
 
 
-class TextureCache:
-    def __init__(self, source, limit: int = 24):
-        self.source, self.limit, self._c = source, limit, {}
-
-    def get(self, key: str) -> TextureData | None:
-        if key in self._c:
-            return self._c[key]
-        t = self.source.load_texture(int(key, 16))
-        if len(self._c) >= self.limit:
-            self._c.pop(next(iter(self._c)))
-        self._c[key] = t
-        return t
-
-
-def _first(mat: Material, *roles: str):
-    for r in roles:
-        for t in mat.textures:
-            if t.role == r:
-                return t
-    return None
-
-
-def _param(mat: Material, name: str, default=None):
-    v = mat.params.get(name)
-    return v[0] if v else default
-
-
-def _rgb(a: np.ndarray) -> np.ndarray:
-    return a[..., :3].astype(np.float32) / 255.0
-
-
 def roughness_to_exponent(r: np.ndarray) -> np.ndarray:
     """PBR roughness -> Blinn-Phong exponent (alpha = r^2, n = 2/alpha^2 - 2), clamped to Source's 1..150."""
     a = np.clip(r, 0.05, 1.0) ** 2
@@ -143,16 +107,6 @@ def _vmt_vec(v) -> str:
     return "[" + " ".join(f"{x:.3f}" for x in v) + "]"
 
 
-def _is_grey_pattern(tex) -> bool:
-    """A base map with (almost) no colour of its own: the colour then comes from a material constant."""
-    if tex is None or tex.width <= 4:
-        return False
-    small = [mp for mp in tex.mips if max(mp[0], mp[1]) <= 64] or [tex.mips[-1]]
-    from ...sources.glacier.texture import Mip, to_rgba
-    a = to_rgba(tex.fmt, Mip(*small[0]))[..., :3].astype(np.float32)
-    return float((a.max(-1) - a.min(-1)).mean()) < 6.0 and float(a.std()) < 25.0
-
-
 def _fresh(path: Path, alpha: bool = False, size: int = 0) -> bool:
     """An already converted texture can be reused, unless the material now needs an alpha channel that the
     file does not have, or it was written at another quality setting (``size``: largest side expected)."""
@@ -160,14 +114,16 @@ def _fresh(path: Path, alpha: bool = False, size: int = 0) -> bool:
     for i in range(20):
         try:
             with open(path, "rb") as f:
-                head = f.read(56)
+                head = f.read(57)
             break
         except FileNotFoundError:
             return False
         except PermissionError:            # another worker is replacing it right now (Windows): wait for it
             time.sleep(0.01 + i * 0.005)
-    if len(head) < 56:
+    if len(head) < 57:
         return False
+    if head[56] > 1 and not int.from_bytes(head[20:24], "little") & vtf.FLAG_ANISOTROPIC:
+        return False                       # written before the anisotropic flag: rewrite it
     if alpha and int.from_bytes(head[52:56], "little", signed=True) == vtf.DXT1:
         return False
     if size and max(int.from_bytes(head[16:18], "little"), int.from_bytes(head[18:20], "little")) != size:
@@ -181,116 +137,6 @@ def _top(tex, max_size: int) -> int:
     return max(m[0], m[1])
 
 
-def _is_hair(mat: Material) -> bool:
-    """Glacier hair shader (strand cards): recognised by its hair-specific texture slots."""
-    return any(t.slot.lower().startswith("maphair") for t in mat.textures) or any(
-        s.lower().startswith("maphair") for s in mat.unknown_slots)
-
-
-def _is_eye(mat: Material) -> bool:
-    return any(k.startswith("EyeShader_") for k in mat.params)
-
-
-def _constant_spec(mat: Material, is_hair: bool, is_eye: bool):
-    """(specular level, roughness, metallic) from material constants when there is no specular map."""
-    if is_eye:
-        return 0.5, 0.1, 0.0                         # wet cornea: smooth dielectric
-    p = mat.params
-    if is_hair and "RoughnessMin" in p and "RoughnessMax" in p:
-        return 0.5, 0.5 * (p["RoughnessMin"][0] + p["RoughnessMax"][0]), 0.0
-    if "Specular_Color" in p and "Roughness" in p:  # fabric shaders (sheen colour + roughness)
-        return float(np.mean(p["Specular_Color"][:3])), float(p["Roughness"][0]), 0.0
-    return None
-
-
-def _lin(c):
-    c = np.asarray(c, np.float32)
-    return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
-
-
-_LIN8 = _lin(np.arange(256, dtype=np.float32) / 255.0).astype(np.float32)
-
-
-def _srgb(c):
-    c = np.clip(np.asarray(c, np.float32), 0.0, None)
-    return np.where(c <= 0.0031308, c * 12.92, 1.055 * np.power(c, 1.0 / 2.4) - 0.055)
-
-
-@dataclass
-class ColourModel:
-    """Albedo = base map (optionally normalised to an average of 1) x factor, in linear space,
-    x baked AO from the base alpha. ``factor`` gathers the shader colour constants."""
-    kind: str
-    factor: np.ndarray                 # linear RGB multiplier
-    normalise: bool                    # grey pattern map: keep only its variation
-    ao: float | None = None            # strength of the AO stored in the base alpha
-    ao_alpha: bool = False             # the base alpha is AO (never an opacity)
-
-    def signature(self):
-        return self.kind, tuple(round(float(x), 4) for x in self.factor), self.normalise, self.ao
-
-    def apply(self, rgba: np.ndarray, keep_alpha: bool) -> np.ndarray:
-        lin = _LIN8[rgba[..., :3]]                 # sRGB -> linear of 8-bit values: a table, not a power per pixel
-        if self.normalise:
-            small = lin[:: max(1, lin.shape[0] // 64), :: max(1, lin.shape[1] // 64)]
-            lin = lin / max(float(small.mean()), 0.02)
-        lin = lin * self.factor
-        if self.ao is not None:
-            lin = lin * (1.0 - float(self.ao) * (1.0 - rgba[..., 3:4].astype(np.float32) / 255.0))
-        out = rgba.copy()
-        out[..., :3] = np.clip(_srgb(lin) * 255.0 + 0.5, 0, 255).astype(np.uint8)
-        if not keep_alpha:
-            out[..., 3] = 255
-        return out
-
-
-def _rgb3(mat: Material, name: str):
-    v = mat.params.get(name)
-    return np.array(v[:3], np.float32) if v is not None and len(v) >= 3 else None
-
-
-def colour_model(mat: Material, base, is_hair: bool, alpha_cut: bool) -> ColourModel | None:
-    """How the game's shader colours the base map, from the material constants. Conventions (consistent over
-    the outfits checked): colour constants are sRGB-encoded and multiplied in linear space; the *Mult /
-    *_Multiplier constants are 0.5 when neutral (x2 inside the shader: gloves 0.8 = brighter, boots 4.0 = a
-    near-black leather dyed tan).
-
-      fabric / grey-pattern maps   BaseColor x mean(WeaveColor, WeftColor) x 2*BaseColorMult, map normalised,
-                                   base alpha = baked AO (AmbientOcclusion strength), BaseColorSaturation
-      basic shader                 BaseColor_Modulate x 2*BaseColor_Multiplier
-      hair                         BaseColor x 2*BaseColorMult
-      skin                         SkinColor (BaseColorMult belongs to the skin shading, not the albedo)
-    Returns None when the constants leave the map unchanged (the map is then copied as is)."""
-    bc = _rgb3(mat, "BaseColor")
-    if is_hair:
-        if bc is None:
-            return None
-        f = _lin(np.clip(bc, 0, None)) * 2.0 * _param(mat, "BaseColorMult", 0.5)
-        return None if np.allclose(f, 1.0, atol=0.01) else ColourModel("hair", f, False)
-    if "class:skin" in mat.flags:
-        sc = _rgb3(mat, "SkinColor")
-        return None if sc is None or np.allclose(sc, 1.0, atol=0.01) else ColourModel("skin", _lin(sc), False)
-    if bc is not None and ("class:fabric" in mat.flags or _is_grey_pattern(base)):
-        f = _lin(np.clip(bc, 0, None))
-        w, wf = _rgb3(mat, "WeaveColor"), _rgb3(mat, "WeftColor")
-        if w is not None and wf is not None:
-            f = f * 0.5 * (_lin(np.clip(w, 0, None)) + _lin(np.clip(wf, 0, None)))
-        f = f * 2.0 * _param(mat, "BaseColorMult", 0.5)
-        sat = _param(mat, "BaseColorSaturation", 1.0)
-        if abs(sat - 1.0) > 1e-3:
-            luma = float(f @ np.array([0.2126, 0.7152, 0.0722], np.float32))
-            f = luma + (f - luma) * max(0.0, sat)
-        ao = None
-        if _param(mat, "Alpha_Discard", 0.0) <= 0.0 and not alpha_cut:
-            ao = _param(mat, "AmbientOcclusion")
-        return ColourModel("fabric", f.astype(np.float32), True, ao, ao_alpha=True)
-    mod = _rgb3(mat, "BaseColor_Modulate")
-    if mod is not None:
-        f = _lin(np.clip(mod, 0, None)) * 2.0 * _param(mat, "BaseColor_Multiplier", 0.5)
-        return None if np.allclose(f, 1.0, atol=0.01) else ColourModel("modulate", f.astype(np.float32), False)
-    return None
-
-
 def convert_material(mat: Material, cache: TextureCache, mat_root: Path, cd: str, opts: Options,
                      vmt_cd: str | None = None) -> MatResult:
     """Write ``<mat_root>/<vmt_cd or cd>/<name>.vmt``; textures go to ``<mat_root>/<cd>/tex`` (shared by every
@@ -301,149 +147,35 @@ def convert_material(mat: Material, cache: TextureCache, mat_root: Path, cd: str
     out_dir.mkdir(parents=True, exist_ok=True)
     vmt: dict[str, str] = {}
 
-    hint = (mat.source_name or mat.name).lower()
-    decal = "decal" in mat.flags or "decal" in hint            # dirt/rust/marking layers
-    overlay = decal or "overlay" in mat.flags                   # anything drawn on top of other geometry
-    alpha_test = "alpha_test" in mat.flags
-    translucent = "translucent" in mat.flags
-    is_glass = "glass" in hint or "class:glass" in mat.flags
-    base_ref, nrm_ref = _first(mat, "base"), _first(mat, "normal")
-    srm_ref, spec_ref = _first(mat, "srm"), _first(mat, "spec")
-    emi_ref = _first(mat, "emissive")
+    lk = sh.look(mat, cache)
+    res.notes += lk.notes
     res.roles = {t.role: t.key for t in mat.textures}
-    is_hair, is_eye = _is_hair(mat), _is_eye(mat)
-    if is_hair:
-        alpha_test = True                   # strand cards: the base alpha is the strand coverage
-    if is_eye:
-        alpha_test = translucent = False    # the base alpha is the iris mask of the cornea shader
-
-    # ---- colour-mask tint (basicmaterial_colormask): base * c01 * mask(R,G,B) -> next 3 constants ----
-    tint_key = ""
-    mask_ref = None
-    if "class:colormask" in mat.flags and base_ref is not None:
-        cols = {int(k.split("_")[1]): v[:3] for k, v in mat.params.items() if k.startswith("ConstantColorRGB_") and len(v) >= 3}
-        best = None
-        for t in (t for t in mat.textures if t.role == "mask"):
-            mt = cache.get(t.key)
-            if mt is not None and mt.width > 4 and (best is None or mt.width * mt.height > best[1]):
-                best = (t, mt.width * mt.height)
-        identity = all(abs(x - 1.0) < 1e-3 for v in cols.values() for x in v)
-        if best and cols and not identity:
-            mask_ref = best[0]
-            sig = repr((mask_ref.key, sorted((k, tuple(round(x, 4) for x in v)) for k, v in cols.items()))).encode()
-            tint_key = "_t" + hashlib.sha1(sig).hexdigest()[:6]
-
-    # ---- shader colour constants (BaseColor, weave, modulate, multipliers): see colour_model ----------
-    colour = None
-    if not tint_key and base_ref is not None:
-        colour = colour_model(mat, cache.get(base_ref.key), is_hair, alpha_test or translucent)
-        if colour is not None:
-            tint_key = "_c" + hashlib.sha1(repr(colour.signature()).encode()).hexdigest()[:6]
+    alpha_test, translucent, decal = lk.alpha_test, lk.translucent, lk.decal
 
     # ---- base colour ---------------------------------------------------------------
-    base_tex = cache.get(base_ref.key) if base_ref else None
-    if base_tex is not None and not (alpha_test or translucent or is_eye or (colour is not None and colour.ao_alpha)) \
-            and tx.has_alpha(base_tex):
-        if is_glass or decal:
-            translucent = True
-        else:
-            alpha_test = True
-        res.notes.append("alpha detected in base texture")
+    base_ref, base_tex = lk.base_ref, lk.base_tex
     if base_tex is not None:
-        uses_alpha = alpha_test or translucent
+        uses_alpha = lk.uses_alpha
         coverage = alpha_test and base_tex.fmt not in ("BC1", "BC3")   # re-encoded anyway: fix the alpha mips
-        bname = f"b_{base_ref.key[-8:].lower()}{tint_key}{'_c' if coverage else ''}"
+        bname = f"b_{base_ref.key[-8:].lower()}{lk.key}{'_c' if coverage else ''}"
         bpath = out_dir / "tex" / f"{bname}.vtf"
-        todo = not _fresh(bpath, uses_alpha, _top(base_tex, opts.max_size))
-        if todo and tint_key.startswith("_c"):
-            mips = [colour.apply(a, uses_alpha) for a in tx.decode_mips_rgba(base_tex, opts.max_size)]
-            tx.encode(mips, bpath, alpha=uses_alpha, coverage=0.5 if coverage else 0.0)
-        elif todo and tint_key.startswith("_t"):
-            mips = tx.decode_mips_rgba(base_tex, opts.max_size)
-            mk = tx.decode_mips_rgba(cache.get(mask_ref.key), opts.max_size)[0]
-            cols = {int(k.split("_")[1]): v[:3] for k, v in mat.params.items() if k.startswith("ConstantColorRGB_") and len(v) >= 3}
-            c01 = np.array(cols.pop(1, (1.0, 1.0, 1.0)), np.float32)
-            chans = [np.array(cols[k], np.float32) for k in sorted(cols)][:3]
-            for i, a in enumerate(mips):
-                h, w = a.shape[:2]
-                mm = tx.resize(mk, w, h).astype(np.float32) / 255.0
-                tint = np.ones((h, w, 3), np.float32)
-                for ch, col in enumerate(chans):
-                    mc = mm[..., ch:ch + 1]
-                    tint = tint * (1.0 - mc) + col * mc
-                out = a.astype(np.float32)
-                out[..., :3] = np.clip(out[..., :3] * tint * c01, 0, 255)
-                mips[i] = out.astype(np.uint8)
-            tx.encode(mips, bpath, alpha=uses_alpha)
-        elif todo:
-            if coverage:
-                tx.encode(tx.decode_mips_rgba(base_tex, opts.max_size), bpath, alpha=True, coverage=0.5)
-            elif not tx.passthrough(base_tex, bpath, opts.max_size, alpha=uses_alpha):
-                tx.encode(tx.decode_mips_rgba(base_tex, opts.max_size), bpath, alpha=uses_alpha)
+        if not _fresh(bpath, uses_alpha, _top(base_tex, opts.max_size)):
+            if lk.key or coverage or not tx.passthrough(base_tex, bpath, opts.max_size, alpha=uses_alpha):
+                tx.encode([lk.albedo(cache, opts.max_size)], bpath, alpha=uses_alpha, coverage=0.5 if coverage else 0.0)
         vmt["$basetexture"] = f"{cd}/tex/{bname}"
     else:
         vmt["$basetexture"] = "models/debug/debugwhite"
-        vmt["$color2"] = "[0.55 0.55 0.55]"
+        vmt["$color2"] = _vmt_vec(lk.constant)
         res.notes.append("no base texture")
 
-    # ---- specular data (SRM: R specular, G roughness, B metallic; or a plain spec map) ----------
-    spec = rough = metal = None
-    srm_tex = cache.get(srm_ref.key) if srm_ref else None
-    if srm_tex is not None and srm_tex.width > 4:
-        f = _rgb(tx.decode_mips_rgba(srm_tex, opts.max_size_spec)[0])
-        spec, rough, metal = f[..., 0], f[..., 1], f[..., 2]
-        rmin, rmax = _param(mat, "Roughness_Min", 0.0), _param(mat, "Roughness_Max", 1.0)
-        rough = rmin + rough * (rmax - rmin)
-    elif spec_ref is not None:
-        st = cache.get(spec_ref.key)
-        if st is not None and st.width > 4:
-            # specular/gloss workflow: RGB = specular colour (sRGB), alpha = gloss
-            a = tx.decode_mips_rgba(st, opts.max_size_spec)[0]
-            f0 = (_rgb(a) ** 2.2).mean(-1)                   # linear reflectance at normal incidence
-            spec = np.clip(f0 / 0.08, 0.0, 1.0)               # 4 % (plastic, wood, paint) -> 0.5 like an SRM
-            metal = np.clip((f0 - 0.04) / 0.5, 0.0, 1.0)      # metals reflect 50-100 %
-            gloss = a[..., 3].astype(np.float32) / 255.0
-            if float(gloss.std()) < 0.01 and float(gloss.mean()) > 0.99:   # no gloss channel: material constant
-                g = _param(mat, "ShaderLOD_Gloss")
-                gloss = np.full_like(f0, g if g is not None else 1.0 - _param(mat, "ShaderLOD_Roughness", 0.5))
-            rough = 1.0 - gloss
-    if spec is None and (_first(mat, "orm") is not None or _first(mat, "rough") is not None):
-        # metal/roughness workflow (Unreal): packed occlusion-roughness-metal (channel order from the slot,
-        # ORM by default) or separate roughness / metallic maps; dielectric F0 4 % = specular level 0.5
-        orm_ref, rough_ref, metal_ref = _first(mat, "orm"), _first(mat, "rough"), _first(mat, "metal")
-        if orm_ref is not None:
-            ot = cache.get(orm_ref.key)
-            if ot is not None and ot.width > 4:
-                f = _rgb(tx.decode_mips_rgba(ot, opts.max_size_spec)[0])
-                order = (orm_ref.slot or "ORM").upper()
-                order = order if len(order) == 3 and "R" in order else "ORM"
-                rough = f[..., order.find("R")]
-                metal = f[..., order.find("M")] if "M" in order else np.zeros_like(rough)
-                srm_ref = orm_ref
-        elif rough_ref is not None:
-            rt = cache.get(rough_ref.key)
-            if rt is not None and rt.width > 4:
-                rough = _rgb(tx.decode_mips_rgba(rt, opts.max_size_spec)[0])[..., 0]
-                metal = np.zeros_like(rough)
-                mt = cache.get(metal_ref.key) if metal_ref is not None else None
-                if mt is not None and mt.width > 4:
-                    m0 = _rgb(tx.decode_mips_rgba(mt, opts.max_size_spec)[0])[..., 0]
-                    ys = np.linspace(0, m0.shape[0] - 1, rough.shape[0]).astype(int)
-                    xs = np.linspace(0, m0.shape[1] - 1, rough.shape[1]).astype(int)
-                    metal = m0[ys][:, xs]
-                srm_ref = rough_ref
-        if rough is not None:
-            spec = np.full_like(rough, 0.5)
-    if spec is None:
-        const = _constant_spec(mat, is_hair, is_eye)
-        if const is not None:
-            spec, rough, metal = (np.full((4, 4), v, np.float32) for v in const)
-
-    want_phong = opts.phong and spec is not None and not decal
+    # ---- specular data -------------------------------------------------------------------------
+    surf = sh.surface(mat, cache, opts.max_size_spec, lk)
+    want_phong = opts.phong and surf is not None and not decal
     if want_phong:
+        spec, rough, metal = surf.spec, np.clip(surf.rough, 0.0, 1.0), surf.metal
         # highlight intensity: dielectrics scale with their specular level, metals are always strong;
         # rough surfaces spread the same energy over a wide lobe, so their peak is dimmer.
-        gloss = 1.0 - np.clip(rough, 0.0, 1.0)
+        gloss = 1.0 - rough
         intensity = (1.0 - metal) * spec * gloss ** 1.5 + metal * gloss ** 0.75
         mask = np.clip(intensity, 0.0, 1.0)
         metal_mean = float(metal.mean())
@@ -453,39 +185,37 @@ def convert_material(mat: Material, cache: TextureCache, mat_root: Path, cd: str
         flat_surface = float(rough.std()) < 0.04 and float(metal.std()) < 0.04
 
     # ---- normal (+ specular mask in alpha) ---------------------------------------------------
+    nrm_ref = sh.first(mat, "normal")
     nrm_tex = cache.get(nrm_ref.key) if nrm_ref else None
-    if nrm_tex is not None and nrm_tex.width <= 4:
+    if not sh.usable(nrm_tex):
         nrm_tex = None                      # 1x1/4x4 placeholder = flat normal, nothing to add
     if nrm_tex is not None or want_phong:
-        sref = (srm_ref or spec_ref) if want_phong else None
-        nname = f"n_{(nrm_ref.key[-8:] if nrm_tex is not None else 'flat0000').lower()}_{sref.key[-4:].lower() if sref and not flat_mask else '0000'}"
+        sref = surf.ref if want_phong else None
+        # "_y": green flipped to Source's convention (files written before that are not reused)
+        nname = (f"n_{(nrm_ref.key[-8:] if nrm_tex is not None else 'flat0000').lower()}"
+                 f"_{sref.key[-4:].lower() if sref and not flat_mask else '0000'}_y")
         if opts.lossless_normals:
             nname += "_l"
         npath = out_dir / "tex" / f"{nname}.vtf"
         if not _fresh(npath, size=_top(nrm_tex, opts.max_size_normal) if nrm_tex is not None else 0):
             if nrm_tex is not None:
-                mips = tx.decode_mips_rgba(nrm_tex, opts.max_size_normal)
-                if nrm_tex.fmt in ("BC5", "BC4", "RG8"):
-                    mips = [tx.rebuild_normal(a) for a in mips]
+                img = sh.normal(nrm_tex, opts.max_size_normal, flip_y=True)
             else:
-                flat = np.empty(mask.shape + (4,), np.uint8)
-                flat[...] = (128, 128, 255, 255)
-                mips = [flat]
+                img = np.empty(mask.shape + (4,), np.uint8)
+                img[...] = (128, 128, 255, 255)
             if want_phong and not flat_mask:
+                h, w = img.shape[:2]
                 full = np.clip(mask * 255.0 + 0.5, 0, 255).astype(np.uint8)
-                for i, a in enumerate(mips):
-                    h, w = a.shape[:2]
-                    a = a.copy()
-                    a[..., 3] = tx.resize(full[..., None].repeat(3, -1), w, h)[..., 0]
-                    mips[i] = a
-            tx.encode(mips, npath, alpha=want_phong and not flat_mask, flags=vtf.FLAG_NORMAL, lossless=opts.lossless_normals)
+                img = img.copy()
+                img[..., 3] = tx.resize(full[..., None].repeat(3, -1), w, h)[..., 0]
+            tx.encode([img], npath, alpha=want_phong and not flat_mask, flags=vtf.FLAG_NORMAL, lossless=opts.lossless_normals)
         vmt["$bumpmap"] = f"{cd}/tex/{nname}"
 
     if want_phong and float(mask.max()) > 0.02:
         if flat_surface:
             vmt["$phongexponent"] = str(int(round(float(roughness_to_exponent(np.float32(rough_mean))))))
         else:
-            xname = f"x_{(srm_ref or spec_ref).key[-8:].lower()}_3"
+            xname = f"x_{surf.ref.key[-8:].lower()}_{surf.ref.channels.strip('_').lower() or '3'}"
             xpath = out_dir / "tex" / f"{xname}.vtf"
             if not xpath.exists():
                 img = np.zeros(rough.shape + (4,), np.uint8)
@@ -510,25 +240,26 @@ def convert_material(mat: Material, cache: TextureCache, mat_root: Path, cd: str
             k = 0.6 * metal_mean * (1.0 - rough_mean) * (float(mask.mean()) if flat_mask else 1.0)
             vmt["$envmaptint"] = _vmt_vec((k, k, k))
 
-    if is_glass and translucent and opts.envmap and "$envmap" not in vmt:
+    if lk.glass and translucent and opts.envmap and "$envmap" not in vmt:
         vmt["$envmap"] = "env_cubemap"
         vmt["$envmaptint"] = "[0.3 0.3 0.3]"
 
     # ---- emissive ---------------------------------------------------------------------------
+    emi_ref = sh.first(mat, "emissive")
     if emi_ref is not None:
-        et = cache.get(emi_ref.key)
-        if et is not None and et.width > 4:
-            mips = tx.decode_mips_rgba(et, opts.max_size_secondary)
-            if float(mips[0][..., :3].max(-1).mean()) > 6.0:
-                ename = f"s_{emi_ref.key[-8:].lower()}"
-                epath = out_dir / "tex" / f"{ename}.vtf"
-                if not epath.exists():
-                    grey = [np.repeat(a[..., :3].max(-1, keepdims=True), 4, -1).astype(np.uint8) for a in mips]
-                    for g in grey:
-                        g[..., 3] = 255
-                    tx.encode(grey, epath, alpha=False, kind="linear")
-                vmt["$selfillum"] = "1"
-                vmt["$selfillummask"] = f"{cd}/tex/{ename}"
+        ename = f"s_{emi_ref.key[-8:].lower()}"
+        epath = out_dir / "tex" / f"{ename}.vtf"
+        lit = epath.exists()
+        if not lit:
+            e = sh.emissive(mat, cache, opts.max_size_secondary)
+            if e is not None:
+                grey = np.repeat(e[..., :3].max(-1, keepdims=True), 4, -1).astype(np.uint8)
+                grey[..., 3] = 255
+                tx.encode([grey], epath, alpha=False, kind="linear")
+                lit = True
+        if lit:
+            vmt["$selfillum"] = "1"
+            vmt["$selfillummask"] = f"{cd}/tex/{ename}"
 
     # ---- blending ----------------------------------------------------------------------------
     if alpha_test:
@@ -540,10 +271,9 @@ def convert_material(mat: Material, cache: TextureCache, mat_root: Path, cd: str
         res.translucent = True
     if "two_sided" in mat.flags:
         vmt["$nocull"] = "1"                # the game draws both faces (leaves, cloth, thin panels)
-    if overlay:
+    if lk.overlay:
         vmt["$decal"] = "1"
-    # a decal whose base colour is opaque (or missing) would paint a solid patch over the surface
-    res.drop = decal and not (base_tex is not None and (alpha_test or translucent))
+    res.drop = lk.drop
 
     body = ['"VertexLitGeneric"', "{"]
     body += [f'\t"{k}" "{v}"' for k, v in vmt.items()]

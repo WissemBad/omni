@@ -21,7 +21,7 @@ class Rig:
 
 class Source:
     def load_texture(self, h):
-        return TextureData("%016X" % h, "RGBA8", 4, 4, [(4, 4, bytes([200, 100, 50, 255]) * 16)])
+        return TextureData("%016X" % h, "RGBA8", 8, 8, [(8, 8, bytes([200, 100, 50, 255]) * 64)])
 
 
 def test_skinned_model_with_pbr_material(tmp_path):

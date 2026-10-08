@@ -226,14 +226,49 @@ pub fn top_rgba(text: &[u8], texd: Option<&[u8]>, max_dim: usize, normal: bool) 
     let name = format_name(hd.fmt).unwrap_or("?");
     let (w, h, raw) = mips.iter().find(|m| m.0.max(m.1) as usize <= lim).unwrap_or(mips.last().unwrap());
     let mut px = to_rgba(name, *w, *h, raw)?;
-    if normal && matches!(name, "BC5" | "BC4" | "RG8") {
-        for p in px.chunks_exact_mut(4) {
-            let x = p[0] as f32 / 127.5 - 1.0;
-            let y = p[1] as f32 / 127.5 - 1.0;
-            let z = (1.0 - x * x - y * y).max(0.0).sqrt();
-            p[2] = ((z * 0.5 + 0.5) * 255.0 + 0.5) as u8;
-            p[3] = 255;
-        }
+    if normal {
+        normal_map(&mut px, two_channel(name), false);
     }
     Ok((*w as usize, *h as usize, px))
+}
+
+/// Formats that store only X and Y of a normal (Z is rebuilt).
+pub fn two_channel(name: &str) -> bool {
+    matches!(name, "BC5" | "BC4" | "RG8")
+}
+
+/// Prepare a decoded tangent-space normal map in place. `rebuild_z`: X/Y-only formats get Z = sqrt(1 - x² - y²)
+/// and an opaque alpha. `flip_y`: the game's maps point green up (OpenGL, like glTF and Blender); Source 1
+/// reads green down (DirectX), so its maps get green inverted.
+pub fn normal_map(px: &mut [u8], rebuild_z: bool, flip_y: bool) {
+    px.par_chunks_mut(4 * 4096).for_each(|run| {
+        for p in run.chunks_exact_mut(4) {
+            if rebuild_z {
+                let x = p[0] as f32 / 127.5 - 1.0;
+                let y = p[1] as f32 / 127.5 - 1.0;
+                let z = (1.0 - x * x - y * y).max(0.0).sqrt();
+                p[2] = ((z * 0.5 + 0.5) * 255.0 + 0.5) as u8;
+                p[3] = 255;
+            }
+            if flip_y {
+                p[1] = 255 - p[1];
+            }
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normal_map_rebuilds_z_and_flips_green() {
+        let mut px = vec![128u8, 128, 0, 0, 255, 128, 0, 0, 128, 200, 7, 9];
+        normal_map(&mut px, true, false);
+        assert_eq!(&px[0..4], &[128, 128, 255, 255]);   // flat: Z = 1
+        assert!(px[6] < 140);                            // fully tilted on X: Z ~ 0
+        let mut g = vec![10u8, 20, 30, 40];
+        normal_map(&mut g, false, true);
+        assert_eq!(g, vec![10, 235, 30, 40]);            // only green changes, the alpha (phong mask) is kept
+    }
 }

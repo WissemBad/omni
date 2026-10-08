@@ -8,6 +8,8 @@ import copy
 import re
 from dataclasses import dataclass
 
+import numpy as np
+
 from ...core.config import CONFIG, Config
 from ...core.ir import Material, Model, SubMesh, TextureData, TextureRef
 from ...core.naming import Names, parse_ioi, slug
@@ -47,6 +49,20 @@ _HINT_ROLE = {"ascolormap": "base", "asnormalmap": "normal", "asheightmap": "hei
 _LEAF_ROLE = [("normal", "normal"), ("diffuse", "base"), ("albedo", "base"), ("basecolor", "base"), ("color", "base"),
               ("srm", "srm"), ("spec", "spec"), ("rough", "srm"), ("emissive", "emissive"), ("mask", "mask"),
               ("height", "height"), ("ao", "ao"), ("alpha", "alpha"), ("detail", "detail_normal")]
+
+
+def base_coords(uvs: np.ndarray, mat: Material | None) -> np.ndarray:
+    """UVs through the material's ``gm_mBaseCoords``: the base, SRM and normal maps of a basic material tile (or
+    shift) by that matrix in the shader. Applied to the mesh so that every target shows the game's texel density
+    instead of one stretched copy. Rows (u: a b c, v: d e f) as stored, the 4th value of each row unused."""
+    v = mat.params.get("gm_mBaseCoords") if mat is not None else None
+    if not v or len(v) < 7:
+        return uvs
+    a, b, c, d, e, f = v[0], v[1], v[2], v[4], v[5], v[6]
+    if abs(a * e - b * d) < 1e-6 or (abs(a - 1) < 1e-6 and abs(e - 1) < 1e-6 and not (b or c or d or f)):
+        return uvs                               # identity, or a degenerate matrix that would collapse the UVs
+    u0, v0 = uvs[:, 0], uvs[:, 1]
+    return np.stack([a * u0 + b * v0 + c, d * u0 + e * v0 + f], 1).astype(np.float32)
 
 
 class GlacierSource(Source):
@@ -248,6 +264,15 @@ class GlacierSource(Source):
                 memo[h] = {}
         return memo[h]
 
+    def material_class(self, refs) -> tuple[int, str]:
+        """(hash, name) of the material class among the references of a MATI. The class is found by its type: a
+        fifth of the classes are missing from the hash list, and their slots still say what each map holds."""
+        mate = self.archive.index("MATE")
+        for rh, _f in refs:
+            if rh in mate:
+                return rh, self.names.name(rh)
+        return 0, ""
+
     def load_material(self, h: int) -> Material:
         """The material instance ``h`` (a fresh copy: callers modify it). Parsed once per process: playermodel
         variants and prop skins ask for the same instances thousands of times."""
@@ -271,14 +296,8 @@ class GlacierSource(Source):
         if not mt.ok or meta is None:
             mat.flags.add("unparsed")
             return mat
-        cls = ""
-        slots: dict[str, str] = {}
-        for rh, _f in meta.refs:
-            nm = self.names.name(rh)
-            if ".materialclass" in nm:
-                cls = nm
-                slots = self.class_slots(rh)
-                break
+        ch, cls = self.material_class(meta.refs)
+        slots = self.class_slots(ch) if ch else {}
         fam = roles.class_family(cls)
         mat.flags.add("class:" + fam)
         legacy: list = []
@@ -302,8 +321,9 @@ class GlacierSource(Source):
                 mat.unknown_slots.append(t.name)
             if tp is None:
                 continue
-            mat.textures.append(TextureRef(role, t.name, "%016X" % th))
-            legacy.append((mat.textures[-1], roles.resolve(t.name, fam, tname, fmt)))
+            mat.textures.append(TextureRef(role, t.name, "%016X" % th, roles.packed_channels(slots.get(t.name.lower(), ""))))
+            if tname:                           # only a file name can overrule the class (a slot position cannot)
+                legacy.append((mat.textures[-1], roles.resolve(t.name, fam, tname, fmt)))
         if not any(x.role == "base" for x in mat.textures):
             # the class gave every map another meaning: a texture named like a colour map is still the best base colour
             for ref, guess in legacy:
@@ -410,8 +430,9 @@ class GlacierSource(Source):
         materials, tex_mat = [], []
         for h, m in parsed:
             refs = mati_refs.get(h, [])
-            cls = next((self.names.name(rh) for rh, _f in refs if ".materialclass" in self.names.name(rh)), "")
+            ch, cls = self.material_class(refs)
             fam = roles.class_family(cls)
+            slots = self.class_slots(ch) if ch else {}
             materials.append({"key": "%016X" % h, "name": self.material_name(h), "cls": fam,
                               "source": self.names.name(h)})
             if m is None or not m.ok:
@@ -422,7 +443,8 @@ class GlacierSource(Source):
                 th = refs[t.ref_index][0]
                 if th not in text:
                     continue
-                tex_mat.append(("%016X" % th, "%016X" % h, t.name, roles.resolve(t.name, fam, self.names.name(th), "")))
+                tex_mat.append(("%016X" % th, "%016X" % h, t.name,
+                                roles.resolve(t.name, fam, self.names.name(th), "", slots.get(t.name.lower(), ""))))
         progress(f"{len(materials)} materials, {len(tex_mat)} texture slots")
 
         paths = list(prim.items())
@@ -528,7 +550,7 @@ class GlacierSource(Source):
                 mk = ""
                 warnings.append(f"mesh {i}: material index {m.material_id} is not a MATI reference ({len(mrefs)} refs)")
             subs.append(SubMesh(
-                positions=m.positions, normals=m.normals, uvs=m.uvs, indices=m.indices,
+                positions=m.positions, normals=m.normals, uvs=base_coords(m.uvs, materials.get(mk)), indices=m.indices,
                 colors=m.colors, tangents=m.tangents, joints=m.joints, weights=m.weights,
                 material_key=mk, lod_mask=m.lod_mask, zbias=m.zbias,
             ))

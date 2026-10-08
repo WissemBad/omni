@@ -8,7 +8,8 @@ is read with one numpy call instead of a Python loop):
   (007: byte +5 is the LOD bitmask, byte +6 the property flags -- the reverse of Hitman)
   mesh       PRIM_OBJECT(44) + 7*u32 submesh fields + posScale/posBias/uvScaleBias (3*16)
              + clothId(4) [+ 5*u32 weighted trailer]
-  vertices   int16x4 positions, then (weighted) 8B stream, then NTB+UV (16B) per vertex.
+  vertices   int16x4 positions (float32x3 for the unquantised sub-meshes of a 0x200 object), then (weighted) 8B stream, then NTB+UV
+             (12 + 4 per UV set) per vertex.
 """
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 SUB_STANDARD, SUB_LINKED, SUB_WEIGHTED = 0, 1, 2
+HIRES_POSITIONS = 0x200           # header flag: unquantised sub-meshes store float32 x3 positions (12 bytes)
 
 
 @dataclass
@@ -71,6 +73,7 @@ def parse_prim(data: bytes) -> PrimData:
     _, _, _, flags, _pad, rig, count, table_off = struct.unpack_from("<BBHIIIII", mv, hdr_off)
     prim = PrimData(flags=flags, bone_rig_index=rig)
     weighted = prim.weighted
+    hires = bool(flags & HIRES_POSITIONS)
     offsets = struct.unpack_from("<%dI" % count, mv, table_off)
 
     for off in offsets:
@@ -89,11 +92,17 @@ def parse_prim(data: bytes) -> PrimData:
         nuv = cloth_id >> 16         # number of UV sets: the per-vertex NTB+UV record is 12 + 4*nuv bytes
         p += 48 + 4  # + cloth id
 
-        pos_raw = np.frombuffer(mv, "<i2", nv * 4, vbo).reshape(nv, 4)
-        pos = (pos_raw[:, :3].astype(np.float32) / 32767.0) * pos_scale[:3] + pos_bias[:3]
+        # a high-precision object stores the sub-meshes it did not quantise (unit scale, zero bias) as float32 x3
+        flt = hires and bool((pos_scale == 1.0).all() and (pos_bias[:3] == 0.0).all())
+        if flt:
+            pos = np.frombuffer(mv, "<f4", nv * 3, vbo).reshape(nv, 3).copy()
+            pos_raw = np.zeros((nv, 4), np.int16)
+        else:
+            pos_raw = np.frombuffer(mv, "<i2", nv * 4, vbo).reshape(nv, 4)
+            pos = (pos_raw[:, :3].astype(np.float32) / 32767.0) * pos_scale[:3] + pos_bias[:3]
         idx = np.frombuffer(mv, "<u2", ni, ibo).astype(np.uint32) if ni else np.zeros(0, np.uint32)
 
-        q = vbo + nv * 8
+        q = vbo + nv * (12 if flt else 8)
         colors = None
         if sub_type == SUB_WEIGHTED:
             q += nv * 8                        # unidentified 8B stream, skipped

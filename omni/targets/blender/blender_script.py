@@ -1,4 +1,5 @@
-"""Runs INSIDE Blender (blender -b --python blender_script.py -- jobs.json)."""
+"""Runs INSIDE Blender (blender -b --python blender_script.py -- jobs.json). The maps arrive resolved by
+targets/shading.py: albedo, normal (green up), roughness, metallic, emissive."""
 import json
 import os
 import sys
@@ -33,7 +34,11 @@ def build_material(name, spec):
     bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
     bsdf.location = (400, 0)
     nt.links.new(bsdf.outputs[0], out.inputs["Surface"])
-    roles, params, flags = spec["roles"], spec["params"], set(spec.get("flags", []))
+    roles, flags = spec["roles"], set(spec.get("flags", []))
+    if spec.get("drop"):                 # opaque decal layer: it would paint a solid patch over the surface
+        _input(bsdf, "Alpha").default_value = 0.0
+        mat.surface_render_method = "BLENDED" if hasattr(mat, "surface_render_method") else None
+        return mat
 
     if "base" in roles:
         t = img(nt, roles["base"], False, -500, 300)
@@ -41,32 +46,10 @@ def build_material(name, spec):
         if "alpha_test" in flags or "translucent" in flags:
             nt.links.new(t.outputs["Alpha"], _input(bsdf, "Alpha"))
             mat.surface_render_method = "BLENDED" if hasattr(mat, "surface_render_method") else None
-    srm = roles.get("srm")
-    if srm:
-        t = img(nt, srm, True, -700, 0)
-        sep = nt.nodes.new("ShaderNodeSeparateColor")
-        sep.location = (-420, 0)
-        nt.links.new(t.outputs["Color"], sep.inputs[0])
-        rmin = (params.get("Roughness_Min") or [0.0])[0]
-        rmax = (params.get("Roughness_Max") or [1.0])[0]
-        mr = nt.nodes.new("ShaderNodeMapRange")
-        mr.location = (-200, 0)
-        mr.inputs["To Min"].default_value = rmin
-        mr.inputs["To Max"].default_value = rmax
-        nt.links.new(sep.outputs[1], mr.inputs[0])
-        nt.links.new(mr.outputs[0], _input(bsdf, "Roughness"))
-        s = _input(bsdf, "Specular IOR Level", "Specular")
-        if s is not None:
-            nt.links.new(sep.outputs[0], s)
-        nt.links.new(sep.outputs[2], _input(bsdf, "Metallic"))
-    elif "spec" in roles:
-        t = img(nt, roles["spec"], True, -700, 0)
-        bw = nt.nodes.new("ShaderNodeRGBToBW")
-        bw.location = (-420, 0)
-        nt.links.new(t.outputs["Color"], bw.inputs[0])
-        s = _input(bsdf, "Specular IOR Level", "Specular")
-        if s is not None:
-            nt.links.new(bw.outputs[0], s)
+    for role, socket in (("rough", "Roughness"), ("metal", "Metallic")):
+        if role in roles:
+            t = img(nt, roles[role], True, -700, 150 if role == "rough" else -50)
+            nt.links.new(t.outputs["Color"], _input(bsdf, socket))
     if "normal" in roles:
         t = img(nt, roles["normal"], True, -500, -300)
         nm = nt.nodes.new("ShaderNodeNormalMap")

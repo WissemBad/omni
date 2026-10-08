@@ -115,6 +115,17 @@ fn write_vtf(py: Python<'_>, path: &str, fmt: u32, mips: Vec<(usize, usize, pyo3
     py.allow_threads(|| vtf::write_vtf(std::path::Path::new(path), fmt, &mips, flags, [reflectivity.0, reflectivity.1, reflectivity.2])).map_err(err)
 }
 
+/// normal_map(rgba (h,w,4), rebuild_z, flip_y) -> uint8 (h, w, 4): a decoded normal map made ready for a
+/// target (see texture::normal_map).
+#[pyfunction]
+fn normal_map<'py>(py: Python<'py>, rgba: PyReadonlyArray3<'py, u8>, rebuild_z: bool, flip_y: bool) -> PyResult<Bound<'py, PyArray3<u8>>> {
+    let mut owned = Vec::new();
+    let (data, w, h) = rgba_slice(&rgba, &mut owned)?;
+    let mut px = data.to_vec();
+    py.allow_threads(|| texture::normal_map(&mut px, rebuild_z, flip_y));
+    Ok(numpy::ndarray::Array3::from_shape_vec((h, w, 4), px).map_err(err)?.into_pyarray_bound(py))
+}
+
 /// decode_vtf(bytes, max_dim=1024) -> uint8 (h, w, 4)
 #[pyfunction]
 #[pyo3(signature = (data, max_dim=1024))]
@@ -230,6 +241,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         wrap_pyfunction!(encode_vtf, m)?,
         wrap_pyfunction!(write_vtf, m)?,
         wrap_pyfunction!(decode_vtf, m)?,
+        wrap_pyfunction!(normal_map, m)?,
         wrap_pyfunction!(png_rgba, m)?,
         wrap_pyfunction!(texture_png, m)?,
         wrap_pyfunction!(texture_headers, m)?,

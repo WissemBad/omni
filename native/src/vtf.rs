@@ -20,6 +20,10 @@ pub const BGRA8888: u32 = 12;
 pub const DXT1A: u32 = 20;
 pub const FLAG_EIGHTBITALPHA: u32 = 0x2000;
 pub const FLAG_ONEBITALPHA: u32 = 0x1000;
+/// Anisotropic filtering whatever the player's setting: a surface seen at an angle keeps the sharp mips instead
+/// of falling back to a much smaller one (the "256 px" look of a 2K texture on a floor or a wall).
+pub const FLAG_ANISOTROPIC: u32 = 0x10;
+const FLAG_NOMIP: u32 = 0x100;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Kind {
@@ -194,6 +198,7 @@ pub fn reflectivity(rgba: &[u8], kind: Kind) -> [f32; 3] {
 /// VTF 7.2 file bytes: 80-byte header, no low-res thumbnail, mips smallest first.
 pub fn vtf_bytes(fmt: u32, mips: &[(usize, usize, Vec<u8>)], flags: u32, refl: [f32; 3]) -> Vec<u8> {
     let (w, h) = (mips[0].0 as u16, mips[0].1 as u16);
+    let flags = if mips.len() > 1 && flags & FLAG_NOMIP == 0 { flags | FLAG_ANISOTROPIC } else { flags };
     let mut hdr = Vec::with_capacity(80);
     hdr.extend(b"VTF\0");
     hdr.extend(7u32.to_le_bytes());

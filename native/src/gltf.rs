@@ -197,6 +197,7 @@ pub struct MaterialSpec {
     pub normal: Option<usize>,
     pub metal_rough: Option<usize>,
     pub occlusion: Option<usize>,
+    pub emissive: Option<usize>,
     pub alpha: String,
     pub cutoff: f64,
     pub double_sided: bool,
@@ -328,6 +329,10 @@ impl Glb {
         }
         if let Some(i) = m.occlusion {
             o.push(("occlusionTexture", tex(i)?));
+        }
+        if let Some(i) = m.emissive {
+            o.push(("emissiveTexture", tex(i)?));
+            o.push(("emissiveFactor", J::Arr(vec![J::Num(1.0), J::Num(1.0), J::Num(1.0)])));
         }
         match m.alpha.as_str() {
             "MASK" => {
@@ -651,7 +656,7 @@ mod tests {
         assert_eq!(mime, "image/png");
         let t = g.add_encoded(&png, mime).unwrap();
         let m = g
-            .add_material(&MaterialSpec { name: "mat".into(), base: Some(t), normal: None, metal_rough: None, occlusion: None, alpha: "MASK".into(), cutoff: 0.5, double_sided: true, metallic: 0.0, roughness: 0.7 })
+            .add_material(&MaterialSpec { name: "mat".into(), base: Some(t), normal: None, metal_rough: None, occlusion: None, emissive: None, alpha: "MASK".into(), cutoff: 0.5, double_sided: true, metallic: 0.0, roughness: 0.7 })
             .unwrap();
         let me = g.add_mesh("quad", &[Prim { positions: &p, normals: &n, uvs: &u, indices: &i, tangents: None, joints: None, weights: None, material: Some(m) }]).unwrap();
         g.add_node("quad", Some(me), None).unwrap();

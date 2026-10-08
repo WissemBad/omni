@@ -9,6 +9,7 @@ DXT1, DXT3, DXT5, BGRA8888, DXT1A = 13, 14, 15, 12, 20
 
 FLAG_CLAMPS = 0x4
 FLAG_CLAMPT = 0x8
+FLAG_ANISOTROPIC = 0x10        # set by the writer on every mipmapped texture
 FLAG_NORMAL = 0x80
 FLAG_NOMIP = 0x100
 FLAG_EIGHTBITALPHA = 0x2000

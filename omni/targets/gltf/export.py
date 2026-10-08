@@ -1,8 +1,8 @@
 """glTF 2.0 target (.glb): any source's models for Blender and other tools, next to the Garry's Mod export.
 
 One self-contained .glb per model: geometry (Y up, metres), PBR metal/roughness materials (base colour, normal,
-metallic-roughness and occlusion rebuilt from the game's own maps: Unreal ORM, Glacier SRM, separate roughness /
-metallic maps), alpha mode from the material flags, and for skinned models the skeleton and skin weights (bind
+metallic-roughness, occlusion and emissive rebuilt from the game's own maps, read like every other target does:
+see ``targets/shading.py``), alpha mode from the material flags, and for skinned models the skeleton and skin weights (bind
 pose). The file itself is written by the Rust core (``N.Glb``); models are exported by worker processes. Written to ``<exports>/<source>/gltf/<model path>.glb``.
 Game-independent: it only reads the IR.
 """
@@ -16,96 +16,51 @@ import numpy as np
 from ...core.config import CONFIG
 from ...core.ir import Material, Model
 from ...native import N
+from .. import shading as sh
 
 
-def _rgba(source, key: str, size: int, normal: bool = False):
-    from ...sources.glacier.texture import Mip, to_rgba
-    t = source.load_texture(int(key, 16))
-    if t is None or not t.mips:
-        return None
-    mips = sorted(t.mips, key=lambda m: -m[0] * m[1])
-    w, h, d = next((m for m in mips if max(m[0], m[1]) <= size), mips[-1])
-    a = to_rgba(t.fmt, Mip(w, h, d))
-    if normal and t.fmt in ("BC5", "BC4", "RG8"):
-        from ..source.textures import rebuild_normal
-        a = rebuild_normal(a)
-    return a
-
-
-def _fit(a: np.ndarray, shape) -> np.ndarray:
-    if a.shape[:2] == shape:
-        return a
-    ys = np.linspace(0, a.shape[0] - 1, shape[0]).astype(int)
-    xs = np.linspace(0, a.shape[1] - 1, shape[1]).astype(int)
-    return a[ys][:, xs]
-
-
-def _first(m: Material, role: str):
-    return next((t for t in m.textures if t.role == role), None)
-
-
-def metal_rough(source, m: Material, size: int):
-    """(metallic-roughness RGBA (G rough, B metal), occlusion RGBA or None) from whatever maps the game has."""
-    orm, srm = _first(m, "orm"), _first(m, "srm")
-    rough_ref, metal_ref, ao_ref = _first(m, "rough"), _first(m, "metal"), _first(m, "ao")
-    rough = metal = ao = None
-    if orm is not None:
-        a = _rgba(source, orm.key, size)
-        if a is not None:
-            order = (orm.slot or "ORM").upper()
-            order = order if len(order) == 3 and "R" in order else "ORM"
-            rough = a[..., order.find("R")]
-            metal = a[..., order.find("M")] if "M" in order else None
-            ao = a[..., order.find("O")] if "O" in order else (a[..., order.find("A")] if "A" in order else None)
-    elif srm is not None:
-        a = _rgba(source, srm.key, size)
-        if a is not None:
-            rough, metal = a[..., 1], a[..., 2]
-    if rough is None and rough_ref is not None:
-        a = _rgba(source, rough_ref.key, size)
-        rough = a[..., 0] if a is not None else None
-    if metal is None and metal_ref is not None and rough is not None:
-        a = _rgba(source, metal_ref.key, size)
-        metal = _fit(a[..., 0], rough.shape) if a is not None else None
-    if ao is None and ao_ref is not None:
-        a = _rgba(source, ao_ref.key, size)
-        ao = a[..., 0] if a is not None else None
-    mr = None
-    if rough is not None:
-        mr = np.zeros(rough.shape + (4,), np.uint8)
-        mr[..., 1] = rough
-        mr[..., 2] = metal if metal is not None else 0
-        mr[..., 3] = 255
+def metal_rough(surf, shape=None):
+    """(metallic-roughness RGBA (G rough, B metal), occlusion RGBA or None) from the shared surface terms."""
+    if surf is None:
+        return None, None
+    rough = np.clip(surf.rough, 0.0, 1.0)
+    mr = np.zeros(rough.shape + (4,), np.uint8)
+    mr[..., 1] = np.clip(rough * 255.0 + 0.5, 0, 255)
+    mr[..., 2] = np.clip(surf.metal * 255.0 + 0.5, 0, 255)
+    mr[..., 3] = 255
     occ = None
-    if ao is not None:
-        occ = np.repeat(ao[..., None], 4, -1)
+    if surf.ao is not None:
+        occ = np.repeat(np.clip(surf.ao * 255.0 + 0.5, 0, 255).astype(np.uint8)[..., None], 4, -1)
         occ[..., 3] = 255
     return mr, occ
 
 
 def write_glb(source, model: Model, materials: dict[str, Material], out: Path, tex_size: int = 4096) -> Path:
     g = N.Glb("facing_z")
+    cache = sh.TextureCache(source)
     index: dict[str, int] = {}
+    dropped: set[str] = set()
     for key, m in materials.items():
-        base = normal = metal_rough_tex = occlusion = None
-        alpha = "BLEND" if "translucent" in m.flags else "MASK" if "alpha_test" in m.flags else "OPAQUE"
-        ref = _first(m, "base")
-        a = _rgba(source, ref.key, tex_size) if ref is not None else None
-        if a is not None:
-            base = g.texture(a)
-        else:
+        lk = sh.look(m, cache)
+        if lk.drop:                          # opaque decal layer: it would paint a solid patch over the surface
+            dropped.add(key)
+            continue
+        alpha = "BLEND" if lk.translucent else "MASK" if lk.alpha_test else "OPAQUE"
+        a = lk.albedo(cache, tex_size)
+        base = g.texture(a) if a is not None else None
+        if base is None:
             alpha = "OPAQUE"
-        ref = _first(m, "normal")
-        n = _rgba(source, ref.key, tex_size, normal=True) if ref is not None else None
-        if n is not None:
-            normal = g.texture(n)
-        mr, occ = metal_rough(source, m, tex_size)
-        if mr is not None:
-            metal_rough_tex = g.texture(mr)
-        if occ is not None:
-            occlusion = g.texture(occ)
-        index[key] = g.material(m.name, base=base, normal=normal, metal_rough=metal_rough_tex, occlusion=occlusion,
-                                alpha=alpha, double_sided="two_sided" in m.flags or "alpha_test" in m.flags,
+        nref = sh.first(m, "normal")
+        n = sh.normal(cache.get(nref.key), tex_size) if nref is not None else None
+        normal = g.texture(n) if n is not None else None
+        surf = sh.surface(m, cache, tex_size, lk)
+        mr, occ = metal_rough(surf)
+        e = sh.emissive(m, cache, tex_size)
+        index[key] = g.material(m.name, base=base, normal=normal,
+                                metal_rough=g.texture(mr) if mr is not None else None,
+                                occlusion=g.texture(occ) if occ is not None else None,
+                                emissive=g.texture(e) if e is not None else None,
+                                alpha=alpha, double_sided="two_sided" in m.flags or lk.alpha_test,
                                 metallic=1.0 if mr is not None else 0.0, roughness=1.0 if mr is not None else 0.7)
     rig = model.rig if model.skinned else None
     world = rig.world() if rig is not None and hasattr(rig, "world") else None
@@ -115,7 +70,7 @@ def write_glb(source, model: Model, materials: dict[str, Material], out: Path, t
         skin = g.skeleton(names, [int(p) for p in rig.parents], np.ascontiguousarray(world, np.float64))
     prims = []
     for sm in model.submeshes:
-        if len(sm.indices) < 3:
+        if len(sm.indices) < 3 or sm.material_key in dropped:
             continue
         p = {"positions": np.asarray(sm.positions, np.float32), "normals": np.asarray(sm.normals, np.float32),
              "uvs": np.asarray(sm.uvs, np.float32), "indices": np.ascontiguousarray(sm.indices, np.uint32),
