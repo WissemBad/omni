@@ -221,3 +221,11 @@ def test_every_python_folder_is_a_package():
     bare = [str(d.relative_to(root)) for d in root.rglob("*") if d.is_dir() and d.name != "__pycache__"
             and any(d.glob("*.py")) and not (d / "__init__.py").exists()]
     assert not bare
+
+
+def test_the_build_lists_every_source_module():
+    """Sources are imported by name; the PyInstaller spec must name them or the app misses a game engine."""
+    from omni.sources import registry
+    spec = (Path(__file__).resolve().parents[1] / "packaging" / "omni.spec").read_text(encoding="utf-8")
+    modules = [m for m, _c in registry.ENGINES.values()]
+    assert all(f'"{m}"' in spec for m in modules)

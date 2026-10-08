@@ -12,6 +12,8 @@ for pkg in ("webview", "py7zr", "coacd", "scipy", "pygltflib", "vpk", "omni_nati
     datas += d
     binaries += b
     hidden += h
+# sources are imported by name (sources/registry.py): list them, a collection that fails on one would drop it silently
+hidden += ["omni.sources.unreal.adapter", "omni.sources.glacier.hitman", "omni.sources.glacier.adapter"]
 hidden += collect_submodules("uvicorn") + collect_submodules("omni") + [
     "webview.platforms.edgechromium", "clr_loader", "pythonnet", "multiprocessing", "pystray._win32",
     "pyppmd", "pybcj", "brotli", "zstandard", "inflate64", "multivolumefile", "texttable", "Cryptodome",
