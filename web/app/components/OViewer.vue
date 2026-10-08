@@ -495,6 +495,60 @@ watch(
   () => root.value && frame(),
 )
 
+/**
+ * A still of the loaded model at an arbitrary size, on a transparent background: the camera keeps its direction but
+ * is refitted to the new aspect, helpers (grid, `hide`) are left out, then everything is put back. The returned
+ * canvas is a copy: it stays valid after the viewport is redrawn.
+ */
+function renderStill(
+  w: number,
+  h: number,
+  hide: (THREE.Object3D | null | undefined)[] = [],
+): HTMLCanvasElement | null {
+  const r = root.value
+  if (!r || !renderer) return null
+  const saved = {
+    pos: camera.position.clone(),
+    target: controls.target.clone(),
+    aspect: camera.aspect,
+    ratio: renderer.getPixelRatio(),
+  }
+  const hidden = [gridHelper, ...hide].filter((o): o is THREE.Object3D => !!o && o.visible)
+  const bVisible = rootB.value?.visible
+  hidden.forEach((o) => (o.visible = false))
+  if (rootB.value) rootB.value.visible = false
+  r.visible = true
+  try {
+    const b = new THREE.Box3().setFromObject(r)
+    const sphere = b.getBoundingSphere(new THREE.Sphere())
+    const dir = camera.position.clone().sub(controls.target).normalize()
+    camera.aspect = w / h
+    const vf = THREE.MathUtils.degToRad(camera.fov)
+    const hf = 2 * Math.atan(Math.tan(vf / 2) * camera.aspect)
+    const dist = (sphere.radius / Math.sin(Math.min(vf, hf) / 2)) * 1.02
+    camera.position.copy(sphere.center).addScaledVector(dir, dist)
+    camera.lookAt(sphere.center)
+    camera.updateProjectionMatrix()
+    renderer.setPixelRatio(1)
+    renderer.setSize(w, h, false)
+    renderPass()
+    const out = document.createElement('canvas')
+    out.width = w
+    out.height = h
+    out.getContext('2d')!.drawImage(renderer.domElement, 0, 0)
+    return out
+  } finally {
+    hidden.forEach((o) => (o.visible = true))
+    if (rootB.value && bVisible !== undefined) rootB.value.visible = bVisible
+    camera.position.copy(saved.pos)
+    controls.target.copy(saved.target)
+    camera.aspect = saved.aspect
+    camera.updateProjectionMatrix()
+    renderer.setPixelRatio(saved.ratio)
+    resize()
+  }
+}
+
 defineExpose({
   root,
   parser,
@@ -505,6 +559,7 @@ defineExpose({
   getScene: () => scene,
   getBox: () => box.clone(),
   setAnimation,
+  renderStill,
   seek,
   hasSkeleton,
   playing,

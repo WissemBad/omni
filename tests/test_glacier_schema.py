@@ -1,4 +1,4 @@
-"""Class schemas (CPPT), enums, localised texts and outfit names of the Glacier source."""
+"""Class schemas (CPPT), enums, and outfit names of the Glacier source."""
 import struct
 
 import pytest
@@ -6,7 +6,7 @@ import pytest
 from omni.native import AVAILABLE, N
 from omni.sources.glacier import naming
 from omni.sources.glacier.outfit import EXPECTED
-from omni.sources.glacier.schema import SchemaBook, canonical, class_name, parse_keys
+from omni.sources.glacier.schema import SchemaBook, canonical, class_name
 
 native = pytest.mark.skipif(not AVAILABLE or not hasattr(N, "class_schema"), reason="native module without schemas")
 
@@ -41,53 +41,6 @@ def test_blueprint_class_is_the_only_type():
     assert N.blueprint_class(bin1(b"\0" * 16, ["zbodypartentity"])) == "zbodypartentity"
     with pytest.raises(ValueError):
         N.blueprint_class(bin1(b"\0" * 16, []))
-
-
-def xtea(v, key, rounds=32):
-    v0, v1, s, m = v[0], v[1], 0, 0xFFFFFFFF
-    for _ in range(rounds):
-        v0 = (v0 + ((((v1 << 4) ^ (v1 >> 5)) + v1) ^ (s + key[s & 3]))) & m
-        s = (s + 0x9E3779B9) & m
-        v1 = (v1 + ((((v0 << 4) ^ (v0 >> 5)) + v0) ^ (s + key[(s >> 11) & 3]))) & m
-    return v0, v1
-
-
-def locr(languages: int, entries: list[tuple[int, str]], key) -> bytes:
-    def enc(text: str) -> bytes:
-        b = text.encode() + b"\0"
-        b += b"\0" * (-len(b) % 8)
-        return b"".join(struct.pack("<II", *xtea(struct.unpack_from("<II", b, o), key)) for o in range(0, len(b), 8))
-
-    table = 1 + 4 * languages
-    body = b""
-    out = b"\0"
-    for _ in range(languages):
-        out += struct.pack("<I", table + len(body))
-        body += struct.pack("<I", len(entries))
-        for i, t in entries:
-            e = enc(t)
-            body += struct.pack("<II", i, len(e)) + e + b"\0"
-    return out + body
-
-
-KEY = [0x30F95282, 0x1F48C419, 0x295F8548, 0x2A78366D]
-
-
-@native
-def test_texts_read_only_with_the_right_key():
-    raw = locr(3, [(0xEF6F0ACC, "Smoking blanc"), (7, "Costume de plongée")], KEY)
-    assert N.locr_structure(raw) == [2, 2, 2]                       # the structure never needs a key
-    assert N.locr_read(raw, [[1, 2, 3, 4]]) is None                  # a wrong key reads nothing
-    got = N.locr_read(raw, [[1, 2, 3, 4], KEY])
-    assert got[2] == [(0xEF6F0ACC, "Smoking blanc"), (7, "Costume de plongée")]
-    with pytest.raises(ValueError):
-        N.locr_structure(b"\0\x03\0\0\0")
-
-
-def test_keys_are_parsed_and_checked():
-    assert parse_keys("82 52 f9 30 19 c4 48 1f 48 85 5f 29 6d 36 78 2a") == [KEY]
-    assert parse_keys("00112233445566778899aabbccddeeff, nonsense, 12") == [[0x33221100, 0x77665544, 0xBBAA9988, 0xFFEEDDCC]]
-    assert parse_keys("") == [] and parse_keys(None) == []
 
 
 def test_class_names_and_aliases():

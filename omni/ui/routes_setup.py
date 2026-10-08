@@ -14,7 +14,6 @@ from ..sources import registry
 
 class Paths(BaseModel):
     game: str | None = None
-    assets: str | None = None
     gmod: str | None = None
     studiomdl: str | None = None
     ffmpeg: str | None = None
@@ -44,7 +43,7 @@ def register(app: FastAPI, *, jobs, reset_runtime) -> None:
     def set_paths(body: Paths):
         patch = {k: v.strip().strip('"') for k, v in body.model_dump().items() if v is not None}
         for k, v in patch.items():
-            if v and k in ("game", "assets", "gmod") and not Path(v).is_dir():
+            if v and k in ("game", "gmod") and not Path(v).is_dir():
                 raise HTTPException(400, f"Ce dossier n’existe pas : {v}")
             if v and k in ("studiomdl", "ffmpeg", "blender") and not Path(v).is_file():
                 raise HTTPException(400, f"Ce fichier n’existe pas : {v}")
@@ -53,13 +52,11 @@ def register(app: FastAPI, *, jobs, reset_runtime) -> None:
                 raise HTTPException(400, "Aucun fichier chunk*.rpkg trouvé : choisis le dossier du jeu (il contient Runtime\\chunk0.rpkg).")
             patch["game"] = str(setup.game_packages(patch["game"])[0].parent)
         settings.save({"paths": patch})
-        if "assets" in patch:
-            reset_runtime()
         return setup.status()
 
     @app.post("/api/setup/pick")
     def pick(kind: str = "game"):
-        titles = {"game": "Dossier du jeu (contient Runtime\\chunk0.rpkg)", "assets": "Dossier des ressources extraites (Sorted)",
+        titles = {"game": "Dossier du jeu (contient Runtime\\chunk0.rpkg)",
                   "gmod": "Dossier de Garry’s Mod"}
         try:
             return {"path": pick_folder(titles.get(kind, "Choisir un dossier"))}

@@ -14,17 +14,14 @@ const toast = useToast()
 const failed = ref('')
 const busy = ref('')
 const gamePath = ref('')
-const assetsPath = ref('')
 const gmodPath = ref('')
 const estimate = ref<{ bytes: number; files: number } | null>(null)
-const advanced = ref(false)
 
 async function refresh() {
   try {
     const s = await load()
     if (s) {
       gamePath.value = gamePath.value || s.game.path
-      assetsPath.value = assetsPath.value || (s.assets.ok ? s.assets.path : '')
       gmodPath.value = gmodPath.value || s.gmod.path
     }
   } catch (e) {
@@ -72,12 +69,11 @@ async function detect(silent = false) {
   }
 }
 
-async function pick(kind: 'game' | 'assets' | 'gmod') {
+async function pick(kind: 'game' | 'gmod') {
   try {
     const { path } = await api<{ path: string }>(`/setup/pick?kind=${kind}`, { method: 'POST' })
     if (!path) return
     if (kind === 'game') gamePath.value = path
-    if (kind === 'assets') assetsPath.value = path
     if (kind === 'gmod') gmodPath.value = path
     await savePath(kind)
   } catch (e) {
@@ -85,8 +81,8 @@ async function pick(kind: 'game' | 'assets' | 'gmod') {
   }
 }
 
-async function savePath(kind: 'game' | 'assets' | 'gmod') {
-  const value = { game: gamePath, assets: assetsPath, gmod: gmodPath }[kind].value
+async function savePath(kind: 'game' | 'gmod') {
+  const value = { game: gamePath, gmod: gmodPath }[kind].value
   try {
     status.value = await api('/setup/paths', { method: 'POST', body: { [kind]: value } })
     if (kind === 'game') {
@@ -213,17 +209,6 @@ const finish = () => navigateTo('/')
           </template>
           <UButton v-else label="Extraire les ressources" icon="i-ri-download-2-line" color="primary" block :disabled="!status?.game.ok || spaceShort || !!running" :loading="busy === 'extract'" @click="start('extract')" />
 
-          <UCollapsible v-model:open="advanced">
-            <UButton label="J’ai déjà un dossier de ressources extraites" size="xs" color="neutral" variant="link" trailing-icon="i-ri-arrow-down-s-line" />
-            <template #content>
-              <UFormField class="mt-2" label="Dossier « Sorted »" description="Il contient chunk0, chunk1… (PRIM, TEXT, MATI…).">
-                <div class="flex gap-2">
-                  <UInput v-model="assetsPath" class="min-w-0 flex-1" placeholder="D:\Assets\Sorted" @change="savePath('assets')" />
-                  <UButton icon="i-ri-folder-open-line" label="Parcourir" color="neutral" variant="outline" @click="pick('assets')" />
-                </div>
-              </UFormField>
-            </template>
-          </UCollapsible>
         </template>
       </UCard>
 

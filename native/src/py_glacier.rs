@@ -156,23 +156,10 @@ fn enum_def(py: Python<'_>, data: &[u8]) -> PyResult<(String, Vec<(String, i32)>
         .map_err(pyo3::exceptions::PyValueError::new_err)
 }
 
-/// locr_structure(data) -> [entries per language] of a LOCR (readable without a key).
+/// parse_model_list(text) -> ["models/a/b.mdl", ...]: the models named by a user's text file, once each, in order.
 #[pyfunction]
-fn locr_structure(py: Python<'_>, data: &[u8]) -> PyResult<Vec<usize>> {
-    py.detach(|| crate::locr::Locr::parse(data))
-        .map(|l| l.languages.iter().map(Vec::len).collect())
-        .map_err(pyo3::exceptions::PyValueError::new_err)
-}
-
-/// locr_read(data, keys) -> None while no key reads the file, else [[(text id, text)] per language].
-/// `keys` are 4-word XTEA keys, tried in order (see `locr.rs`).
-#[pyfunction]
-fn locr_read(py: Python<'_>, data: &[u8], keys: Vec<[u32; 4]>) -> PyResult<Option<Vec<Vec<(u32, String)>>>> {
-    py.detach(|| {
-        let l = crate::locr::Locr::parse(data)?;
-        Ok(l.find_key(&keys).map(|c| (0..l.languages.len()).map(|i| l.texts(i, &c)).collect()))
-    })
-    .map_err(|e: String| pyo3::exceptions::PyValueError::new_err(e))
+fn parse_model_list(py: Python<'_>, text: &str) -> Vec<String> {
+    py.detach(|| crate::modellist::parse(text))
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -180,8 +167,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(class_schema, m)?)?;
     m.add_function(wrap_pyfunction!(blueprint_class, m)?)?;
     m.add_function(wrap_pyfunction!(enum_def, m)?)?;
-    m.add_function(wrap_pyfunction!(locr_structure, m)?)?;
-    m.add_function(wrap_pyfunction!(locr_read, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_model_list, m)?)?;
     m.add_function(wrap_pyfunction!(mate_slots, m)?)?;
     m.add_function(wrap_pyfunction!(wem_labels, m)?)?;
     m.add_function(wrap_pyfunction!(meta_refs_flags, m)?)?;

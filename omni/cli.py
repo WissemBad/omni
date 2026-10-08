@@ -218,10 +218,9 @@ def cmd_native(a):
 
 
 def cmd_schema(a):
-    """What the game's own type data says about omni's reading of it: class schemas, enums, texts."""
-    from .core import settings
+    """What the game's own type data says about omni's reading of it: class schemas, enums."""
     from .sources.glacier.outfit import OutfitResolver
-    from .sources.glacier.schema import locr_status, read_enums
+    from .sources.glacier.schema import read_enums
     src = _source(a.source)
     if not hasattr(src.archive, "index"):
         raise SystemExit(f"{src.title}: no Glacier resources")
@@ -235,10 +234,6 @@ def cmd_schema(a):
         print("  !", p)
     enums = read_enums(src)
     print(f"enums: {len(enums)} ({sum(len(e['members']) for e in enums.values())} members)")
-    st = locr_status(src, settings.get("texts", "locr_key"))
-    print(f"texts: {st['files']} files, {st['languages']} languages, {st['entries']} entries: {st['state']}")
-    if st["state"] != "lisible":
-        print("  the texts are enciphered; set Settings > texts.locr_key (32 hex digits) once the game's key is known")
     if a.audit:
         import collections
         tot = collections.Counter()
@@ -247,6 +242,29 @@ def cmd_schema(a):
             if t:
                 tot.update(r.schema.audit([p for s in t.subs for p in s.props + s.post_props] + [o.prop for o in t.overrides]))
         print(f"outfit properties checked: {dict(tot)} (unknown = material parameters and script values)")
+
+
+def cmd_subset(a):
+    """Extract the models named in a text file (one GMod .mdl per line) into an addon folder of their own."""
+    from . import subset
+    from .core.catalog import Catalog
+    from .sources import registry
+    lines = subset.parse(Path(a.list).read_text(encoding="utf-8-sig", errors="replace"))
+    if not lines:
+        raise SystemExit("no model in the list")
+    entries = subset.resolve(lines, ids=registry.source_ids(), source_of=registry.get_source,
+                             catalog_of=lambda sid: Catalog(registry.get_source(sid)), default=a.source or "")
+    s = subset.summary(entries)
+    print(f"{s['found']}/{s['total']} models found: " + (", ".join(f"{g}: {n['props']} props, {n['characters']} playermodels"
+                                                                   for g, n in s["games"].items()) or "none"))
+    for e in entries:
+        if not e.ok:
+            print(f"  ! {e.model}: {e.error}")
+    if a.dry_run or not s["found"]:
+        return
+    stats = subset.run([e for e in entries if e.ok], Path(a.out), workers=a.workers or None,
+                       on_result=lambda r: print(f"  {r['status']:8} {r.get('model') or r['key']}"))
+    print("addon:", stats["folder"])
 
 
 def cmd_home(a):
@@ -343,7 +361,7 @@ def main(argv=None):
     hm.set_defaults(fn=cmd_home)
     mg = sub.add_parser("migrate", help="bring the data of an earlier layout (a folder with workspace/, tools/) into the Omni folder")
     mg.add_argument("old"); mg.add_argument("--dry-run", action="store_true"); mg.set_defaults(fn=cmd_migrate)
-    sc = sub.add_parser("schema", help="check omni's reading of the game's entities against the game's own class schemas, enums, texts")
+    sc = sub.add_parser("schema", help="check omni's reading of the game's entities against the game's own class schemas, enums")
     sc.add_argument("--audit", type=int, default=0, metavar="N", help="also check the properties of N outfit templates")
     sc.set_defaults(fn=cmd_schema)
     nv = sub.add_parser("native", help="status of the Rust core; --build compiles and installs it")
@@ -359,6 +377,13 @@ def main(argv=None):
     so.add_argument("--force", action="store_true", help="rewrite files already exported (new names / tags)")
     so.add_argument("--clean", action="store_true", help="with --force: remove files of an earlier naming")
     so.set_defaults(fn=cmd_sounds)
+    su = sub.add_parser("subset", help="extract only the models listed in a text file (one .mdl per line) into a separate addon")
+    su.add_argument("list", help="text file: one GMod model path per line")
+    su.add_argument("out", help="addon folder to write")
+    su.add_argument("--source", default="", help="game tried first when a path does not name one")
+    su.add_argument("--workers", type=int, default=0)
+    su.add_argument("--dry-run", action="store_true", help="only say what each line resolves to")
+    su.set_defaults(fn=cmd_subset)
     pf = sub.add_parser("pick-folder", help=argparse.SUPPRESS)       # used by the server: the native folder dialog
     pf.add_argument("title", nargs="?", default="Choisir un dossier")
     pf.set_defaults(fn=cmd_pick_folder)

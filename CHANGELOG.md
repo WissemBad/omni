@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- Targeted extraction ("Sélection" tab, `omni subset <list.txt> <addon folder>`): give a text file with one GMod `.mdl` per
+  line and omni extracts just those models and their textures into an addon of its own, with the current settings. Each
+  path is traced back to the game asset without needing the earlier export.
+- Viewer: a screenshot button (key P) draws a share card (model, name, figures) saved in `workspace/screenshots` and put
+  on the clipboard.
+- Sounds: the game's own sound list can be searched and played before anything is exported.
+- A welcome tour at the first launch (again from Réglages).
+
+### Fixed
+
+- Unreal Engine games failed to prepare in the installed app ("No module named omni.sources.unreal.adapter") and were
+  missing from the game menu: a package folder was left out of the build.
+- Viewer: the animation menu sometimes did not appear until the page was refreshed.
+
+### Removed
+
+- The GitHub token setting (the repository is public), the "extracted resources (007)" setting (omni reads the game
+  folder directly) and the localised-texts key with the code that used it.
+
 ## [1.0.2] - 2026-10-08
 
 ### Fixed

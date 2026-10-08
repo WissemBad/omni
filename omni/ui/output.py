@@ -273,19 +273,11 @@ def _material(addon: Path, cds: list[str], name: str, root: Path | None = None) 
 
 def _find_source(sid: str, catalog, rel_path: str) -> dict | None:
     """The catalog row a prop output came from (the reverse of ``build._model_path``)."""
-    from ..targets.source.build import _model_path
+    from ..targets.source.build import prop_of_path
     prefix = f"models/{CONFIG.ns(sid)}/"
     if not rel_path.startswith(prefix) or rel_path.startswith(prefix + "pm/"):
         return None
-    inner = rel_path[len(prefix):-4]
-    rows = catalog._query("SELECT key, rel, cat, name FROM assets WHERE rel = ?", (inner,))
-    tail = inner.rsplit("_", 1)[-1]
-    if not rows and len(tail) == 6:
-        rows = catalog._query("SELECT key, rel, cat, name FROM assets WHERE lower(key) LIKE ?", (f"%{tail}",))
-    for r in rows:
-        if _model_path(sid, r["rel"], r["key"]) == f"{CONFIG.ns(sid)}/{inner}":
-            return {"key": r["key"], "rel": r["rel"], "cat": r["cat"]}
-    return None
+    return prop_of_path(catalog, sid, rel_path[len(prefix):-4])
 
 
 def _checks(m: dict) -> list[dict]:

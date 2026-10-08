@@ -4,7 +4,13 @@ const sid = useSourceId()
 const { details, refresh, toggleDeploy } = useSourceDetails()
 const { running, open, refresh: refreshJobs } = useJobs()
 const update = useUpdate()
-onMounted(() => update.check())
+const tour = useState('tour', () => false)
+onMounted(async () => {
+  update.check()
+  tour.value = await api<{ needed: boolean }>('/onboarding')
+    .then((r) => r.needed)
+    .catch(() => false)
+})
 
 const apiDown = ref('')
 async function boot() {
@@ -22,7 +28,7 @@ watch(sid, refresh, { immediate: true })
 
 const current = computed(() => sources.value.find((s) => s.id === sid.value))
 
-// Accueil · Modèles · Textures · Visionneuse · Sons · Réglages (only what the source offers)
+// Accueil · Modèles · Textures · Visionneuse · Sélection · Sons · Réglages (only what the source offers)
 const route = useRoute()
 const items = computed(() => {
   const c = current.value
@@ -38,6 +44,8 @@ const items = computed(() => {
     rows.push({ label: 'Textures', icon: 'i-ri-image-2-line', to: `/${c.id}/textures` })
   if (caps.includes('props') || caps.includes('characters'))
     rows.push({ label: 'Visionneuse', icon: 'i-ri-eye-line', to: `/${c.id}/viewer` })
+  if (caps.includes('props') || caps.includes('characters'))
+    rows.push({ label: 'Sélection', icon: 'i-ri-scissors-cut-line', to: `/${c.id}/subset` })
   if (caps.includes('sounds'))
     rows.push({ label: 'Sons', icon: 'i-ri-music-2-line', to: `/${c.id}/sounds` })
   rows.push({ label: 'Réglages', icon: 'i-ri-settings-3-line', to: `/${c.id}/settings` })
@@ -92,5 +100,6 @@ const items = computed(() => {
     </main>
     <OJobsPanel />
     <OConfirm />
+    <OOnboarding v-model:open="tour" />
   </UApp>
 </template>

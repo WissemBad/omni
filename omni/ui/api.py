@@ -11,6 +11,7 @@ GMod link, maintenance. The built front-end (``web/.output/public``) is served a
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import threading
@@ -86,7 +87,7 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         from ..core import update
         try:
             if settings.get("updates", "check"):
-                update.check(settings.get("updates", "token"))
+                update.check()
         except Exception:  # noqa: BLE001 - never a reason to fail at launch
             pass
     catalogs: dict[str, Catalog] = {}
@@ -197,10 +198,16 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
             try:
                 d = registry.describe(sid)
             except Exception:  # noqa: BLE001 - one broken library entry must not hide the others
+                logging.getLogger("omni.api").exception("source %s cannot be described", sid)
                 continue
             from .. import games as library
             out.append({**d, "deployed": deploy.link_path(CONFIG, sid).exists(), "ready": library.status(sid)["ready"]})
         return out
+
+    @app.get("/api/onboarding")
+    def onboarding():
+        """Whether the welcome tour must be shown (first launch of a fresh install)."""
+        return {"needed": settings.first_run()}
 
     @app.get("/api/{sid}/info")
     def info(sid: str):
@@ -294,7 +301,7 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         return jobs.remove(jid)
 
     # ------------------------------------------------------------------------------------------ workbenches
-    from . import output, routes_games, routes_models, routes_setup, routes_sounds, routes_textures
+    from . import output, routes_games, routes_models, routes_setup, routes_shots, routes_sounds, routes_subset, routes_textures
     routes_games.register(app, source_ids=registry.source_ids, jobs=jobs, reset_runtime=reset_runtime)
     routes_setup.register(app, jobs=jobs, reset_runtime=reset_runtime)
     routes_models.register(app, jobs=jobs, need=need, catalog_of=catalog_of, texcat_of=texcat_of,
@@ -302,6 +309,8 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
     routes_textures.register(app, jobs=jobs, need=need, texcat_of=texcat_of, catalog_of=catalog_of,
                              converted=converted)
     routes_sounds.register(app, jobs=jobs, need=need)
+    routes_shots.register(app)
+    routes_subset.register(app, jobs=jobs, source_ids=all_ids, source_of=source_of, catalog_of=catalog_of)
     output.register(app, catalog_of=catalog_of, resolve_source=source_of, texcat_of=texcat_of)
 
     # -------------------------------------------------------------------------------------- system / home
@@ -513,14 +522,13 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
     def update_info(force: bool = False):
         """The latest release and whether it is newer (cached six hours; ``force`` asks GitHub again)."""
         from ..core import update
-        return update.check(settings.get("updates", "token"), force)
+        return update.check(force)
 
     @app.post("/api/update/install")
     def update_install():
         """Download the installer (SHA-256 checked) and run it: it closes omni and starts the new version."""
         from ..core import update
-        tok = settings.get("updates", "token")
-        info = update.check(tok, force=True)
+        info = update.check(force=True)
         if not info["available"]:
             raise HTTPException(409, info["error"] or "omni est à jour")
         if any(j["kind"] != "maintenance" for j in jobs.running()):
@@ -528,7 +536,7 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         job = jobs.create("maintenance", f"Mise à jour {info['latest']}", "", dedupe="update")
 
         def run(job):
-            path = update.download(info, tok, lambda d, t: jobs.count(job, d, t), jobs.cancel_event(job))
+            path = update.download(info, lambda d, t: jobs.count(job, d, t), jobs.cancel_event(job))
             jobs.log(job, "Installation : omni va se fermer puis redémarrer")
             update.install(path)
             threading.Timer(4.0, lambda: os._exit(0)).start()

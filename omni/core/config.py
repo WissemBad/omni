@@ -135,13 +135,13 @@ def find_studiomdl(tools: Path, configured: str = "") -> Path:
 class Config:
     workspace: Path = field(default_factory=lambda: Path(os.environ.get("OMNI_WORKSPACE") or HOME / "workspace"))
     exports_override: Path | None = None
-    assets_override: Path | None = None
     gmod: Path = field(default_factory=find_gmod)
     studiomdl: Path = field(default_factory=lambda: find_studiomdl(HOME / "workspace" / "tools"))
     ffmpeg: str = field(default_factory=lambda: os.environ.get("OMNI_FFMPEG", "ffmpeg"))
     blender: str = ""
     namespace: str = "omni"             # folder of the models and materials inside the addon: models/<namespace>/<game>/
     game: Path | None = None            # folder of the game (holds Runtime/*.rpkg), for the extraction
+    addon_override: Path | None = None  # a conversion that writes into another addon folder (see subset.py)
 
     # ------------------------------------------------------------------------------------------ roots
     @property
@@ -155,7 +155,7 @@ class Config:
     @property
     def assets_sorted(self) -> Path:
         """Extracted game resources (``Sorted/chunk0/PRIM/...``), only for a game that is extracted instead of read in place."""
-        return self.assets_override or self.workspace / "assets" / "Sorted"
+        return self.workspace / "assets" / "Sorted"
 
     # ------------------------------------------------------------------------------------ workspace
     @property
@@ -165,6 +165,10 @@ class Config:
     @property
     def state_dir(self) -> Path:
         return self.workspace / "state"
+
+    @property
+    def screenshots(self) -> Path:
+        return self.workspace / "screenshots"
 
     @property
     def tools(self) -> Path:
@@ -223,7 +227,7 @@ class Config:
         return self.exports / source_id
 
     def addon_dir(self, source_id: str) -> Path:
-        return self.export_dir(source_id) / "garrysmod-addon"
+        return self.addon_override or self.export_dir(source_id) / "garrysmod-addon"
 
     def sounds_dir(self, source_id: str) -> Path:
         return self.export_dir(source_id) / "sounds"
@@ -253,7 +257,6 @@ class Config:
     def refresh(self, paths: dict | None = None) -> None:
         """Apply the ``paths`` of the settings (empty value = automatic)."""
         p = paths or {}
-        self.assets_override = Path(p["assets"]) if p.get("assets") else None
         self.exports_override = Path(p["exports"]) if p.get("exports") else None
         self.gmod = Path(p["gmod"]) if p.get("gmod") else find_gmod()
         self.studiomdl = find_studiomdl(self.tools, p.get("studiomdl", ""))

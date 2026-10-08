@@ -37,9 +37,8 @@ def test_every_path_hangs_off_the_omni_folder(tmp_path):
 
 def test_exports_can_live_elsewhere(tmp_path):
     cfg = _cfg(tmp_path)
-    cfg.refresh({"exports": str(tmp_path / "big-disk"), "assets": str(tmp_path / "Assets" / "Sorted")})
+    cfg.refresh({"exports": str(tmp_path / "big-disk")})
     assert cfg.addon_dir("g") == tmp_path / "big-disk" / "g" / "garrysmod-addon"
-    assert cfg.assets_sorted == tmp_path / "Assets" / "Sorted"
     cfg.refresh({})
     assert cfg.exports == tmp_path / "Omni" / "exports"
     assert cfg.assets_sorted == tmp_path / "Omni" / "workspace" / "assets" / "Sorted"
@@ -214,3 +213,11 @@ def test_monitor_sample_has_the_fields_the_home_page_draws():
     s = monitor.sample()
     assert 0 <= s["cpu"] <= 100 and 0 < s["memory"]["percent"] <= 100 and s["memory"]["used"] <= s["memory"]["total"]
     assert s["gpu"] is None or {"name", "load", "temp", "mem_used", "mem_total", "power"} <= set(s["gpu"])
+
+
+def test_every_python_folder_is_a_package():
+    """PyInstaller only collects real packages: a folder without __init__.py works from source and is missing from the build."""
+    root = Path(__file__).resolve().parents[1] / "omni"
+    bare = [str(d.relative_to(root)) for d in root.rglob("*") if d.is_dir() and d.name != "__pycache__"
+            and any(d.glob("*.py")) and not (d / "__init__.py").exists()]
+    assert not bare

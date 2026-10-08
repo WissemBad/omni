@@ -92,6 +92,18 @@ def reveal(path: Path) -> None:
         os.startfile(str(path))                           # noqa: S606 - Windows only
 
 
+def copy_image(path: Path) -> bool:
+    """Put an image file on the clipboard (as a picture, ready to paste in a chat). False when Windows refuses."""
+    script = ("Add-Type -AssemblyName System.Windows.Forms,System.Drawing;"
+              "$i=[System.Drawing.Image]::FromFile($args[0]);[System.Windows.Forms.Clipboard]::SetImage($i);$i.Dispose()")
+    try:
+        r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-STA", "-Command", script, str(path)],
+                           capture_output=True, timeout=30, creationflags=NOWINDOW)
+        return r.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def is_link(p: Path) -> bool:
     try:
         return bool(os.readlink(p))

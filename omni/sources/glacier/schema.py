@@ -1,4 +1,4 @@
-"""What the game says about its own data: entity class schemas (CPPT), enums (ENUM) and localised texts (LOCR).
+"""What the game says about its own data: entity class schemas (CPPT) and enums (ENUM).
 
 * **Class schemas.** A CPPT lists, for one entity class, the CRC32 of each property name and its type. Names are
   not stored, so a schema cannot name a property, but it does say which class has which property and of which type.
@@ -7,8 +7,6 @@
   property a template stores (known to the schema, same type) so a misread layout shows up instead of silently
   giving wrong outfits.
 * **Enums.** Member names of the game's enumerations (outfit variations, archetypes...).
-* **Texts.** LOCR files keep display texts enciphered. The structure is always readable; the texts only once a
-  key reads them (``texts.locr_key`` setting, 32 hexadecimal digits), see ``native/src/locr.rs``.
 """
 from __future__ import annotations
 
@@ -161,55 +159,4 @@ def read_enums(source) -> dict[str, dict]:
         except (ValueError, OSError):
             continue
         out[name] = {"members": members, "legacy": legacy, "path": source.names.name(h)}
-    return out
-
-
-# ---- localised texts -------------------------------------------------------------------
-def parse_keys(values) -> list[list[int]]:
-    """Setting ``texts.locr_key``: 32 hexadecimal digits per key (four little-endian words), several separated by
-    commas, semicolons or lines. Invalid entries are skipped."""
-    out = []
-    if isinstance(values, str):
-        values = re.split(r"[,;\n]", values)
-    for v in values or ():
-        s = re.sub(r"[\s_-]", "", str(v))
-        if re.fullmatch(r"[0-9a-fA-F]{32}", s):
-            b = bytes.fromhex(s)
-            out.append([int.from_bytes(b[i:i + 4], "little") for i in range(0, 16, 4)])
-    return out
-
-
-def locr_status(source, keys=()) -> dict:
-    """How far the game's texts can be read: files, languages, entries, and how many a key reads."""
-    idx = source.archive.index("LOCR")
-    k = parse_keys(keys)
-    files = langs = entries = readable = 0
-    for _h, p in idx.items():
-        raw = p.read_bytes()
-        try:
-            per_lang = N.locr_structure(raw)
-        except ValueError:
-            continue
-        files += 1
-        langs = max(langs, len(per_lang))
-        entries += sum(per_lang)
-        if k and N.locr_read(raw, k) is not None:
-            readable += 1
-    return {"files": files, "languages": langs, "entries": entries, "readable_files": readable,
-            "state": "lisible" if files and readable == files else "partiel" if readable else "chiffré"}
-
-
-def locr_texts(source, keys, lang: int = 1) -> dict[int, str]:
-    """text id (CRC32 of its key) -> text, in language ``lang``, over every file a key reads. Empty without a key."""
-    k = parse_keys(keys)
-    out: dict[int, str] = {}
-    if not k:
-        return out
-    for _h, p in source.archive.index("LOCR").items():
-        try:
-            got = N.locr_read(p.read_bytes(), k)
-        except ValueError:
-            continue
-        if got and lang < len(got):
-            out.update(got[lang])
     return out

@@ -20,23 +20,23 @@ def test_sums_file_is_parsed():
 
 def test_check_reports_a_newer_release(monkeypatch):
     monkeypatch.setattr(update, "__version__", "0.3.1")
-    monkeypatch.setattr(update, "_json", lambda url, tok: {
+    monkeypatch.setattr(update, "_json", lambda url: {
         "tag_name": "v0.4.0", "body": "notes", "html_url": "https://x",
-        "assets": [{"id": 1, "name": "Omni-Setup-0.4.0.exe", "size": 5}, {"id": 2, "name": "SHA256SUMS.txt", "size": 1}]})
-    info = update.check("t", force=True)
-    assert info["available"] and info["latest"] == "0.4.0" and info["asset"]["sums"] == 2
+        "assets": [{"browser_download_url": "u1", "name": "Omni-Setup-0.4.0.exe", "size": 5}, {"browser_download_url": "u2", "name": "SHA256SUMS.txt", "size": 1}]})
+    info = update.check(force=True)
+    assert info["available"] and info["latest"] == "0.4.0" and info["asset"]["sums"] == "u2"
 
 
 def test_check_same_version_or_missing_installer_is_not_an_update(monkeypatch):
     monkeypatch.setattr(update, "__version__", "0.4.0")
-    monkeypatch.setattr(update, "_json", lambda url, tok: {"tag_name": "v0.4.0", "assets": []})
-    assert update.check("t", force=True)["available"] is False
+    monkeypatch.setattr(update, "_json", lambda url: {"tag_name": "v0.4.0", "assets": []})
+    assert update.check(force=True)["available"] is False
     monkeypatch.setattr(update, "__version__", "0.3.0")
-    assert update.check("t", force=True)["available"] is False          # newer, but nothing to install
+    assert update.check(force=True)["available"] is False          # newer, but nothing to install
 
 
-def test_private_repository_message(monkeypatch):
-    def deny(url, tok):
+def test_missing_release_message(monkeypatch):
+    def deny(url):
         raise urllib.error.HTTPError(url, 404, "nf", {}, None)
     monkeypatch.setattr(update, "_json", deny)
-    assert "jeton" in update.check("", force=True)["error"]
+    assert "Aucune" in update.check(force=True)["error"]

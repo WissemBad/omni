@@ -2,6 +2,7 @@
 import type * as THREE from 'three'
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js'
 import type { LayerName } from '~/utils/overlays'
+import { composeShot, SHOT_STAGE } from '~/utils/shot'
 import type {
   AnimCatalog,
   Category,
@@ -21,6 +22,7 @@ definePageMeta({ key: (r) => `${r.params.source}/viewer` })
  * Conversion-related features (origin, original comparison, reconversion) only exist for omni's own output.
  */
 const sid = useSourceId()
+const { sources } = useSources()
 const route = useRoute()
 const router = useRouter()
 const jobsState = useJobs()
@@ -62,6 +64,11 @@ const viewer = useTemplateRef<{
   getScene: () => THREE.Scene
   getBox: () => THREE.Box3
   setAnimation: (clip: Clip | null, autoplay?: boolean) => void
+  renderStill: (
+    w: number,
+    h: number,
+    hide?: (THREE.Object3D | null | undefined)[],
+  ) => HTMLCanvasElement | null
   seek: (t: number) => void
   hasSkeleton: boolean
   playing: boolean
@@ -364,7 +371,8 @@ async function onLoaded() {
 const anims = ref<AnimCatalog | null>(null)
 const animChoice = ref('none')
 const animLoading = ref(false)
-let animToken = 0
+let animToken = 0 // the catalogue of the model being shown
+let playToken = 0 // the sequence being fetched: a separate counter, or choosing 'none' cancels the catalogue load
 
 const animItems = computed(() => {
   const out: (
@@ -423,8 +431,9 @@ async function playChoice() {
   const v = viewer.value
   const m = model.value
   if (!v || !m) return
-  const mine = ++animToken
+  const mine = ++playToken
   if (animChoice.value === 'none') {
+    animLoading.value = false
     v.setAnimation(null)
     return
   }
@@ -442,7 +451,7 @@ async function playChoice() {
     }>(
       `/${sid.value}/output/animation?path=${encodeURIComponent(m.path)}&source=${encodeURIComponent(source)}&seq=${index}&root=${root.value}`,
     )
-    if (mine !== animToken) return
+    if (mine !== playToken) return
     const bin = atob(r.data)
     const bytes = new Uint8Array(bin.length)
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
@@ -456,10 +465,79 @@ async function playChoice() {
   } catch (e) {
     toast.add({ title: 'Animation impossible', description: apiError(e), color: 'error' })
   } finally {
-    if (mine === animToken) animLoading.value = false
+    if (mine === playToken) animLoading.value = false
   }
 }
 watch(animChoice, playChoice)
+
+// ---- screenshot: the share card (rendered model + name + figures), saved in the workspace and put on the clipboard
+const shotBusy = ref(false)
+async function takeShot() {
+  const v = viewer.value
+  const m = model.value
+  const item = active.value
+  if (!v || !m || !item || shotBusy.value) return
+  shotBusy.value = true
+  try {
+    const still = v.renderStill(SHOT_STAGE.w, SHOT_STAGE.h, [objects.player, markerObj])
+    if (!still) throw new Error('rien à capturer')
+    const tris = (m.lods[lod.value]?.triangles ?? m.triangles).toLocaleString('fr-FR')
+    const chips = [`${tris} triangles`, dims.value, `${m.model.textures.length} textures`].filter(
+      Boolean,
+    ) as string[]
+    const blob = await composeShot(still, {
+      title: outputTitle(item),
+      subtitle: item.path.replace(/^models\//, ''),
+      chips,
+      game: sources.value.find((x) => x.id === sid.value)?.title ?? 'omni',
+    })
+    const saved = await $fetch<{ path: string; name: string; copied: boolean }>(
+      '/api/screenshots',
+      {
+        method: 'POST',
+        query: { name: item.name || outputTitle(item), copy: false },
+        body: blob,
+        headers: { 'Content-Type': 'image/png' },
+      },
+    )
+    let copied = false
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      copied = true
+    } catch {
+      copied = await api<{ copied: boolean }>('/screenshots/copy', {
+        method: 'POST',
+        query: { path: saved.path },
+      })
+        .then((r) => r.copied)
+        .catch(() => false)
+    }
+    toast.add({
+      title: copied ? 'Capture copiée' : 'Capture enregistrée',
+      description: copied
+        ? 'Colle-la où tu veux. Une copie est dans le dossier screenshots.'
+        : saved.path,
+      icon: 'i-ri-camera-line',
+      color: 'success',
+      actions: [
+        {
+          label: 'Afficher',
+          color: 'neutral',
+          variant: 'outline',
+          onClick: () =>
+            api('/screenshots/reveal', {
+              method: 'POST',
+              query: { path: saved.name },
+            }),
+        },
+      ],
+    })
+  } catch (e) {
+    toast.add({ title: 'Capture impossible', description: apiError(e), color: 'error' })
+  } finally {
+    shotBusy.value = false
+  }
+}
 
 async function loadCollision() {
   const m = model.value
@@ -624,6 +702,7 @@ defineShortcuts({
   s: () => toggle('skeleton'),
   h: () => toggle('hitboxes'),
   c: () => toggle('collision'),
+  p: () => takeShot(),
   v: () => compareUrl.value && (compare.value = !compare.value),
   escape: () => (mobilePreview.value = false),
 })
@@ -822,6 +901,9 @@ defineShortcuts({
             </UDropdownMenu>
             <UTooltip v-if="compareUrl" text="Comparer avec l’original du jeu" :kbds="['V']" :content="{ side: 'left' }">
               <UButton icon="i-ri-arrow-left-right-line" size="sm" :color="compare ? 'primary' : 'neutral'" :variant="compare ? 'soft' : 'ghost'" aria-label="Comparer avec l’original" @click="compare = !compare" />
+            </UTooltip>
+            <UTooltip v-if="active && model" text="Capture pour partager" :kbds="['P']" :content="{ side: 'left' }">
+              <UButton icon="i-ri-camera-line" size="sm" color="neutral" variant="ghost" aria-label="Capture pour partager" :loading="shotBusy" @click="takeShot" />
             </UTooltip>
             <UTooltip v-if="active && !currentRoot?.external" text="Ouvrir dans Garry’s Mod" :content="{ side: 'left' }">
               <UButton icon="i-ri-gamepad-line" size="sm" color="neutral" variant="ghost" aria-label="Ouvrir dans Garry’s Mod" :loading="gmodBusy" @click="openInGmod" />
