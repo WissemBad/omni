@@ -2,7 +2,7 @@
 
 Converts the assets of a game into Garry's Mod content and glTF models, locally, on Windows.
 
-[![CI](https://ci.wissem.pro/api/badges/17/status.svg)](https://ci.wissem.pro/repos/17)
+[![CI](https://ci.wissem.pro/api/badges/19/status.svg)](https://ci.wissem.pro/repos/19)
 [![Release](https://img.shields.io/github/v/release/WissemBad/omni?sort=semver)](https://github.com/WissemBad/omni/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
