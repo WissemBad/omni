@@ -94,6 +94,12 @@ const total = ref(0)
 const tops = ref<Facet[]>([])
 const loading = ref(false)
 const loaded = ref(false)
+/** Game list (no export needed) or the exported tree. */
+const view = ref<'game' | 'export'>('game')
+const building = ref(false)
+const libraryError = ref('')
+let poll: ReturnType<typeof setTimeout> | undefined
+onBeforeUnmount(() => clearTimeout(poll))
 const scroll = useTemplateRef<{ $el: HTMLElement }>('scroll')
 const search = useTemplateRef<{ inputRef?: HTMLInputElement }>('search')
 
@@ -110,8 +116,15 @@ async function fetchPage(reset: boolean) {
       limit: '200',
       offset: reset ? '0' : String(items.value.length),
     })
-    const r = await api<SoundPage>(`/${sid.value}/sounds?${params}`)
+    if (view.value === 'game') params.delete('named')
+    const r = await api<SoundPage & { state?: string; error?: string }>(
+      `/${sid.value}/sounds${view.value === 'game' ? '/library' : ''}?${params}`,
+    )
     if (mine !== seq) return
+    clearTimeout(poll)
+    building.value = r.state === 'building'
+    libraryError.value = r.state === 'error' ? (r.error ?? 'Erreur') : ''
+    if (building.value) poll = setTimeout(() => fetchPage(true), 2000)
     total.value = r.total
     tops.value = r.tops
     langs.value = r.langs ?? []
@@ -143,21 +156,28 @@ function more() {
 }
 const reload = debounce(() => fetchPage(true), 220)
 watch([q, top, lang, onlyNamed], reload)
+watch(view, () => {
+  q.value = top.value = lang.value = ''
+  items.value = []
+  stop()
+  fetchPage(true)
+})
 
 onMounted(async () => {
   await loadStatus()
-  if (status.value?.exported) fetchPage(true)
+  view.value = status.value?.exported ? 'export' : 'game'
+  fetchPage(true)
 })
 watch(running, async (now, before) => {
   if (before && !now) {
     await loadStatus()
-    fetchPage(true)
+    if (view.value === 'export') fetchPage(true)
   }
 })
 
 const topTabs = computed(() => [
   {
-    label: `Tout ${status.value?.count ? `(${status.value.count.toLocaleString('fr-FR')})` : ''}`,
+    label: `Tout ${tops.value.length ? `(${tops.value.reduce((n, t) => n + t.n, 0).toLocaleString('fr-FR')})` : ''}`,
     value: '',
   },
   ...tops.value.map((t) => ({
@@ -198,7 +218,10 @@ const current = computed(() => items.value.find((i) => i.file === playing.value)
 function play(s: Sound) {
   const a = audio.value
   if (!a) return
-  a.src = `/api/${sid.value}/sounds/file?path=${encodeURIComponent(s.file)}`
+  a.src =
+    view.value === 'game'
+      ? `/api/${sid.value}/sounds/preview?id=${s.id}`
+      : `/api/${sid.value}/sounds/file?path=${encodeURIComponent(s.file)}`
   a.volume = volume.value.volume
   a.play().catch(() => (playing.value = null))
   playing.value = s.file
@@ -331,7 +354,7 @@ defineShortcuts({
 
     <!-- explorer -->
     <UCard class="min-w-0 flex-1 max-lg:min-h-[28rem]" :ui="panelUi">
-      <template v-if="status?.exported" #header>
+      <template #header>
         <UInput ref="search" v-model="q" icon="i-ri-search-line" size="lg" class="w-full" placeholder="Rechercher un son (nom, locuteur, événement)…" :loading="loading">
           <template #trailing>
             <UButton v-if="q" icon="i-ri-close-line" color="neutral" variant="link" size="xs" aria-label="Effacer" @click="q = ''" />
@@ -339,18 +362,21 @@ defineShortcuts({
           </template>
         </UInput>
         <UTabs v-model="topModel" :items="topTabs" :content="false" size="sm" :ui="{ list: 'overflow-x-auto' }" />
+        <UTabs v-if="status?.exported" v-model="view" :items="[{ label: 'Dans le jeu', value: 'game' }, { label: 'Exportés', value: 'export' }]" :content="false" size="xs" />
         <div class="flex items-center gap-2">
           <p class="text-xs tabular-nums text-muted">{{ total.toLocaleString('fr-FR') }} son{{ total > 1 ? 's' : '' }}</p>
           <USelectMenu v-if="langs.length" v-model="lang" :items="langItems" size="xs" class="ml-auto w-44" icon="i-ri-translate-2" value-key="value" :search-input="false" />
-          <USwitch v-model="onlyNamed" size="sm" label="Nommés" :class="!langs.length && 'ml-auto'" />
-          <UTooltip text="Ouvrir le dossier">
+          <USwitch v-if="view === 'export'" v-model="onlyNamed" size="sm" label="Nommés" :class="!langs.length && 'ml-auto'" />
+          <UTooltip v-if="view === 'export'" text="Ouvrir le dossier">
             <UButton icon="i-ri-folder-open-line" size="xs" color="neutral" variant="ghost" aria-label="Ouvrir le dossier" @click="revealSound('')" />
           </UTooltip>
         </div>
       </template>
 
-      <template v-if="status?.exported">
-        <UEmpty v-if="!items.length && loaded && !loading" icon="i-ri-music-2-line" title="Aucun son" description="Change de recherche ou de dossier." class="absolute inset-0" />
+      <template v-if="view">
+        <UEmpty v-if="libraryError" icon="i-ri-error-warning-line" title="Liste des sons indisponible" :description="libraryError" class="absolute inset-0" />
+        <UEmpty v-else-if="building" icon="i-ri-loader-4-line" title="Lecture de la liste des sons…" description="Première lecture du jeu : une minute environ, ensuite c’est instantané." class="absolute inset-0" />
+        <UEmpty v-else-if="!items.length && loaded && !loading" icon="i-ri-music-2-line" title="Aucun son" description="Change de recherche ou de dossier." class="absolute inset-0" />
         <div v-else-if="!items.length" class="space-y-2 p-3">
           <USkeleton v-for="n in 9" :key="n" class="h-12 w-full" />
         </div>
@@ -378,25 +404,18 @@ defineShortcuts({
               class="min-w-0 flex-1"
               :ui="{ wrapper: 'min-w-0', name: 'truncate', description: 'truncate' }"
             />
-            <span class="hidden text-xs tabular-nums text-muted sm:block">{{ fmtDuration((item as Sound).seconds) }}</span>
-            <UBadge v-if="!(item as Sound).named && !(item as Sound).aliases.length" label="sans nom" color="warning" variant="subtle" size="sm" class="hidden sm:inline-flex" />
-            <UBadge :label="(item as Sound).file.split('.').pop()?.toUpperCase()" color="neutral" variant="outline" size="sm" class="hidden sm:inline-flex" />
+            <span v-if="(item as Sound).seconds" class="hidden text-xs tabular-nums text-muted sm:block">{{ fmtDuration((item as Sound).seconds) }}</span>
+            <UBadge v-if="view === 'export' && !(item as Sound).named && !(item as Sound).aliases.length" label="sans nom" color="warning" variant="subtle" size="sm" class="hidden sm:inline-flex" />
+            <UBadge v-if="view === 'export'" :label="(item as Sound).file.split('.').pop()?.toUpperCase()" color="neutral" variant="outline" size="sm" class="hidden sm:inline-flex" />
             <UTooltip text="Copier le chemin">
               <UButton icon="i-ri-file-copy-line" color="neutral" variant="ghost" size="xs" aria-label="Copier le chemin" @click="copy((item as Sound).file, 'Chemin copié')" />
             </UTooltip>
-            <UTooltip text="Afficher dans l’Explorateur">
+            <UTooltip v-if="view === 'export'" text="Afficher dans l’Explorateur">
               <UButton icon="i-ri-folder-open-line" color="neutral" variant="ghost" size="xs" aria-label="Afficher" @click="revealSound((item as Sound).file)" />
             </UTooltip>
           </div>
         </UScrollArea>
       </template>
-      <UEmpty
-        v-else
-        icon="i-ri-music-2-line"
-        title="Aucun son exporté pour l’instant"
-        description="Lance l’export à gauche : l’explorateur apparaît ici, avec l’écoute directe de chaque son."
-        class="absolute inset-0"
-      />
 
       <template v-if="playing" #footer>
         <div class="space-y-2">

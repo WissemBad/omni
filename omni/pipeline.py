@@ -1,6 +1,7 @@
 """Batch orchestration: parallel conversion in worker processes (no Blender involved)."""
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import os
@@ -86,9 +87,16 @@ def make_options(physics: bool = True, collision: str = "game", lossless_normals
     return o
 
 
+def _config_for(addon: str | None):
+    """The configuration a worker converts with: the usual one, or one that writes into another addon folder."""
+    return dataclasses.replace(CONFIG, addon_override=Path(addon)) if addon else CONFIG
+
+
 def _work(key: str, opt_kw: dict):
     from .targets.source.build import build_model
-    return asdict(build_model(_src, key, CONFIG, make_options(apply_settings=False, **opt_kw)))
+    opt_kw = dict(opt_kw)
+    cfg = _config_for(opt_kw.pop("addon", None))
+    return asdict(build_model(_src, key, cfg, make_options(apply_settings=False, **opt_kw)))
 
 
 def _work_pm(cid: str, kw: dict):
@@ -102,10 +110,11 @@ def _work_pm(cid: str, kw: dict):
     o = PMOptions(max_tris=kw["max_tris"])
     apply_quality(o.mat, kw["tex_quality"])
     o.mat.lossless_normals = kw.get("lossless_normals", False)
+    cfg = _config_for(kw.get("addon"))
     if hasattr(_src, "build_character"):                # sources with their own character builder (Unreal)
-        r = _src.build_character(cid, o, CONFIG)
+        r = _src.build_character(cid, o, cfg)
     else:
-        r = build_outfit_pm(_src, [int(v["key"], 16) for v in c["variants"]], o, CONFIG, cid.replace("outfit_", ""), "")
+        r = build_outfit_pm(_src, [int(v["key"], 16) for v in c["variants"]], o, cfg, cid.replace("outfit_", ""), "")
     return {"key": cid, "status": r.status, "model": r.model, "errors": r.errors, "notes": r.notes,
             "seconds": r.seconds}
 
@@ -145,10 +154,12 @@ def _kill(ex: ProcessPoolExecutor) -> None:
 
 def run_batch(source_name: str, keys: list[str], workers: int = 4, physics: bool = True, report: Path | None = None,
               on_result=None, collision: str = "game", lossless_normals: bool = False,
-              tex_quality: str = "max", cancel=None, on_plan=None, lods: bool = True) -> dict:
+              tex_quality: str = "max", cancel=None, on_plan=None, lods: bool = True, addon: str | None = None) -> dict:
     """Convert the props ``keys`` in worker processes (see run_pool). ``on_plan(sizes, workers)`` receives the mesh
     size of each prop (what the remaining-time estimate weighs them by) once the order is known."""
     kw = dict(physics=physics, collision=collision, lossless_normals=lossless_normals, tex_quality=tex_quality, lods=lods)
+    if addon:
+        kw["addon"] = addon                       # another addon folder (see subset.py)
     sizes: dict = {}
     ordered = biggest_first(source_name, keys, sizes)
     if on_plan:

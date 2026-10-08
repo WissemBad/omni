@@ -62,6 +62,19 @@ def _model_path(source_id: str, rel: str, key: str) -> str:
     return path
 
 
+def prop_of_path(catalog, source_id: str, inner: str) -> dict | None:
+    """The catalog row a prop was converted from, given its model path inside the namespace (``props/chair`` for
+    ``models/<namespace>/<game>/props/chair.mdl``): the reverse of ``_model_path``. Needs the catalog only, not the export."""
+    rows = catalog._query("SELECT key, rel, cat, name FROM assets WHERE rel = ?", (inner,))
+    tail = inner.rsplit("_", 1)[-1]
+    if not rows and len(tail) == 6:            # a long path is shortened to <leaf>_<last 6 hex digits of the key>
+        rows = catalog._query("SELECT key, rel, cat, name FROM assets WHERE lower(key) LIKE ?", (f"%{tail}",))
+    for r in rows:
+        if _model_path(source_id, r["rel"], r["key"]) == f"{CONFIG.ns(source_id)}/{inner}":
+            return {"key": r["key"], "rel": r["rel"], "cat": r["cat"]}
+    return None
+
+
 # Source $lod switch points (screen-size metric, already relative to the model's size): the game's LOD1/2/3
 LOD_SWITCH = (12, 30, 60)
 

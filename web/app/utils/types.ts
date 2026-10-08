@@ -88,6 +88,7 @@ export interface CharacterPreview {
 }
 
 export interface Sound {
+  id?: number
   file: string
   title?: string
   album?: string
@@ -431,8 +432,8 @@ export interface Overview {
 }
 
 export interface Settings {
-  general: { open_browser: boolean; port: number; namespace: string }
-  paths: { gmod: string; exports: string; assets: string }
+  general: { open_browser: boolean; port: number; namespace: string; onboarded: boolean }
+  paths: { gmod: string; exports: string }
   textures: { quality: string; encoder: number; lossless_normals: boolean }
   props: {
     physics: boolean
@@ -444,9 +445,8 @@ export interface Settings {
   }
   characters: { max_tris: number; preview_size: number }
   sounds: { format: string; workers: number; tags: boolean; skip_stubs: boolean; languages: string }
-  texts?: { locr_key: string }
   viewer: { texture_size: number }
-  updates: { check: boolean; token: string }
+  updates: { check: boolean }
 }
 
 export interface UpdateInfo {

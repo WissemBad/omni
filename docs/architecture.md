@@ -62,11 +62,10 @@ Modules: textures (TEXT/TEXD, BCn, mips, DXT, VTF, PNG, JPEG), audio (Wwise Vorb
 
 ## What the game says about its own data
 
-Three kinds of Glacier resources describe other resources, and `sources/glacier/schema.py` reads them (parsers in `native/src/schema.rs` and `locr.rs`, fuzzed like the others):
+Two kinds of Glacier resources describe other resources, and `sources/glacier/schema.py` reads them (parsers in `native/src/schema.rs`, fuzzed like the others):
 
 - **`CPPT`** (class schema): for each entity class the CRC32 of every property name and its type, plus whether a default is stored. Names are not stored, so a schema cannot name a property, but it says which class owns which id with which type. `OutfitResolver.problems()` checks the ids omni reads by hand (`outfit.EXPECTED`) against it, `SchemaBook.audit` checks every property a template stores. `CBLU` (class blueprint) is only the class name; every blueprint has a schema.
 - **`ENUM`**: the game's enumerations (name, members and values, former spellings). `naming.py` ties an outfit family to a member of `bond_outfit_variations` when the normalised names are equal (about half of Bond's families).
-- **`LOCR`** (texts): `u8`, one offset per language, then `{u32 CRC32(key), u32 length, text, 0}` entries. The text is XTEA-enciphered in 8-byte blocks. The key of the earlier Hitman games does not read 007 First Light, so texts need a key from the settings (`Locr::find_key` accepts a candidate only when 90 % of the entries decode to text). `ORES` (online configuration) holds no outfit or character names: its unlockables are locations.
 
 ## Texture roles of Glacier materials
 

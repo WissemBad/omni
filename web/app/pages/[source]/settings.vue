@@ -47,13 +47,14 @@ watch(
 )
 
 const confirm = useConfirm()
+const tour = useState('tour', () => false)
 const updates = useUpdate()
 const updateInfo = updates.info
 const checking = ref(false)
 async function checkNow() {
   checking.value = true
   try {
-    await save({ updates: { check: s.value!.updates.check, token: s.value!.updates.token } })
+    await save({ updates: { check: s.value!.updates.check } })
     await updates.check(true)
   } finally {
     checking.value = false
@@ -361,12 +362,16 @@ const MAINTENANCE = computed(() => [
                 <UButton label="Vérifier maintenant" icon="i-ri-refresh-line" size="xs" color="neutral" variant="soft" :loading="checking" @click="checkNow" />
               </div>
               <USwitch v-model="s.updates.check" label="Chercher une mise à jour au lancement" />
-              <UFormField label="Jeton GitHub" description="Nécessaire tant que le dépôt est privé (lecture des versions).">
-                <UInput v-model="s.updates.token" type="password" class="w-full" placeholder="ghp_…" autocomplete="off" />
-              </UFormField>
               <p v-if="updateInfo" class="text-xs" :class="updateInfo.error ? 'text-error' : 'text-muted'">
                 {{ updateInfo.error || (updateInfo.available ? `omni ${updateInfo.latest} est disponible.` : `omni ${updateInfo.current} est à jour.`) }}
               </p>
+            </div>
+            <div class="flex items-center justify-between gap-2 rounded-md border border-default p-3">
+              <div>
+                <h3 class="text-sm font-medium text-highlighted">Présentation</h3>
+                <p class="text-xs text-muted">Le tour de bienvenue du premier lancement.</p>
+              </div>
+              <UButton label="Revoir" icon="i-ri-slideshow-line" size="xs" color="neutral" variant="soft" @click="tour = true" />
             </div>
             <USwitch v-model="s.general.open_browser" label="Ouvrir le navigateur au lancement" description="Pour la commande « omni ui » (l’application a sa propre fenêtre)." />
             <UFormField label="Dossier des modèles et matériaux dans l’addon" description="Champ libre : models/&lt;dossier&gt;/&lt;jeu&gt; et materials/&lt;dossier&gt;/&lt;jeu&gt;. Exemples : omni, wissem/omni, import/wissem. Reconvertis les modèles après un changement.">
@@ -374,9 +379,6 @@ const MAINTENANCE = computed(() => [
             </UFormField>
             <UFormField label="Dossier de Garry’s Mod" description="Vide : le dossier Steam par défaut.">
               <UInput v-model="s.paths.gmod" class="w-full" placeholder="C:\Program Files (x86)\Steam\steamapps\common\GarrysMod" />
-            </UFormField>
-            <UFormField v-if="s.texts" label="Clé des textes du jeu (LOCR)" description="32 chiffres hexadécimaux. Les textes d’affichage (noms de tenues, de lieux) sont chiffrés dans 007 First Light : sans clé, omni utilise les noms internes des tenues.">
-              <UInput v-model="s.texts.locr_key" class="w-full font-mono" placeholder="00112233445566778899aabbccddeeff" autocomplete="off" />
             </UFormField>
             <UFormField label="Lecteur de sons (ce navigateur)">
               <div class="space-y-3">
@@ -418,9 +420,6 @@ const MAINTENANCE = computed(() => [
                   <UInput :model-value="home.workspace" class="w-full" readonly />
                   <UButton icon="i-ri-folder-open-line" color="neutral" variant="soft" aria-label="Ouvrir l’espace de travail" @click="openFolder('workspace')" />
                 </div>
-              </UFormField>
-              <UFormField label="Ressources extraites (007)" description="Seulement si tu as extrait le jeu toi-même. Vide : lecture directe des paquets du jeu.">
-                <UInput v-model="s.paths.assets" class="w-full" placeholder="…\Assets\Sorted" />
               </UFormField>
             </div>
           </div>

@@ -19,11 +19,11 @@ DEFAULTS: dict = {
     "general": {
         "open_browser": True,        # `omni ui` / the launcher opens the interface
         "port": 8770,
+        "onboarded": False,          # the welcome tour was seen (or skipped)
         "namespace": "omni",         # addon folder of models and materials: models/<namespace>/<game>/ (free path, e.g. wissem/omni)
     },
     "paths": {                       # "" = automatic
         "game": "",                  # folder of the game that holds Runtime/*.rpkg (extraction)
-        "assets": "",                # extracted resources (Sorted: chunk0/PRIM/...), default <workspace>/assets/Sorted
         "exports": "",               # where the exports go (default <Omni folder>/exports)
         "gmod": "",                  # Garry's Mod folder (Steam default)
         "studiomdl": "",             # cestudiomdl.exe (default: downloaded into <workspace>/tools)
@@ -54,15 +54,11 @@ DEFAULTS: dict = {
         "skip_stubs": True,          # skip bank copies of the first bytes of streamed music
         "languages": "all",          # all | english | neutral
     },
-    "texts": {
-        "locr_key": "",              # XTEA key of the game's localised texts (32 hex digits, several separated by commas); empty: texts stay enciphered
-    },
     "viewer": {
         "texture_size": 1024,        # textures of the 3D previews
     },
     "updates": {
         "check": True,               # look for a newer release at launch (GitHub)
-        "token": "",                 # read access to the release when the repository is private
     },
 }
 
@@ -147,6 +143,17 @@ def reset() -> dict:
     s = load()
     apply(s)
     return s
+
+
+def first_run() -> bool:
+    """True on a fresh install: the tour was not seen and nothing exists yet (an update of an older version, which
+    already has settings, exports or game caches, never shows it)."""
+    if get("general", "onboarded"):
+        return False
+    games = CONFIG.workspace / "games"
+    used = (CONFIG.settings_file.exists() or (games.is_dir() and any(games.iterdir()))
+            or (CONFIG.exports.is_dir() and any(CONFIG.exports.iterdir())))
+    return not used
 
 
 def get(section: str, key: str):

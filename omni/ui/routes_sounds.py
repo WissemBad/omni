@@ -4,10 +4,11 @@ from __future__ import annotations
 import csv
 import json
 import re
+import threading
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from ..core import settings
@@ -61,6 +62,64 @@ class SoundIndex:
                      or (not self.rows[i].get("language") and f"/{lang}/" in self.rows[i]["file"]))
                 and (not ext or self.rows[i]["file"].endswith("." + ext))]
         return len(hits), [self.rows[i] for i in hits[offset:offset + limit]]
+
+
+class GameSounds:
+    """The game's own sound list (``src.list_sounds``), built once in the background and searched in memory: the
+    explorer works before anything is exported. Sounds are decoded one at a time, when played."""
+
+    def __init__(self, src):
+        self.src, self.refs, self.low = src, [], []
+        self.state, self.error = "idle", ""
+        self._lock = threading.Lock()
+
+    def start(self) -> None:
+        with self._lock:
+            if self.state in ("building", "ready"):
+                return
+            self.state, self.error = "building", ""
+        threading.Thread(target=self._build, daemon=True, name="sound-library").start()
+
+    def _build(self) -> None:
+        try:
+            refs = sorted(self.src.list_sounds(progress=lambda m: None), key=lambda r: (r.path.lower(), r.priority))
+            self.refs = refs
+            self.low = [f"{r.path} {(r.meta or {}).get('title', '')} {(r.meta or {}).get('album', '')} {(r.meta or {}).get('artist', '')}".lower()
+                        for r in refs]
+            self.state = "ready"
+        except Exception as e:  # noqa: BLE001 - reported to the explorer
+            self.state, self.error = "error", f"{type(e).__name__}: {e}"
+
+    @staticmethod
+    def lang_of(r) -> str:
+        m = (r.meta or {}).get("language", "")
+        if m:
+            return m
+        parts = r.path.split("/")
+        return parts[1] if parts[0] == "voices" and len(parts) > 2 else ""
+
+    def search(self, q: str, top: str, limit: int, offset: int, lang: str = ""):
+        words = q.lower().split()
+        hits = [i for i, low in enumerate(self.low)
+                if (not top or self.refs[i].path.startswith(top + "/")) and all(w in low for w in words)
+                and (not lang or self.lang_of(self.refs[i]) == lang)]
+        return hits, hits[offset:offset + limit]
+
+    def item(self, i: int) -> dict:
+        r, m = self.refs[i], self.refs[i].meta or {}
+        return {"id": i, "file": r.path, "seconds": "", "channels": "", "rate": "", "codec": "", "named": SoundIndex.is_named(r.path),
+                "title": m.get("title", ""), "album": m.get("album", ""), "genre": m.get("genre", ""),
+                "language": self.lang_of(r), "sources": [], "aliases": [], "alias_count": 0}
+
+    def preview(self, i: int) -> tuple[bytes, str]:
+        """One sound as a file a browser plays: the game's Vorbis as is, anything else decoded to WAV."""
+        from ..native import N
+        data = self.refs[i].read()
+        ext, out, _info = N.convert_wem(data, "auto", [])
+        if ext == ".ogg":
+            return bytes(out), "audio/ogg"
+        _e, out, _info = N.convert_wem(data, "wav", [])
+        return bytes(out), "audio/wav"
 
 
 def register(app: FastAPI, *, jobs, need) -> None:
@@ -149,6 +208,46 @@ def register(app: FastAPI, *, jobs, need) -> None:
                            "sources": r.get("sources", "").split()[:4],
                            "aliases": [a.strip() for a in r["aliases"].split("|") if a.strip()][:6],
                            "alias_count": r["aliases"].count("|") + 1 if r["aliases"] else 0} for r in page]}
+
+    library: dict[str, GameSounds] = {}
+
+    def library_of(sid: str) -> GameSounds:
+        src = need(sid, "sounds")
+        if sid not in library:
+            library[sid] = GameSounds(src)
+        return library[sid]
+
+    @app.get("/api/{sid}/sounds/library")
+    def library_page(sid: str, q: str = "", top: str = "", limit: int = 100, offset: int = 0, lang: str = ""):
+        """Sounds of the game itself (no export needed). ``state`` is building while the list is read."""
+        lib = library_of(sid)
+        lib.start()
+        if lib.state != "ready":
+            return {"state": lib.state, "error": lib.error, "total": 0, "items": [], "tops": [], "langs": []}
+        hits, page = lib.search(q, top, min(limit, 500), offset, lang)
+        tops: dict[str, int] = {}
+        langs: dict[str, int] = {}
+        for r in lib.refs:
+            t = r.path.split("/", 1)[0]
+            tops[t] = tops.get(t, 0) + 1
+            lg = lib.lang_of(r)
+            if lg:
+                langs[lg] = langs.get(lg, 0) + 1
+        return {"state": "ready", "error": "", "total": len(hits),
+                "tops": [{"value": k, "n": v} for k, v in sorted(tops.items(), key=lambda kv: (SoundIndex.ORDER.get(kv[0], 3), kv[0]))],
+                "langs": [{"value": k, "n": v} for k, v in sorted(langs.items())],
+                "items": [lib.item(i) for i in page]}
+
+    @app.get("/api/{sid}/sounds/preview")
+    def library_preview(sid: str, id: int):
+        lib = library_of(sid)
+        if lib.state != "ready" or not 0 <= id < len(lib.refs):
+            raise HTTPException(404, "Introuvable")
+        try:
+            data, mime = lib.preview(id)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(422, f"Lecture impossible : {e}")
+        return Response(data, media_type=mime, headers={"Cache-Control": "max-age=3600"})
 
     @app.get("/api/{sid}/sounds/file")
     def sound_file(sid: str, path: str, set: str = ""):
