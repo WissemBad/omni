@@ -1,0 +1,41 @@
+name: Bug report
+description: Something converts wrongly, fails or crashes.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: omni version
+      description: Shown in the settings page, or `omni --version`.
+      placeholder: 1.0.2
+    validations:
+      required: true
+  - type: dropdown
+    id: game
+    attributes:
+      label: Game
+      options:
+        - 007 First Light
+        - HITMAN World of Assassination
+        - Unreal Engine game (say which below)
+        - Not game-specific
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what you got. Screenshots help for visual problems.
+    validations:
+      required: true
+  - type: textarea
+    id: assets
+    attributes:
+      label: Affected assets
+      description: Keys or names of the props, characters or textures (copy them from the interface or the job report).
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: The job report or the relevant part of `workspace\logs` in your Omni folder.
+      render: text

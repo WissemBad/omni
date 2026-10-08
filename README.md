@@ -3,7 +3,7 @@
 Converts the assets of a game into Garry's Mod content and glTF models, locally, on Windows.
 
 [![CI](https://ci.wissem.pro/api/badges/17/status.svg)](https://ci.wissem.pro/repos/17)
-[![Release](https://img.shields.io/github/v/release/Wissem-Industries/omni?sort=semver)](https://github.com/Wissem-Industries/omni/releases)
+[![Release](https://img.shields.io/github/v/release/WissemBad/omni?sort=semver)](https://github.com/WissemBad/omni/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-native%20core-000000?logo=rust&logoColor=white)
@@ -17,7 +17,7 @@ The parsers, texture codecs, audio converters, glTF writer and bulk readers are 
 
 ## Install
 
-Download `Omni-Setup-<version>.exe` (installer) or `Omni-<version>-windows.zip` (portable) from the [releases](https://github.com/Wissem-Industries/omni/releases), start Omni, then add a game on the **Jeux** page. `SHA256SUMS.txt` lists the checksums of both files. A short guide in French is in [docs/mode-emploi.md](docs/mode-emploi.md).
+Download `Omni-Setup-<version>.exe` (installer) or `Omni-<version>-windows.zip` (portable) from the [releases](https://github.com/WissemBad/omni/releases), start Omni, then add a game on the **Jeux** page. `SHA256SUMS.txt` lists the checksums of both files. A short guide in French is in [docs/mode-emploi.md](docs/mode-emploi.md).
 
 Requirements: Windows 10 or 11 with the WebView2 runtime, a copy of the game, Garry's Mod for the model conversion.
 
@@ -65,6 +65,10 @@ uv run --no-sync python scripts/release.py <x.y.z>
 ```
 
 Merge the `chore(release): vX.Y.Z` pull request, then push the `vX.Y.Z` tag: the pipeline builds the installer and publishes the release.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 

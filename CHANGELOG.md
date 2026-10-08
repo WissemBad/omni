@@ -24,6 +24,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- The repository is public at [WissemBad/omni](https://github.com/WissemBad/omni); update checks follow it and no longer need
+  a token.
 - Garry's Mod textures carry the anisotropic filtering flag: surfaces seen at an angle keep their sharp mips whatever
   the player's filtering setting. Textures written by an older version are rewritten on the next conversion.
 

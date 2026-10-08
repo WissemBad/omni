@@ -1,7 +1,7 @@
 """Updates: the latest GitHub release of omni, downloaded, checked against its SHA-256 sums and run.
 
-The repository can be private: a token with read access (settings, ``OMNI_UPDATE_TOKEN``/``GH_TOKEN``/``GITHUB_TOKEN``,
-or the GitHub CLI's) is then needed to read the release and download its assets. Nothing is installed without the user
+The repository is public; a token (settings, ``OMNI_UPDATE_TOKEN``/``GH_TOKEN``/``GITHUB_TOKEN``, or the GitHub CLI's) is
+optional and only raises GitHub's rate limit. Nothing is installed without the user
 asking: ``check`` only reports, ``download`` + ``install`` run when they press the button.
 """
 from __future__ import annotations
@@ -24,7 +24,7 @@ from .windows import NOWINDOW
 
 log = logging.getLogger("omni.update")
 
-REPO = "Wissem-Industries/omni"
+REPO = "WissemBad/omni"
 API = f"https://api.github.com/repos/{REPO}"
 CACHE_SECONDS = 6 * 3600
 _cache: dict = {"at": 0.0, "value": None}

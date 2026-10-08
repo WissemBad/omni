@@ -1,0 +1,16 @@
+name: Feature request
+description: A game, a format or a tool omni does not support yet.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you need
+      description: The problem you want solved, and the game it concerns if any.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Suggested approach
+      description: Optional. Links to format documentation or community tools are welcome.
