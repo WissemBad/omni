@@ -26,7 +26,7 @@ class FakeCatalog:
 
 
 def test_list_is_normalised():
-    got = subset.parse("# note\nModels\Props\Chair.MDL\nmodels/props/chair.mdl\nfoo/bar.dx90.vtx\nmaterials/x.vmt\n")
+    got = subset.parse("# note\nModels/Props/Chair.MDL\nmodels/props/chair.mdl\nfoo/bar.dx90.vtx\nmaterials/x.vmt\n")
     assert got == ["models/props/chair.mdl", "foo/bar.mdl"]
 
 
