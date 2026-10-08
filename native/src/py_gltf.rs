@@ -51,7 +51,7 @@ impl Glb {
         }
         let (h, w) = (s[0], s[1]);
         let px = slice_of(&rgba);
-        let (data, mime) = py.allow_threads(|| gltf::encode_image(&px, w, h, max_size, jpeg)).map_err(err)?;
+        let (data, mime) = py.detach(|| gltf::encode_image(&px, w, h, max_size, jpeg)).map_err(err)?;
         self.inner.add_encoded(&data, mime).map_err(err)
     }
 
@@ -122,13 +122,13 @@ impl Glb {
     }
 
     fn to_bytes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
-        Ok(PyBytes::new_bound(py, &self.inner.finish("omni").map_err(err)?))
+        Ok(PyBytes::new(py, &self.inner.finish("omni").map_err(err)?))
     }
 
     /// Write the file atomically (temporary file, then rename), creating the folders.
     fn save(&self, py: Python<'_>, path: PathBuf) -> PyResult<()> {
         let inner = &self.inner;
-        py.allow_threads(|| {
+        py.detach(|| {
             let bytes = inner.finish("omni")?;
             if let Some(d) = path.parent() {
                 std::fs::create_dir_all(d).map_err(|e| e.to_string())?;

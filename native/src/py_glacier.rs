@@ -24,7 +24,7 @@ impl GlacierStore {
     #[new]
     fn new(py: Python<'_>, packages: Vec<String>) -> PyResult<Self> {
         let paths: Vec<PathBuf> = packages.into_iter().map(PathBuf::from).collect();
-        let store = py.allow_threads(|| Store::open(&paths)).map_err(err)?;
+        let store = py.detach(|| Store::open(&paths)).map_err(err)?;
         Ok(GlacierStore { store: Arc::new(store) })
     }
 
@@ -34,7 +34,7 @@ impl GlacierStore {
 
     /// {type: count}
     fn types<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let d = PyDict::new_bound(py);
+        let d = PyDict::new(py);
         for (k, v) in self.store.types() {
             d.set_item(k, v)?;
         }
@@ -44,7 +44,7 @@ impl GlacierStore {
     /// Hashes of the resources of a type.
     fn of_type(&self, py: Python<'_>, ty: &str) -> Vec<u64> {
         let ty = ty.to_string();
-        py.allow_threads(|| self.store.of_type(&ty))
+        py.detach(|| self.store.of_type(&ty))
     }
 
     fn has(&self, hash: u64) -> bool {
@@ -62,8 +62,8 @@ impl GlacierStore {
 
     /// Decompressed bytes of a resource.
     fn read<'py>(&self, py: Python<'py>, hash: u64) -> PyResult<Bound<'py, PyBytes>> {
-        let data = py.allow_threads(|| self.store.read(hash)).map_err(err)?;
-        Ok(PyBytes::new_bound(py, &data))
+        let data = py.detach(|| self.store.read(hash)).map_err(err)?;
+        Ok(PyBytes::new(py, &data))
     }
 
     /// labels(hashes, threads=0) -> [original Wwise name or ""] of the .wem resources, decompressed and read in parallel.
@@ -71,7 +71,7 @@ impl GlacierStore {
     fn labels(&self, py: Python<'_>, hashes: Vec<u64>, threads: usize) -> PyResult<Vec<String>> {
         let p = pool(threads)?;
         let store = &self.store;
-        Ok(py.allow_threads(|| {
+        Ok(py.detach(|| {
             p.install(|| {
                 use rayon::prelude::*;
                 hashes.par_iter().map(|h| store.read(*h).map(|d| crate::scan::wem_label_of(&d)).unwrap_or_default()).collect()
@@ -95,7 +95,7 @@ impl GlacierStore {
 #[pyo3(signature = (paths, threads=0))]
 fn prim_headers(py: Python<'_>, paths: Vec<String>, threads: usize) -> PyResult<Vec<Option<(u64, u32)>>> {
     let p = pool(threads)?;
-    Ok(py.allow_threads(|| p.install(|| crate::scan::prim_headers(&paths))))
+    Ok(py.detach(|| p.install(|| crate::scan::prim_headers(&paths))))
 }
 
 fn pool(threads: usize) -> PyResult<rayon::ThreadPool> {
@@ -108,7 +108,7 @@ fn pool(threads: usize) -> PyResult<rayon::ThreadPool> {
 #[pyo3(signature = (items, threads=0))]
 fn wem_labels(py: Python<'_>, items: Vec<(String, u64, i64)>, threads: usize) -> PyResult<Vec<String>> {
     let p = pool(threads)?;
-    Ok(py.allow_threads(|| p.install(|| crate::scan::wem_labels(&items))))
+    Ok(py.detach(|| p.install(|| crate::scan::wem_labels(&items))))
 }
 
 /// meta_refs_flags(paths, threads=0) -> [[(hash, flag)] | None] for each "<path>.meta".
@@ -116,7 +116,7 @@ fn wem_labels(py: Python<'_>, items: Vec<(String, u64, i64)>, threads: usize) ->
 #[pyo3(signature = (paths, threads=0))]
 fn meta_refs_flags(py: Python<'_>, paths: Vec<String>, threads: usize) -> PyResult<Vec<Option<Vec<(u64, u8)>>>> {
     let p = pool(threads)?;
-    Ok(py.allow_threads(|| p.install(|| crate::scan::meta_refs_flags_many(&paths))))
+    Ok(py.detach(|| p.install(|| crate::scan::meta_refs_flags_many(&paths))))
 }
 
 /// read_files(paths, threads=0) -> [bytes | None]: whole files read in parallel.
@@ -124,20 +124,20 @@ fn meta_refs_flags(py: Python<'_>, paths: Vec<String>, threads: usize) -> PyResu
 #[pyo3(signature = (paths, threads=0))]
 fn read_files<'py>(py: Python<'py>, paths: Vec<String>, threads: usize) -> PyResult<Vec<Option<Bound<'py, PyBytes>>>> {
     let p = pool(threads)?;
-    let data = py.allow_threads(|| p.install(|| crate::scan::read_files(&paths)));
-    Ok(data.into_iter().map(|d| d.map(|b| PyBytes::new_bound(py, &b))).collect())
+    let data = py.detach(|| p.install(|| crate::scan::read_files(&paths)));
+    Ok(data.into_iter().map(|d| d.map(|b| PyBytes::new(py, &b))).collect())
 }
 
 /// mate_slots(data) -> [(slot, meaning | None)]: the texture slots of a material class (see `mate.rs`).
 #[pyfunction]
 fn mate_slots(py: Python<'_>, data: &[u8]) -> Vec<(String, Option<String>)> {
-    py.allow_threads(|| crate::mate::slots(data))
+    py.detach(|| crate::mate::slots(data))
 }
 
 /// class_schema(data) -> [(CRC32 of the property name, type, has default)] of a CPPT (see `schema.rs`).
 #[pyfunction]
 fn class_schema(py: Python<'_>, data: &[u8]) -> PyResult<Vec<(u32, String, bool)>> {
-    py.allow_threads(|| crate::schema::class_schema(data))
+    py.detach(|| crate::schema::class_schema(data))
         .map(|v| v.into_iter().map(|p| (p.crc, p.ty, p.default)).collect())
         .map_err(pyo3::exceptions::PyValueError::new_err)
 }
@@ -145,13 +145,13 @@ fn class_schema(py: Python<'_>, data: &[u8]) -> PyResult<Vec<(u32, String, bool)
 /// blueprint_class(data) -> class name of a CBLU.
 #[pyfunction]
 fn blueprint_class(py: Python<'_>, data: &[u8]) -> PyResult<String> {
-    py.allow_threads(|| crate::schema::blueprint_class(data)).map_err(pyo3::exceptions::PyValueError::new_err)
+    py.detach(|| crate::schema::blueprint_class(data)).map_err(pyo3::exceptions::PyValueError::new_err)
 }
 
 /// enum_def(data) -> (name, [(member, value)], former names) of an ENUM.
 #[pyfunction]
 fn enum_def(py: Python<'_>, data: &[u8]) -> PyResult<(String, Vec<(String, i32)>, Vec<String>)> {
-    py.allow_threads(|| crate::schema::enum_def(data))
+    py.detach(|| crate::schema::enum_def(data))
         .map(|e| (e.name, e.members, e.legacy))
         .map_err(pyo3::exceptions::PyValueError::new_err)
 }
@@ -159,7 +159,7 @@ fn enum_def(py: Python<'_>, data: &[u8]) -> PyResult<(String, Vec<(String, i32)>
 /// locr_structure(data) -> [entries per language] of a LOCR (readable without a key).
 #[pyfunction]
 fn locr_structure(py: Python<'_>, data: &[u8]) -> PyResult<Vec<usize>> {
-    py.allow_threads(|| crate::locr::Locr::parse(data))
+    py.detach(|| crate::locr::Locr::parse(data))
         .map(|l| l.languages.iter().map(Vec::len).collect())
         .map_err(pyo3::exceptions::PyValueError::new_err)
 }
@@ -168,7 +168,7 @@ fn locr_structure(py: Python<'_>, data: &[u8]) -> PyResult<Vec<usize>> {
 /// `keys` are 4-word XTEA keys, tried in order (see `locr.rs`).
 #[pyfunction]
 fn locr_read(py: Python<'_>, data: &[u8], keys: Vec<[u32; 4]>) -> PyResult<Option<Vec<Vec<(u32, String)>>>> {
-    py.allow_threads(|| {
+    py.detach(|| {
         let l = crate::locr::Locr::parse(data)?;
         Ok(l.find_key(&keys).map(|c| (0..l.languages.len()).map(|i| l.texts(i, &c)).collect()))
     })
