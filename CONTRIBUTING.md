@@ -26,7 +26,7 @@ More detail in [docs/architecture.md](docs/architecture.md).
 
 ## Checks
 
-All of these must pass before a pull request is merged:
+Woodpecker runs the same checks on every pull request (see `.woodpecker/check.yml`); all of them must pass before it is merged:
 
 ```powershell
 uv run ruff check

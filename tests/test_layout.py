@@ -1,5 +1,6 @@
 """The Omni folder layout, its settings and the move from the earlier layouts."""
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -207,6 +208,7 @@ def test_settings_reset_forgets_window_and_viewer_roots(tmp_path, monkeypatch):
     assert [p.name for p in cfg.config_dir.iterdir()] == ["games.json"]
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="reads the Windows performance counters")
 def test_monitor_sample_has_the_fields_the_home_page_draws():
     from omni.core import monitor
     s = monitor.sample()
