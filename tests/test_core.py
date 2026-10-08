@@ -54,6 +54,40 @@ def test_prim_crane_decode():
         assert abs(np.linalg.norm(m.normals, axis=1) - 1).max() < 1e-3
 
 
+def _fake_prim(nuv: int) -> bytes:
+    """One standard sub-mesh of three vertices, in the layout of the current game build."""
+    stride = 12 + 4 * nuv
+    ibo, vbo = 16, 24
+    ntb = vbo + 3 * 8
+    mesh = ntb + 3 * stride + (-(ntb + 3 * stride) % 16)
+    buf = bytearray(mesh + 128 + 4 + 24)
+    struct.pack_into("<3H", buf, ibo, 0, 1, 2)
+    struct.pack_into("<12h", buf, vbo, 0, 0, 0, 0, 32767, 0, 0, 0, 0, 32767, 0, 0)
+    struct.pack_into("<BBHBBBBBBHI", buf, mesh, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0)
+    struct.pack_into("<I", buf, mesh + 12, 0xFFFFFFFF)
+    struct.pack_into("<6f", buf, mesh + 20, 1, 1, 1, 3, 3, 1)
+    struct.pack_into("<7I", buf, mesh + 44, 3, vbo, 3, 0, ibo, 0, 0)
+    struct.pack_into("<I", buf, mesh + 72, 0x1385F0)
+    struct.pack_into("<12f", buf, mesh + 76, 2, 2, 2, 0, 1, 1, 1, 0, 1, 1, 0, 0)
+    struct.pack_into("<I", buf, mesh + 124, nuv << 16)
+    table = mesh + 128
+    struct.pack_into("<I", buf, table, mesh)
+    hdr = table + 4
+    struct.pack_into("<BBHIIIII", buf, hdr, 0, 0, 1, 0, 0, 0xFFFFFFFF, 1, table)
+    struct.pack_into("<Q", buf, 0, hdr)
+    return bytes(buf)
+
+
+@pytest.mark.parametrize("nuv", [0, 1])
+def test_prim_layout_with_data_words(nuv):
+    """The words at +12 and after the counts shift the box, the scale and the bias; a mesh may have no UV set."""
+    from omni.sources.glacier.prim import parse_prim
+    (m,) = parse_prim(_fake_prim(nuv)).meshes
+    assert np.allclose(m.positions, [[1, 1, 1], [3, 1, 1], [1, 3, 1]], atol=1e-3)
+    assert m.bbox_min == (1.0, 1.0, 1.0) and m.bbox_max == (3.0, 3.0, 1.0)
+    assert m.indices.tolist() == [0, 1, 2] and m.uvs.shape == (3, 2)
+
+
 @pytest.mark.skipif(not (HAVE_ASSETS and CONFIG.studiomdl.exists()), reason="assets or compiler missing")
 def test_end_to_end_crane():
     from omni.sources.glacier.adapter import GlacierSource

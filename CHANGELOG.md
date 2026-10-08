@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+
+- 007 First Light: the current build of the game stores two more words in each sub-mesh of a model, so almost every
+  prop and player model failed with *buffer is smaller than requested size* (27,548 of 27,965 props in one run). The
+  reader follows the new layout, and meshes without a UV set load too. All 32,897 models of the game now parse.
+- Outfit sets (`outfitset_*`) are no longer listed as player models: they only point to outfits and never had a mesh,
+  so every one of them failed with *no outfit with visible parts*.
+
 ## [1.0.0] - 2026-10-08
 
 ### Added

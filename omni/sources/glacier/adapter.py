@@ -87,7 +87,7 @@ class GlacierSource(Source):
             sig = self.archive._signature("TEMP") + [len(self.archive.index("TEMP")), self._names_sig()]
             try:
                 data = json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else None
-                if data and data.get("sig") == sig and data.get("version") == 2:
+                if data and data.get("sig") == sig and data.get("version") == 3:
                     self._characters = {c["id"]: c for c in data["items"]}
                     return list(self._characters.values())
             except (OSError, ValueError):
@@ -96,7 +96,7 @@ class GlacierSource(Source):
             from .outfit import OutfitResolver, body_type
             fam = defaultdict(list)
             for f, v, h, n in OutfitResolver(self).outfits():
-                if body_type(f):
+                if body_type(f) and not f.startswith("outfitset_"):      # a set lists outfits, it has no mesh of its own
                     fam[f].append({"v": v, "key": "%016X" % h, "name": n})
             from .naming import bond_variations, known_missions, split_family, variation_of
             from .schema import read_enums
@@ -119,7 +119,7 @@ class GlacierSource(Source):
                 if not self._characters:
                     raise OSError("nothing found: not cached, the next call looks again")
                 cache.parent.mkdir(parents=True, exist_ok=True)
-                cache.write_text(json.dumps({"sig": sig, "version": 2, "items": list(self._characters.values())}),
+                cache.write_text(json.dumps({"sig": sig, "version": 3, "items": list(self._characters.values())}),
                                  encoding="utf-8")
             except OSError:
                 pass

@@ -75,16 +75,18 @@ def parse_prim(data: bytes) -> PrimData:
 
     for off in offsets:
         (_, _, _, sub_type, lodmask, props, _var, zbias, _zo, mat_id, _wire) = struct.unpack_from("<BBHBBBBBBHI", mv, off)
-        bmin = struct.unpack_from("<3f", mv, off + 16)
-        bmax = struct.unpack_from("<3f", mv, off + 28)
+        # Two words are not part of the layout this reader started from: one at +12 (0xFFFFFFFF or a value) before
+        # the bounding box, one after the counts before the scale and the bias.
+        bmin = struct.unpack_from("<3f", mv, off + 20)
+        bmax = struct.unpack_from("<3f", mv, off + 32)
         p = off + 44
         nv, vbo, ni, _u0c, ibo, _aux, _u18 = struct.unpack_from("<7I", mv, p)
-        p += 28
+        p += 28 + 4
         pos_scale = np.frombuffer(mv, "<f4", 4, p)
         pos_bias = np.frombuffer(mv, "<f4", 4, p + 16)
         tsb = np.frombuffer(mv, "<f4", 4, p + 32)
         cloth_id = struct.unpack_from("<I", mv, p + 48)[0]
-        nuv = max(1, cloth_id >> 16)         # number of UV sets: the per-vertex NTB+UV record is 12 + 4*nuv bytes
+        nuv = cloth_id >> 16         # number of UV sets: the per-vertex NTB+UV record is 12 + 4*nuv bytes
         p += 48 + 4  # + cloth id
 
         pos_raw = np.frombuffer(mv, "<i2", nv * 4, vbo).reshape(nv, 4)
@@ -100,8 +102,11 @@ def parse_prim(data: bytes) -> PrimData:
             ntb = np.frombuffer(mv, np.uint8, nv * stride, q).reshape(nv, stride) if nv else np.zeros((0, stride), np.uint8)
             n = _unit_bytes(ntb[:, 0:4])
             t = _unit_bytes(ntb[:, 4:8])
-            uv_raw = np.ascontiguousarray(ntb[:, 12:16]).view("<i2").reshape(nv, 2)
-            uv = (uv_raw.astype(np.float32) / 32767.0) * tsb[:2] + tsb[2:4]
+            if nuv:
+                uv_raw = np.ascontiguousarray(ntb[:, 12:16]).view("<i2").reshape(nv, 2)
+                uv = (uv_raw.astype(np.float32) / 32767.0) * tsb[:2] + tsb[2:4]
+            else:
+                uv = np.zeros((nv, 2), np.float32)
             q += nv * stride
             if sub_type == SUB_WEIGHTED:
                 colors = np.frombuffer(mv, np.uint8, nv * 4, q).reshape(nv, 4).copy()
