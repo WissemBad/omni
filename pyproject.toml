@@ -21,7 +21,7 @@ dev = [
     "lz4",                     # tests/rpkg_builder.py writes LZ4-compressed test packages
     "pygltflib",               # tests read the .glb files the Rust writer produces
     "pyinstaller>=6.10",
-    "ruff>=0.6",
+    "ruff>=0.17.0",
     "httpx2>=2.13.1",
     "pytest",
 ]
