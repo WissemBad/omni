@@ -7,10 +7,17 @@ export interface ShotInfo {
   game: string
 }
 
-export const SHOT_W = 2400
-export const SHOT_H = 1350
-/** Where the model is drawn on the card: the right two thirds. */
+/** The card is laid out on a 2400 x 1350 grid and written at 4K. */
+const K = 1.6
+export const SHOT_W = 2400 * K
+export const SHOT_H = 1350 * K
+/** Where the model is drawn on the layout grid: the right two thirds. */
 export const SHOT_STAGE = { x: 672, y: 0, w: 1728, h: 1350 }
+/** The model is rendered 1.5 times larger than it is shown, then reduced: smoother edges and finer texture detail. */
+export const SHOT_RENDER = {
+  w: Math.round(SHOT_STAGE.w * K * 1.5),
+  h: Math.round(SHOT_STAGE.h * K * 1.5),
+}
 
 const FONT = "'Inter', 'Segoe UI', system-ui, sans-serif"
 const MONO = "'JetBrains Mono', 'Cascadia Mono', Consolas, monospace"
@@ -51,23 +58,26 @@ function chip(g: CanvasRenderingContext2D, text: string, x: number, y: number) {
   return w
 }
 
-/** The card as a PNG: `still` is the transparent render of the model (SHOT_STAGE.w x SHOT_STAGE.h). */
+/** The card as a PNG: `still` is the transparent render of the model (SHOT_RENDER). */
 export function composeShot(still: HTMLCanvasElement, info: ShotInfo): Promise<Blob> {
   const c = document.createElement('canvas')
   c.width = SHOT_W
   c.height = SHOT_H
   const g = c.getContext('2d')!
+  g.scale(K, K)
+  g.imageSmoothingEnabled = true
+  g.imageSmoothingQuality = 'high'
 
-  const bg = g.createLinearGradient(0, 0, 0, SHOT_H)
+  const bg = g.createLinearGradient(0, 0, 0, 1350)
   bg.addColorStop(0, '#191425')
   bg.addColorStop(1, '#07070b')
   g.fillStyle = bg
-  g.fillRect(0, 0, SHOT_W, SHOT_H)
+  g.fillRect(0, 0, 2400, 1350)
   const glow = g.createRadialGradient(1500, 620, 0, 1500, 620, 1000)
   glow.addColorStop(0, 'rgba(139,92,246,0.30)')
   glow.addColorStop(1, 'rgba(139,92,246,0)')
   g.fillStyle = glow
-  g.fillRect(0, 0, SHOT_W, SHOT_H)
+  g.fillRect(0, 0, 2400, 1350)
   // floor light under the model
   const floor = g.createRadialGradient(1536, 1180, 0, 1536, 1180, 520)
   floor.addColorStop(0, 'rgba(167,139,250,0.22)')
@@ -104,14 +114,6 @@ export function composeShot(still: HTMLCanvasElement, info: ShotInfo): Promise<B
     chip(g, t, x, y)
     y += 74
   }
-
-  // signature
-  g.fillStyle = '#ffffff'
-  g.font = `800 54px ${FONT}`
-  g.fillText('omni', x, SHOT_H - 120)
-  g.fillStyle = '#8f8aa3'
-  g.font = `400 26px ${FONT}`
-  g.fillText('github.com/WissemBad/omni', x, SHOT_H - 74)
 
   return new Promise((resolve, reject) =>
     c.toBlob((b) => (b ? resolve(b) : reject(new Error('image vide'))), 'image/png'),

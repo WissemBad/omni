@@ -2,7 +2,7 @@
 import type * as THREE from 'three'
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js'
 import type { LayerName } from '~/utils/overlays'
-import { composeShot, SHOT_STAGE } from '~/utils/shot'
+import { composeShot, SHOT_RENDER } from '~/utils/shot'
 import type {
   AnimCatalog,
   Category,
@@ -479,7 +479,7 @@ async function takeShot() {
   if (!v || !m || !item || shotBusy.value) return
   shotBusy.value = true
   try {
-    const still = v.renderStill(SHOT_STAGE.w, SHOT_STAGE.h, [objects.player, markerObj])
+    const still = v.renderStill(SHOT_RENDER.w, SHOT_RENDER.h, [objects.player, markerObj])
     if (!still) throw new Error('rien à capturer')
     const tris = (m.lods[lod.value]?.triangles ?? m.triangles).toLocaleString('fr-FR')
     const chips = [`${tris} triangles`, dims.value, `${m.model.textures.length} textures`].filter(
