@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-10-18
+
 ### Changed
 
 - Viewer screenshot: the model is rendered larger and reduced (4K card, sharper edges, maximum texture filtering), and the omni signature is gone from the card.
