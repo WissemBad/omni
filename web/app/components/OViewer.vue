@@ -518,6 +518,13 @@ function renderStill(
   hidden.forEach((o) => (o.visible = false))
   if (rootB.value) rootB.value.visible = false
   r.visible = true
+  const aniso = renderer.capabilities.getMaxAnisotropy()
+  r.traverse((o) => {
+    const mats = (o as THREE.Mesh).material
+    for (const m of Array.isArray(mats) ? mats : mats ? [mats] : [])
+      for (const v of Object.values(m))
+        if ((v as THREE.Texture)?.isTexture) (v as THREE.Texture).anisotropy = aniso
+  })
   try {
     const b = new THREE.Box3().setFromObject(r)
     const sphere = b.getBoundingSphere(new THREE.Sphere())
