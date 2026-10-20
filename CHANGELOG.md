@@ -4,6 +4,11 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+
+- Props: "Tout sélectionner" follows the converted / not converted filter instead of selecting every prop, and
+  Shift-click selects a range of rows again.
+
 ## [1.0.5] - 2026-10-18
 
 ### Changed
