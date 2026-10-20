@@ -2,6 +2,10 @@
 
 The repository is public, so everything is read anonymously. Nothing is installed without the user
 asking: ``check`` only reports, ``download`` + ``install`` run when they press the button.
+
+The sums come from the same place as the installer, so they only prove the download is intact: the release key
+(ed25519, ``RELEASE_KEY``) signs ``SHA256SUMS.txt`` (``SHA256SUMS.txt.sig``, ``scripts/release_sign.py``) and an
+installer is run only when that signature and its sum are both right. Anything missing refuses the update.
 """
 from __future__ import annotations
 
@@ -25,6 +29,10 @@ log = logging.getLogger("omni.update")
 REPO = "WissemBad/omni"
 API = f"https://api.github.com/repos/{REPO}"
 CACHE_SECONDS = 6 * 3600
+SUMS = "SHA256SUMS.txt"
+SIGNATURE = SUMS + ".sig"
+# public key of the release signatures (hex, 32 bytes): ``python scripts/release_sign.py public <seed file>``
+RELEASE_KEY = ""
 _cache: dict = {"at": 0.0, "value": None}
 
 
@@ -52,10 +60,12 @@ def check(force: bool = False) -> dict:
         latest = rel["tag_name"].lstrip("v")
         out.update(latest=latest, notes=rel.get("body") or "", url=rel.get("html_url", ""))
         asset = next((a for a in rel.get("assets", []) if re.fullmatch(r"Omni-Setup-[\d.]+\.exe", a["name"])), None)
-        sums = next((a for a in rel.get("assets", []) if a["name"] == "SHA256SUMS.txt"), None)
+        sums = next((a for a in rel.get("assets", []) if a["name"] == SUMS), None)
+        sig = next((a for a in rel.get("assets", []) if a["name"] == SIGNATURE), None)
         if asset:
             out["asset"] = {"url": asset["browser_download_url"], "name": asset["name"], "size": asset["size"],
-                            "sums": sums["browser_download_url"] if sums else None}
+                            "sums": sums["browser_download_url"] if sums else None,
+                            "sig": sig["browser_download_url"] if sig else None}
         out["available"] = version_tuple(latest) > version_tuple(__version__) and asset is not None
     except urllib.error.HTTPError as e:
         out["error"] = "Aucune version publiée." if e.code == 404 else f"GitHub : {e.code}"
@@ -91,18 +101,39 @@ def parse_sums(text: str) -> dict[str, str]:
     return out
 
 
+def verified_sums(sums: bytes, signature: bytes, key: str | None = None) -> dict[str, str]:
+    """``{file: sha256}`` of a sums file whose release signature is right, else ``RuntimeError``."""
+    from ..native import N
+    key = RELEASE_KEY if key is None else key
+    if not key:
+        raise RuntimeError("cette version d'omni ne connaît pas la clé des mises à jour : téléchargez-la depuis GitHub")
+    try:
+        public, sig = bytes.fromhex(key), bytes.fromhex(signature.decode("ascii").strip())
+    except (UnicodeDecodeError, ValueError):
+        raise RuntimeError("signature de la mise à jour illisible : téléchargement refusé") from None
+    if not N.verify_signature(public, sums, sig):
+        raise RuntimeError("signature de la mise à jour invalide : téléchargement refusé")
+    return parse_sums(sums.decode("utf-8", "replace"))
+
+
+def _small(url: str) -> bytes:
+    buf = bytearray()
+    _asset_bytes(url, buf.extend)
+    return bytes(buf)
+
+
 def download(info: dict, progress=None, cancel=None) -> Path:
-    """The installer into ``<workspace>/updates``, verified against the release's SHA256SUMS.txt."""
+    """The installer into ``<workspace>/updates``, checked against the release's signed SHA256SUMS.txt."""
     asset = info.get("asset")
     if not asset:
         raise RuntimeError("aucun installeur dans cette version")
+    if not asset.get("sums") or not asset.get("sig"):
+        raise RuntimeError("cette version n'est pas signée : téléchargement refusé")
+    expected = verified_sums(_small(asset["sums"]), _small(asset["sig"])).get(asset["name"], "")
+    if not expected:
+        raise RuntimeError("l'installeur n'est pas listé dans les sommes signées : téléchargement refusé")
     dest = CONFIG.workspace / "updates" / asset["name"]
     dest.parent.mkdir(parents=True, exist_ok=True)
-    expected = ""
-    if asset.get("sums"):
-        buf = bytearray()
-        _asset_bytes(asset["sums"], buf.extend)
-        expected = parse_sums(buf.decode("utf-8", "replace")).get(asset["name"], "")
     tmp = dest.with_name(dest.name + ".part")
     h = hashlib.sha256()
     try:
@@ -111,7 +142,7 @@ def download(info: dict, progress=None, cancel=None) -> Path:
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
-    if expected and h.hexdigest() != expected:
+    if h.hexdigest() != expected:
         tmp.unlink(missing_ok=True)
         raise RuntimeError("somme de contrôle de l'installeur inattendue : téléchargement refusé")
     os.replace(tmp, dest)

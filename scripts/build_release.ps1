@@ -12,6 +12,9 @@
     Needs uv, Bun (with a read:packages token for @wissem-industries/ui in ~/.npmrc), Rust with the MSVC toolchain
     (Visual Studio Build Tools, "Desktop development with C++"), Inno Setup 6 and the GitHub CLI.
     Without -Publish the files are only written to dist\.
+
+    OMNI_RELEASE_KEY names the file of the release key (scripts/release_sign.py keygen, kept offline): SHA256SUMS.txt
+    is signed with it into SHA256SUMS.txt.sig, which the updater requires. -Publish refuses to run without it.
 #>
 param(
     [Parameter(Mandatory)][string]$Version,
@@ -31,6 +34,11 @@ function Step([string]$Name, [scriptblock]$Body) {
 Step 'Version matches pyproject.toml' {
     $declared = (Select-String -Path pyproject.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
     if ($declared -ne $Version) { throw "pyproject.toml says $declared, not $Version" }
+}
+
+$sign = [bool]$env:OMNI_RELEASE_KEY
+if ($Publish -and -not $sign) {
+    throw 'OMNI_RELEASE_KEY (path of the release key, scripts/release_sign.py) is required to publish: the updater refuses unsigned releases'
 }
 
 if ($Publish) {
@@ -60,6 +68,10 @@ Step 'Rust core' {
     if ($LASTEXITCODE -eq 0) { uv pip install --reinstall --find-links wheels omni_native }
 }
 
+if ($sign) {
+    Step 'Release key matches the one the app trusts' { uv run --no-sync python scripts\release_sign.py check $env:OMNI_RELEASE_KEY }
+}
+
 Step 'Tests' { uv run --no-sync pytest -q }
 
 Step 'Application' {
@@ -86,6 +98,13 @@ Step 'Installer and archive' {
     [IO.File]::WriteAllText((Join-Path (Get-Location) 'dist\SHA256SUMS.txt'), (($sums -join "`n") + "`n"), [Text.Encoding]::ASCII)
 }
 
+if ($sign) {
+    Step 'Signature of the sums' { uv run --no-sync python scripts\release_sign.py sign $env:OMNI_RELEASE_KEY dist\SHA256SUMS.txt }
+}
+else {
+    Write-Host 'OMNI_RELEASE_KEY is not set: SHA256SUMS.txt is not signed (the updater will refuse this build).' -ForegroundColor Yellow
+}
+
 Step 'Release notes' {
     $env:PYTHONIOENCODING = 'utf-8'
     cmd /c "uv run --no-sync python scripts\release_notes.py $Version > dist\notes.md"
@@ -93,7 +112,7 @@ Step 'Release notes' {
 
 if ($Publish) {
     Step 'Publish' {
-        gh release create "v$Version" "dist\Omni-Setup-$Version.exe" "dist\Omni-$Version-windows.zip" dist\SHA256SUMS.txt `
+        gh release create "v$Version" "dist\Omni-Setup-$Version.exe" "dist\Omni-$Version-windows.zip" dist\SHA256SUMS.txt dist\SHA256SUMS.txt.sig `
             --title "omni v$Version" --notes-file dist\notes.md --verify-tag
     }
 }

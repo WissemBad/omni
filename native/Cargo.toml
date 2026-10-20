@@ -26,6 +26,7 @@ sha1_smol = "1"
 miniz_oxide = "0.9"
 aes = "0.9"
 jpeg-encoder = { version = "0.7", default-features = false }
+ed25519-dalek = { version = "2", default-features = false, features = ["std", "zeroize"] }
 
 [profile.release]
 opt-level = 3
