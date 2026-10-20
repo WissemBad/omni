@@ -217,6 +217,14 @@ fn split_args(s: &str) -> Vec<&str> {
 }
 
 pub fn parse_ty(s: &str) -> Ty {
+    parse_ty_at(s, 0)
+}
+
+fn parse_ty_at(s: &str, depth: usize) -> Ty {
+    let parse_ty = |s: &str| parse_ty_at(s, depth + 1);
+    if depth > crate::limits::MAX_DEPTH {
+        return Ty::Unknown(0);
+    }
     if let Some(open) = s.find('<') {
         let head = &s[..open];
         // "Head<inner>": the closing '>' is dropped (text read from a cache file: never slice inside a character)
@@ -304,21 +312,26 @@ impl<'a> Image<'a> {
             let raw_size = rd32(s + 16)? as usize;
             let raw = rd32(s + 20)? as usize;
             let ch = rd32(s + 36)?;
-            secs.push(Section { va: base + va, size: vsize.max(raw_size as u64), raw, raw_size, exec: ch & 0x2000_0000 != 0, write: ch & 0x8000_0000 != 0 });
+            secs.push(Section { va: base.wrapping_add(va), size: vsize.max(raw_size as u64), raw, raw_size, exec: ch & 0x2000_0000 != 0, write: ch & 0x8000_0000 != 0 });
         }
         Ok(Image { data, _base: base, secs })
     }
 
     fn sec(&self, va: u64) -> Option<&Section> {
-        self.secs.iter().find(|s| va >= s.va && va < s.va + s.size)
+        self.secs.iter().find(|s| va >= s.va && va - s.va < s.size)
     }
+    /// File offset of `n` bytes at `va`, when they lie in the section's raw data and in the file.
     fn off(&self, va: u64, n: usize) -> Option<usize> {
         let s = self.sec(va)?;
-        let rel = (va - s.va) as usize;
-        if rel + n > s.raw_size {
+        let rel = usize::try_from(va - s.va).ok()?;
+        if rel.checked_add(n)? > s.raw_size {
             return None;
         }
-        Some(s.raw + rel)
+        let o = s.raw.checked_add(rel)?;
+        if o.checked_add(n)? > self.data.len() {
+            return None;
+        }
+        Some(o)
     }
     pub fn bytes(&self, va: u64, n: usize) -> Option<&'a [u8]> {
         let o = self.off(va, n)?;
@@ -331,13 +344,13 @@ impl<'a> Image<'a> {
         self.bytes(va, 4).map(|b| u32::from_le_bytes(b.try_into().unwrap())).unwrap_or(0)
     }
     pub fn is_code(&self, va: u64) -> bool {
-        self.sec(va).map_or(false, |s| s.exec)
+        self.sec(va).is_some_and(|s| s.exec)
     }
     pub fn is_rdata(&self, va: u64) -> bool {
-        self.sec(va).map_or(false, |s| !s.exec && !s.write)
+        self.sec(va).is_some_and(|s| !s.exec && !s.write)
     }
     pub fn is_data(&self, va: u64) -> bool {
-        self.sec(va).map_or(false, |s| s.write && !s.exec)
+        self.sec(va).is_some_and(|s| s.write && !s.exec)
     }
     pub fn is_ptr(&self, va: u64) -> bool {
         self.sec(va).is_some()
@@ -683,10 +696,12 @@ pub fn from_usmap(data: &[u8]) -> Result<Schema> {
     let method = r.u8()?;
     let comp = r.u32()? as usize;
     let size = r.u32()? as usize;
-    if size > 1 << 30 {
-        return err("usmap too large");
-    }
     let raw = r.bytes(comp)?;
+    if method == 1 {
+        // Oodle expands well under 1:256; the bound keeps a corrupt header from asking for gigabytes
+        crate::limits::checked_len(size, 1, comp.saturating_mul(256).saturating_add(1 << 16).min(1 << 30))
+            .map_err(|e| super::reader::Error(format!("usmap size: {e}")))?;
+    }
     let body: Vec<u8> = match method {
         0 => raw.to_vec(),
         1 => {

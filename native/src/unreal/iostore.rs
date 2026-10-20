@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 
 use super::oodle;
 use super::reader::{err, Error, Reader, Result};
+use crate::limits::checked_len;
 
 pub const MAGIC: &[u8; 16] = b"-==--==--==--==-";
 
@@ -256,7 +257,7 @@ impl Container {
     /// `len` bytes at `start` inside the chunk `index` (only the blocks that hold them are read).
     pub fn read_partial(&self, index: u32, start: u64, len: u64) -> Result<Vec<u8>> {
         let (off, size) = *self.offsets.get(index as usize).ok_or(Error("bad toc index".into()))?;
-        if start.checked_add(len).map_or(true, |e| e > size) {
+        if start.checked_add(len).is_none_or(|e| e > size) {
             return err(format!("range {start}+{len} outside chunk of {size} bytes"));
         }
         self.read_range_raw(off, size, start, len)
@@ -275,7 +276,9 @@ impl Container {
         if last >= self.blocks.len() {
             return err("chunk outside the compressed block table");
         }
-        let mut out = Vec::with_capacity(len as usize);
+        // the blocks that hold the range bound what it can return
+        let held: usize = self.blocks[first..=last].iter().map(|b| b.raw as usize).sum();
+        let mut out = Vec::with_capacity(checked_len(len as usize, 1, held).map_err(Error)?);
         let mut comp = Vec::new();
         let mut raw = Vec::new();
         for bi in first..=last {

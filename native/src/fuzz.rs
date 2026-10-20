@@ -41,7 +41,7 @@ fn fuzz(name: &str, seed: &[u8], f: impl Fn(&[u8])) {
                 _ => r.next() as u8,
             };
         }
-        if r.next() % 5 == 0 {
+        if r.next().is_multiple_of(5) {
             b.truncate((r.next() as usize) % b.len());
         }
         inputs.push(b);
@@ -347,4 +347,185 @@ fn unreal_parsers_survive_garbage() {
         }
         let _ = crate::source_anim::sample(b, None, 0);
     });
+}
+
+// ------------------------------------------------------------------------------------------------ allocation bounds
+// One input per size taken from a file: each must end in an error (or a bounded result), not in an allocation the
+// data cannot back. Under `cargo test` the capped allocator (limits.rs) aborts the run on any buffer above 512 MiB.
+
+fn le(words: &[u32]) -> Vec<u8> {
+    words.iter().flat_map(|w| w.to_le_bytes()).collect()
+}
+
+#[test]
+fn skin_weights_are_bounded_by_their_buffers() {
+    use crate::unreal::{mesh::Lod, reader::Reader, skel::skin_weights};
+    // strip, fixed influences, 4 influences, bones, 2^31-1 vertices, 8-bit indices, empty weight data
+    let mut b = vec![0u8, 0];
+    b.extend(le(&[0, 4, 1, 0x7FFF_FFFF, 0, 1, 0, 0]));
+    b.extend([0u8, 0]);
+    b.extend(le(&[0, 4, 0]));
+    assert!(skin_weights(&mut Reader::new(&b), &mut Lod::default(), 1008).is_err());
+    // variable influences with a lookup of 1-byte elements: 8 entries do not hold 8 vertices
+    let mut b = vec![0u8, 0];
+    b.extend(le(&[1, 4, 1, 8, 0, 1, 0, 0]));
+    b.extend([0u8, 0]);
+    b.extend(le(&[8, 1, 8]));
+    b.extend([0u8; 8]);
+    assert!(skin_weights(&mut Reader::new(&b), &mut Lod::default(), 1008).is_err());
+}
+
+#[test]
+fn vertex_buffers_are_bounded_by_their_data() {
+    use crate::unreal::{mesh::{vertex_buffers, Lod}, reader::Reader};
+    let head = |ntex: u32, nv: u32, high: u32| {
+        let mut b = le(&[12, 0, 12, 0]); // positions: stride, no count, empty bulk array
+        b.extend([0u8, 0]);
+        b.extend(le(&[ntex, nv, 0, high]));
+        b
+    };
+    // 2^31-1 vertices claimed, no tangents, one UV of 4 bytes
+    let mut b = head(1, 0x7FFF_FFFF, 0);
+    b.extend(le(&[8, 0, 4, 1]));
+    b.extend([0u8; 4]);
+    assert!(vertex_buffers(&mut Reader::new(&b), &mut Lod::default()).is_err());
+    // tangents of 1 byte each (8 needed, 16 with high precision)
+    for high in [0, 1] {
+        let mut b = head(0, 4, high);
+        b.extend(le(&[1, 4]));
+        b.extend([0u8; 4]);
+        b.extend(le(&[4, 0]));
+        assert!(vertex_buffers(&mut Reader::new(&b), &mut Lod::default()).is_err());
+    }
+    // 200 UV channels
+    let mut b = head(200, 1, 0);
+    b.extend(le(&[8, 0, 4, 200]));
+    b.extend([0u8; 800]);
+    assert!(vertex_buffers(&mut Reader::new(&b), &mut Lod::default()).is_err());
+}
+
+#[test]
+fn bc6h_mip_is_bounded_by_its_blocks() {
+    assert!(crate::unreal::assets::convert_mip("PF_BC6H", 65536, 65536, &[0u8; 64]).is_err());
+    assert!(crate::unreal::assets::convert_mip("PF_FloatRGBA", u32::MAX, u32::MAX, &[0u8; 64]).is_err());
+}
+
+#[test]
+fn binka_sample_count_is_bounded_by_the_stream() {
+    let mut abeu = b"ABEU\x01\x08\0\0\x80\xbb\0\0\xff\xff\xff\xff\0\x10\0\0\0\x10\0\0\0\0\0\0".to_vec();
+    abeu.extend([0x99, 0x99, 0x20, 0]);
+    abeu.extend(vec![0x5Au8; 32]);
+    if let Ok(d) = crate::binka::decode(&abeu) {
+        assert!(d.pcm.len() <= 2 * 1920 * 8);
+    }
+}
+
+#[test]
+fn rpkg_lz4_output_is_bounded() {
+    use crate::rpkg::{read_resource, Entry};
+    let dir = std::env::temp_dir().join(format!("omni-fuzz-rpkg-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("data.bin");
+    std::fs::write(&f, vec![0u8; 9 << 20]).unwrap();
+    let file = std::fs::File::open(&f).unwrap();
+    let mut e = Entry { hash: 1, offset: 0, compressed: 16, scrambled: false, ty: *b"MIRP", data_size: 16 * 255 + 65,
+        sys_mem: 0, vid_mem: 0, refs: Vec::new() };
+    assert!(read_resource(&file, &e).unwrap_err().contains("implausible"));
+    // within LZ4's 255:1 of 9 MiB, but more than one buffer may take
+    e.compressed = 9 << 20;
+    e.data_size = (1 << 31) + 1;
+    assert!(read_resource(&file, &e).unwrap_err().contains("implausible"));
+    drop(file);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn iostore_range_is_bounded_by_its_blocks() {
+    use crate::unreal::iostore;
+    let dir = std::env::temp_dir().join(format!("omni-fuzz-range-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("t.ucas"), vec![0u8; 256]).unwrap();
+    // one chunk of 4 GiB - 1 in a single 16-byte block (block size 4 GiB - 1)
+    let mut toc = iostore::MAGIC.to_vec();
+    toc.push(5);
+    toc.extend([0u8; 3]);
+    toc.extend(le(&[0x90, 1, 1, 12, 1, 32, u32::MAX]));
+    toc.resize(0x90, 0);
+    toc.extend([1u8; 12]);
+    toc.extend([0u8, 0, 0, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF]);
+    toc.extend([0u8, 0, 0, 0, 0, 16, 0, 0, 16, 0, 0, 0]);
+    let mut method = b"Zlib".to_vec();
+    method.resize(32, 0);
+    toc.extend(method);
+    let p = dir.join("t.utoc");
+    std::fs::write(&p, &toc).unwrap();
+    let c = iostore::Container::open(&p, None).unwrap();
+    assert!(c.read_index(0).is_err());
+    assert!(c.read_partial(0, 0, 0xFFFF_FFF0).is_err());
+    drop(c);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn media_range_is_bounded_by_the_file() {
+    let dir = std::env::temp_dir().join(format!("omni-fuzz-media-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("a.pck");
+    std::fs::write(&f, [0u8; 16]).unwrap();
+    let f = f.to_string_lossy().into_owned();
+    assert!(audio::read_range(&f, 0, 1 << 40).is_err());
+    assert!(audio::read_range(&f, 12, 8).is_err());
+    assert_eq!(audio::read_range(&f, 4, 8).unwrap().len(), 8);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn usmap_size_is_bounded_by_its_data() {
+    // Oodle-compressed, 8 bytes claiming 1 GiB
+    let mut usmap = vec![0xC4, 0x30, 0, 1];
+    usmap.extend(le(&[8, 1 << 30]));
+    usmap.extend([0u8; 8]);
+    let Err(e) = crate::unreal::reflect::from_usmap(&usmap) else { panic!("accepted") };
+    assert!(e.0.contains("usmap size"), "{e}");
+}
+
+#[test]
+fn pe_sections_outside_the_file_are_ignored() {
+    use crate::unreal::reflect::Image;
+    let pe = |base: u64, raw: u32| {
+        let mut b = vec![0u8; 0x400];
+        b[0..2].copy_from_slice(b"MZ");
+        b[0x3C..0x40].copy_from_slice(&0x80u32.to_le_bytes());
+        b[0x80..0x84].copy_from_slice(b"PE\0\0");
+        b[0x86..0x88].copy_from_slice(&1u16.to_le_bytes());
+        b[0x94..0x96].copy_from_slice(&0xF0u16.to_le_bytes());
+        b[0x98..0x9A].copy_from_slice(&0x20Bu16.to_le_bytes());
+        b[0xB0..0xB8].copy_from_slice(&base.to_le_bytes());
+        // section: virtual size, address, raw size, raw offset
+        b[0x188 + 8..0x188 + 24].copy_from_slice(&le(&[0x1000, 0x1000, 0x1000, raw]));
+        b
+    };
+    let data = pe(0, 0x10000);
+    let img = Image::parse(&data).unwrap();
+    assert!(img.cstr(0x1000).is_none());
+    assert_eq!(img.q(0x1000), 0);
+    let data = pe(u64::MAX - 0x10, 0x200);
+    let img = Image::parse(&data).unwrap();
+    assert!(img.cstr(u64::MAX - 8).is_none());
+}
+
+#[test]
+fn nesting_is_bounded() {
+    use crate::unreal::{props, reader::Reader, reflect};
+    // a struct that contains itself, and data that keeps saying "one property follows"
+    let schema = reflect::Schema::from_text("omni-mappings 1\nS Loop -\nP 1 Next Struct<Loop>\n").unwrap();
+    let names = vec!["None".to_string()];
+    let ctx = props::Ctx { schema: &schema, names: &names, ue5: 1008 };
+    let data: Vec<u8> = [0x00u8, 0x03].repeat(100_000);
+    let e = ctx.properties("Loop", &mut Reader::new(&data)).unwrap_err();
+    assert!(e.0.contains("nested deeper"), "{e}");
+    // and a type string nested 100 000 times
+    let deep = "Array<".repeat(100_000) + "Int" + &">".repeat(100_000);
+    let _ = reflect::parse_ty(&deep);
+    let _ = reflect::Schema::from_text(&format!("omni-mappings 1\nS A -\nP 1 X {deep}\n"));
 }

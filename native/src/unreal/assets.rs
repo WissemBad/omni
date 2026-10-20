@@ -8,6 +8,7 @@ use super::props::{self, Ctx, Props};
 use super::reader::{err, Error, Reader, Result};
 use super::zen::Package;
 use super::Game;
+use crate::limits::checked_len;
 
 pub mod flags {
     pub const PAYLOAD_AT_END: u32 = 0x1;
@@ -161,24 +162,28 @@ fn to8(x: f32) -> u8 {
 /// Mip bytes in `pf` -> bytes in `omni_format(pf)` (unchanged for the block formats omni keeps).
 pub fn convert_mip(pf: &str, w: u32, h: u32, data: &[u8]) -> Result<Vec<u8>> {
     let n = (w as usize) * (h as usize);
-    let need = |bpp: usize| -> Result<&[u8]> { data.get(..n * bpp).ok_or_else(|| Error(format!("{pf} mip truncated"))) };
+    let need = |bpp: usize| -> Result<&[u8]> {
+        checked_len(n, bpp, data.len()).map(|len| &data[..len]).map_err(|e| Error(format!("{pf} mip truncated: {e}")))
+    };
     Ok(match pf {
         "PF_DXT1" | "PF_DXT3" | "PF_DXT5" | "PF_BC4" | "PF_BC5" | "PF_BC7" | "PF_R8G8B8A8" => data.to_vec(),
-        "PF_B8G8R8A8" => need(4)?.chunks_exact(4).flat_map(|p| [p[2], p[1], p[0], p[3]]).collect(),
+        "PF_B8G8R8A8" => need(4)?.as_chunks::<4>().0.iter().flat_map(|p| [p[2], p[1], p[0], p[3]]).collect(),
         "PF_G8" | "PF_L8" | "PF_A8" | "PF_R8" => need(1)?.iter().flat_map(|&g| [g, g, g, 255]).collect(),
-        "PF_R8G8" | "PF_V8U8" => need(2)?.chunks_exact(2).flat_map(|p| [p[0], p[1], 0, 255]).collect(),
-        "PF_G16" | "PF_R16_UINT" => need(2)?.chunks_exact(2).flat_map(|p| { let g = p[1]; [g, g, g, 255] }).collect(),
+        "PF_R8G8" | "PF_V8U8" => need(2)?.as_chunks::<2>().0.iter().flat_map(|p| [p[0], p[1], 0, 255]).collect(),
+        "PF_G16" | "PF_R16_UINT" => need(2)?.as_chunks::<2>().0.iter().flat_map(|p| { let g = p[1]; [g, g, g, 255] }).collect(),
         "PF_FloatRGBA" => need(8)?
-            .chunks_exact(8)
+            .as_chunks::<8>().0.iter()
             .flat_map(|p| {
                 let c = |i: usize| half(u16::from_le_bytes([p[i], p[i + 1]]));
                 [to8(c(0)), to8(c(2)), to8(c(4)), (c(6).clamp(0.0, 1.0) * 255.0) as u8]
             })
             .collect(),
-        "PF_R16F" => need(2)?.chunks_exact(2).flat_map(|p| { let g = to8(half(u16::from_le_bytes([p[0], p[1]]))); [g, g, g, 255] }).collect(),
+        "PF_R16F" => need(2)?.as_chunks::<2>().0.iter().flat_map(|p| { let g = to8(half(u16::from_le_bytes([p[0], p[1]]))); [g, g, g, 255] }).collect(),
         "PF_BC6H" => {
             let bw = (w as usize).div_ceil(4);
             let bh = (h as usize).div_ceil(4);
+            // 16 bytes per 4x4 block: the decoded buffer is only as large as the blocks present
+            checked_len(bw * bh, 16, data.len()).map_err(|e| Error(format!("BC6H mip truncated: {e}")))?;
             let mut px = vec![0u32; bw * 4 * bh * 4];
             // the third-party decoder can overflow on corrupt blocks (a panic with overflow checks): an error instead
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| texture2ddecoder::decode_bc6(data, bw * 4, bh * 4, &mut px, false)))
@@ -358,7 +363,7 @@ pub fn read_sound(game: &Game, ctx: &Ctx, pkg: &Package, index: usize, class: &s
     }
     let streaming_hint = match props::get(&props, "bStreaming") {
         Some(v) => v.as_i64() == Some(1),
-        None => props::get(&props, "LoadingBehavior").and_then(|v| v.as_str()).map_or(true, |s| !s.ends_with("ForceInline")),
+        None => props::get(&props, "LoadingBehavior").and_then(|v| v.as_str()).is_none_or(|s| !s.ends_with("ForceInline")),
     };
     let body = r.pos;
     let order: [bool; 2] = if streaming_hint { [true, false] } else { [false, true] };

@@ -8,6 +8,10 @@ use super::props::{self, Ctx, Props};
 use super::reader::{err, Error, Reader, Result};
 use super::zen::Package;
 use super::Game;
+use crate::limits::checked_len;
+
+/// MAX_STATIC_TEXCOORDS in the engine.
+const MAX_UV_CHANNELS: usize = 8;
 
 #[derive(Clone, Debug, Default)]
 pub struct Section {
@@ -98,9 +102,9 @@ pub(crate) fn vertex_buffers(r: &mut Reader, lod: &mut Lod) -> Result<()> {
     let nverts = r.i32()?.max(0) as usize;
     let (es, cnt, data) = bulk_array(r)?;
     if es == 12 {
-        lod.positions = data.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect();
+        lod.positions = data.as_chunks::<4>().0.iter().map(|c| f32::from_le_bytes(*c)).collect();
     } else if es == 24 {
-        lod.positions = data.chunks_exact(8).map(|c| f64::from_le_bytes(c.try_into().unwrap()) as f32).collect();
+        lod.positions = data.as_chunks::<8>().0.iter().map(|c| f64::from_le_bytes(*c) as f32).collect();
     } else if cnt > 0 {
         return err(format!("position element size {es}"));
     }
@@ -118,8 +122,13 @@ pub(crate) fn vertex_buffers(r: &mut Reader, lod: &mut Lod) -> Result<()> {
     if tcnt != nv && tcnt != 0 {
         return err("tangent count mismatch");
     }
-    lod.normals = Vec::with_capacity(nv * 3);
-    lod.tangents = Vec::with_capacity(nv * 4);
+    // two packed vectors per vertex: 2 x 4 x i16, or 2 x 4 x i8
+    let need = if high_tan { 16 } else { 8 };
+    if tcnt > 0 && tes < need {
+        return err(format!("tangent element size {tes} (need {need})"));
+    }
+    lod.normals = Vec::with_capacity(tcnt * 3);
+    lod.tangents = Vec::with_capacity(tcnt * 4);
     for i in 0..tcnt {
         let v = &tdata[i * tes..(i + 1) * tes];
         let (t, n) = if high_tan {
@@ -131,12 +140,15 @@ pub(crate) fn vertex_buffers(r: &mut Reader, lod: &mut Lod) -> Result<()> {
         lod.tangents.extend_from_slice(&[t[0], t[1], t[2], if n[3] < 0.0 { -1.0 } else { 1.0 }]);
         lod.normals.extend_from_slice(&[n[0], n[1], n[2]]);
     }
-    let (ues, ucnt, udata) = bulk_array(r)?;
+    let (_ues, ucnt, udata) = bulk_array(r)?;
     if ntex > 0 && ucnt > 0 {
-        let per = ues * ucnt / (nv.max(1) * ntex).max(1);
-        let _ = per;
-        lod.uvs = vec![Vec::with_capacity(nv * 2); ntex];
+        if ntex > MAX_UV_CHANNELS {
+            return err(format!("{ntex} UV channels"));
+        }
         let item = if full_uv { 8 } else { 4 };
+        // the UV buffer holds every channel of every vertex
+        checked_len(nv, ntex * item, udata.len()).map_err(Error)?;
+        lod.uvs = vec![Vec::with_capacity(nv * 2); ntex];
         for vi in 0..nv {
             for t in 0..ntex {
                 let o = (vi * ntex + t) * item;
@@ -161,7 +173,7 @@ pub(crate) fn color_buffer(r: &mut Reader, lod: &mut Lod) -> Result<()> {
     if n > 0 {
         let (es, cnt, data) = bulk_array(r)?;
         if es == 4 {
-            lod.colors = data.chunks_exact(4).flat_map(|c| [c[2], c[1], c[0], c[3]]).collect();
+            lod.colors = data.as_chunks::<4>().0.iter().flat_map(|c| [c[2], c[1], c[0], c[3]]).collect();
         }
         let _ = cnt;
     }
@@ -174,9 +186,9 @@ fn index_buffer(r: &mut Reader, ue5: i32) -> Result<Vec<u32>> {
     let _ = ue5;
     r.u32()?; // bShouldExpandTo32Bit (4.25+)
     Ok(if is32 {
-        data.chunks_exact(4).map(|c| u32::from_le_bytes(c.try_into().unwrap())).collect()
+        data.as_chunks::<4>().0.iter().map(|c| u32::from_le_bytes(*c)).collect()
     } else {
-        data.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]]) as u32).collect()
+        data.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes([c[0], c[1]]) as u32).collect()
     })
 }
 

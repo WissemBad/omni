@@ -458,7 +458,7 @@ pub fn wem_pcm(wem: &[u8], info: &WemInfo) -> Result<Vec<i16>, String> {
     let data = wem.get(info.data_off..info.data_off + info.data_size).ok_or("truncated data chunk")?;
     match info.codec {
         PTADPCM => decode_ptadpcm(data, info.channels as usize, info.block_align as usize),
-        0x0001 | 0xFFFE if info.bits == 16 => Ok(data.chunks_exact(2).map(|c| i16::from_le_bytes([c[0], c[1]])).collect()),
+        0x0001 | 0xFFFE if info.bits == 16 => Ok(data.as_chunks::<2>().0.iter().map(|c| i16::from_le_bytes([c[0], c[1]])).collect()),
         VORBIS => {
             let ogg = wem_to_ogg(wem, info, &[])?;
             Ok(decode_ogg(&ogg, info.samples)?.0)
@@ -518,7 +518,11 @@ pub fn read_range(file: &str, offset: u64, size: i64) -> Result<Vec<u8>, String>
         f.read_to_end(&mut v).map_err(|e| e.to_string())?;
         Ok(v)
     } else {
-        let mut v = vec![0u8; size as usize];
+        // the range must lie in the file (sizes come from package indexes)
+        let flen = f.metadata().map_err(|e| format!("{file}: {e}"))?.len();
+        let avail = flen.saturating_sub(offset).min(usize::MAX as u64) as usize;
+        let n = crate::limits::checked_len(size as usize, 1, avail).map_err(|e| format!("{file} at {offset}: {e}"))?;
+        let mut v = vec![0u8; n];
         f.seek(SeekFrom::Start(offset)).map_err(|e| e.to_string())?;
         f.read_exact(&mut v).map_err(|e| format!("{file}: {e}"))?;
         Ok(v)

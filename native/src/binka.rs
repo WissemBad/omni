@@ -16,6 +16,7 @@ static CUTOFF: [u32; 25] = [
     7700, 9500, 12000, 15500,
 ];
 static RLE: [usize; 16] = [2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 32, 64];
+#[allow(clippy::excessive_precision)] // the values as vgmstream publishes them
 static SCALE: [f32; 96] = [
     1.0, 1.1651987, 1.3576881, 1.5819764, 1.8433169, 2.1478305, 2.5026493, 2.9160838, 3.3978171, 3.9591322, 4.6131759,
     5.3752666, 6.2632537, 7.297935, 8.5035448, 9.9083195, 11.545161, 13.452407, 15.674727, 18.264172, 21.281391,
@@ -113,7 +114,7 @@ pub struct Dct {
 
 impl Dct {
     pub fn new(n: usize) -> Dct {
-        let tw = (0..n / 2.max(1)).map(|k| {
+        let tw = (0..n / 2).map(|k| {
             let a = 2.0 * std::f64::consts::PI * k as f64 / n as f64;
             C(a.cos() as f32, a.sin() as f32) // inverse transform: e^{+i 2 pi k / n}
         }).collect();
@@ -293,7 +294,11 @@ pub fn decode(data: &[u8]) -> Result<Decoded, String> {
     let out_per_frame = if sample_rate < 22050 { 480 } else if sample_rate < 44100 { 960 } else { 1920 };
     let mut coefs = vec![0f32; frame_samples * channels + 2 * frame_samples];
     let mut overlap = vec![0f32; 256 * channels];
-    let mut pcm: Vec<i16> = Vec::with_capacity(total.min(1 << 28) * channels);
+    // every packet takes at least its 4-byte header and gives at most one frame: the header's sample count cannot
+    // ask for more than the data can produce
+    let total = total.min((data.len() / 4 + 1).saturating_mul(out_per_frame));
+    crate::limits::checked_len(total, channels * 2, usize::MAX)?;
+    let mut pcm: Vec<i16> = Vec::with_capacity(total * channels);
     while pos + 4 <= data.len() && pcm.len() < total * channels {
         if &data[pos..pos + 4] == b"SEEK" {
             if pos + 0x0F > data.len() {
@@ -369,8 +374,8 @@ mod tests {
             Dct::new(n).run(&mut fast);
             for (k, f) in fast.iter().enumerate() {
                 let mut s = x[0] as f64;
-                for j in 1..n {
-                    s += x[j] as f64 * (std::f64::consts::PI * j as f64 * (2.0 * k as f64 + 1.0) / (2.0 * n as f64)).cos();
+                for (j, xj) in x.iter().enumerate().skip(1) {
+                    s += *xj as f64 * (std::f64::consts::PI * j as f64 * (2.0 * k as f64 + 1.0) / (2.0 * n as f64)).cos();
                 }
                 assert!((*f as f64 - s).abs() < 1e-2 * (1.0 + s.abs()), "n={n} k={k}: {f} vs {s}");
             }
