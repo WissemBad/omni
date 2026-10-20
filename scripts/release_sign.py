@@ -15,8 +15,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from omni.core import update  # noqa: E402
-from omni.native import N  # noqa: E402
+from omni.core import update
+from omni.native import N
 
 
 def _seed(path: str) -> bytes:
