@@ -6,8 +6,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 
-- Resetting the data removes only what omni wrote in the exports folder (addon content, glTF, sounds, textures, Blender
-  files and the `.gma` of each known game): other files kept in a shared exports folder stay.
+- Props: "Tout sélectionner" follows the converted / not converted filter instead of selecting every prop, and
+  Shift-click selects a range of rows again.
 
 ## [1.0.5] - 2026-10-18
 
