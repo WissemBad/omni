@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Security
+
+- The local API now requires a per-launch session cookie (HttpOnly, SameSite=Strict) on every `/api` route, reads included, so another web page can no longer trigger previews, catalog builds or other work.
+- Tool locations saved from the settings (StudioMDL, ffmpeg, Blender, game and Garry's Mod folders) go through the same checks as the setup page: an executable must be an existing `.exe` given by its full path.
+- Character previews and forced update checks are started with POST instead of GET.
+
 ## [1.0.5] - 2026-10-18
 
 ### Changed

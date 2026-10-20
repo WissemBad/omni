@@ -12,7 +12,9 @@ pytestmark = pytest.mark.skipif(not CONFIG.assets_sorted.exists(), reason="game 
 
 @pytest.fixture(scope="module")
 def client():
-    return TestClient(create_app(jobs_db=None), base_url="http://127.0.0.1:8770")
+    c = TestClient(create_app(jobs_db=None), base_url="http://127.0.0.1:8770")
+    c.get("/")                                   # the page hands out the session cookie, as in the window
+    return c
 
 
 def test_sources_declare_capabilities(client):

@@ -379,7 +379,7 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
         except Exception as e:  # noqa: BLE001
             state.update(status="error", error=f"{type(e).__name__}: {e}")
 
-    @app.get("/api/{sid}/characters/{cid}/preview")
+    @app.post("/api/{sid}/characters/{cid}/preview")
     def character_preview(sid: str, cid: str, refresh: int = 0):
         """Bodygroups, skins, presets and materials of a character (+ its GLB, see ``/glb``). Preparing a family
         converts its materials (light quality, in a scratch addon) and poses its meshes, which takes seconds to a
