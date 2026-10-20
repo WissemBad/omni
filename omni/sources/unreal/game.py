@@ -19,7 +19,8 @@ from ...core.config import CONFIG
 
 log = logging.getLogger("omni.unreal")
 
-OODLE_URL = ("https://github.com/WorkingRobot/OodleUE/raw/refs/heads/main/Engine/Source/Programs/Shared/"
+OODLE_COMMIT = "5e38cb6c99c588b51cde0cae4a6420d6bc865605"
+OODLE_URL = (f"https://github.com/WorkingRobot/OodleUE/raw/{OODLE_COMMIT}/Engine/Source/Programs/Shared/"
              "EpicGames.Oodle/Sdk/2.9.10/win/redist/oo2core_9_win64.dll")
 OODLE_SHA256 = "6f5d41a7892ea6b2db420f2458dad2f84a63901c9a93ce9497337b16c195f457"
 
@@ -55,8 +56,8 @@ def ensure_oodle(say=None, cancel=None) -> Path:
     return p
 
 
-ARCHIVE_TREE = "https://api.github.com/repos/TheNaeem/Unreal-Mappings-Archive/git/trees/HEAD?recursive=1"
-ARCHIVE_RAW = "https://raw.githubusercontent.com/TheNaeem/Unreal-Mappings-Archive/HEAD/"
+# community .usmap files: TheNaeem/Unreal-Mappings-Archive at one commit, every file with its SHA-256
+ARCHIVE_MANIFEST = Path(__file__).resolve().parents[2] / "assets" / "unreal-mappings.json"
 MIN_STRUCTS = 200          # fewer than this read from the executable: the extraction is not trusted
 
 
@@ -86,21 +87,23 @@ def archive_pick(paths: list[str], names: list[str]) -> str | None:
     return max(files, key=rank)
 
 
+def archive_manifest() -> dict:
+    return json.loads(ARCHIVE_MANIFEST.read_text(encoding="utf-8"))
+
+
 def _archive_usmap(info: dict, dest: Path, say=None, cancel=None) -> Path | None:
-    import urllib.request
     from urllib.parse import quote
-    req = urllib.request.Request(ARCHIVE_TREE, headers={"User-Agent": "omni", "Accept": "application/vnd.github+json"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        tree = json.loads(r.read())
-    paths = [t["path"] for t in tree.get("tree", []) if t.get("type") == "blob"]
+    manifest = archive_manifest()
+    files = manifest["files"]
     names = [info.get("title") or "", info.get("project") or "", Path(info.get("root") or "").name]
-    pick = archive_pick(paths, names)
+    pick = archive_pick(list(files), names)
     if pick is None:
         return None
     from ...core.setup import download
     if say:
         say(f"téléchargement des mappings communautaires ({pick})…")
-    download(ARCHIVE_RAW + quote(pick), dest, None, cancel)
+    url = f"https://raw.githubusercontent.com/{manifest['repository']}/{manifest['commit']}/{quote(pick)}"
+    download(url, dest, None, cancel, files[pick])
     return dest
 
 

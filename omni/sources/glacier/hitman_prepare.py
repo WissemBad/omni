@@ -44,17 +44,12 @@ def status(info: dict) -> dict:
     return {"steps": steps, "ready": all(s["ok"] for s in steps), "updated": bool(state) and not current}
 
 
-def fetch_names(info: dict, say=print, cancel=None) -> None:
-    import py7zr
-    from ...core.setup import download
-    from .hitman import NAMES_URL, names_dir
+def fetch_names(info: dict, say=print, cancel=None, latest: bool = False) -> None:
+    """Hitman-Hashes (pinned release, or with ``latest`` the newest one checked against its published SHA-256)."""
+    from ...core.setup import fetch_hash_list
+    from .hitman import NAMES_RELEASE, NAMES_REPO, names_dir
     d = names_dir(info["id"])
-    archive = d / "latest-hashes.7z"
-    say("téléchargement des noms (Hitman-Hashes)…")
-    download(NAMES_URL, archive, None, cancel)
-    with py7zr.SevenZipFile(archive) as z:
-        z.extract(path=d, targets=["hash_list.txt"])
-    archive.unlink(missing_ok=True)
+    fetch_hash_list(NAMES_REPO, NAMES_RELEASE, d, say, None, cancel, latest)
     (d / "names.sqlite").unlink(missing_ok=True)
 
 

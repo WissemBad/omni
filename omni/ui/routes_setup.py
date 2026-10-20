@@ -138,10 +138,11 @@ def register(app: FastAPI, *, jobs, reset_runtime) -> None:
         return {"job": job["id"]}
 
     @app.post("/api/setup/names")
-    def names():
+    def names(latest: bool = False):
+        """The pinned names release; ``latest``: the newest one, checked against the SHA-256 GitHub publishes."""
         return _job("names", "Liste des noms (Bond-Hashes)", lambda job: setup.fetch_names(
             lambda m: jobs.log(job, m), lambda d, t: jobs.count(job, d, t), jobs.cancel_event(job),
-            release=registry.reset))
+            release=registry.reset, latest=latest))
 
     @app.post("/api/setup/studiomdl")
     def studiomdl():

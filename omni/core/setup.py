@@ -4,7 +4,9 @@ omni ships without any game data. Setting up means:
   1. game      folder of the game holding ``Runtime/*.rpkg`` (detected in the Steam libraries, or chosen);
   2. assets    the resources omni reads, extracted from the packages into ``Assets/Sorted`` (native extractor, only
                the resource types omni uses, resumable);
-  3. names     the readable paths of the resources (glacier-modding/Bond-Hashes, MIT), turned into a lookup database;
+  3. names     the readable paths of the resources (glacier-modding/Bond-Hashes, MIT), turned into a lookup database
+               (a pinned release checked against its SHA-256; "update" takes the latest one, checked against the
+               SHA-256 GitHub publishes for it);
   4. gmod      Garry's Mod (detected in Steam): player animations and the folder the addon is linked into;
   5. studiomdl the model compiler (StudioMDL-CE, downloaded and checked against pinned SHA-256 sums).
 Each step reports ``ok`` and what is missing; the interface runs the long ones as jobs.
@@ -24,7 +26,9 @@ from .windows import find_steam_game
 NEEDED_TYPES = ["ALOC", "ASET", "BORG", "DLGE", "ECPB", "ECPT", "MATE", "MATI", "MATT", "PRIM", "TBLU", "TEMP", "TEXD", "TEXT",
                 "WBNK", "WSGB", "WSGT", "WSWB", "WSWT", "WWEM", "WWES", "WWEV"]
 
-NAMES_URL = "https://github.com/glacier-modding/Bond-Hashes/releases/latest/download/latest-hashes.7z"
+NAMES_REPO = "glacier-modding/Bond-Hashes"
+NAMES_RELEASE = ("v19", "3585a1ac358bc54912b072ab71b2df895ad2efb7e846e7586e97d9983f91b025")
+NAMES_ASSET = "latest-hashes.7z"
 STUDIOMDL_COMMIT = "87b85ab8181e4a0f5928791383280f4fcc12ae3f"
 STUDIOMDL_BASE = f"https://raw.githubusercontent.com/DeadZoneLuna/StudioMDL-CE/{STUDIOMDL_COMMIT}/bin/x64/"
 STUDIOMDL_FILES = {
@@ -148,18 +152,48 @@ def download(url: str, dest: Path, progress=None, cancel=None, sha256: str = "")
     return dest
 
 
-def fetch_names(say=print, count=None, cancel=None, release=None) -> dict:
+def release_url(repo: str, tag: str, asset: str = NAMES_ASSET) -> str:
+    return f"https://github.com/{repo}/releases/download/{tag}/{asset}"
+
+
+def latest_release(repo: str, asset: str = NAMES_ASSET) -> tuple[str, str]:
+    """(tag, SHA-256) of ``asset`` in the latest release of ``repo``, from the digest GitHub publishes for it."""
+    import json
+    req = urllib.request.Request(f"https://api.github.com/repos/{repo}/releases/latest",
+                                 headers={"User-Agent": "omni", "Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        rel = json.loads(r.read())
+    digest = next((a.get("digest") or "" for a in rel.get("assets", []) if a.get("name") == asset), "")
+    algo, _, sha = digest.partition(":")
+    if algo != "sha256" or len(sha) != 64:
+        raise RuntimeError(f"{repo} {rel.get('tag_name', '?')} : pas de somme SHA-256 publiée pour {asset}, mise à jour refusée")
+    return rel["tag_name"], sha.lower()
+
+
+def fetch_hash_list(repo: str, pinned: tuple[str, str], folder: Path, say=print, count=None, cancel=None,
+                    latest: bool = False) -> str:
+    """``hash_list.txt`` of a glacier-modding names release into ``folder``: the pinned (tag, SHA-256), or with
+    ``latest`` the newest release, checked against its published SHA-256. Returns the release tag."""
+    import py7zr
+    tag, sha = latest_release(repo) if latest else pinned
+    folder.mkdir(parents=True, exist_ok=True)
+    archive = folder / NAMES_ASSET
+    say(f"téléchargement de la liste des noms ({repo.split('/')[-1]} {tag})…")
+    download(release_url(repo, tag), archive, lambda d, t: count and count(d, t), cancel, sha)
+    say("décompression…")
+    try:
+        with py7zr.SevenZipFile(archive) as z:
+            z.extract(path=folder, targets=["hash_list.txt"])
+    finally:
+        archive.unlink(missing_ok=True)
+    return tag
+
+
+def fetch_names(say=print, count=None, cancel=None, release=None, latest: bool = False) -> dict:
     """Download the 007 names (Bond-Hashes) and rebuild the lookup database. ``release`` is called before the
     old database is deleted (the running source keeps it open, which Windows does not allow to delete)."""
-    import py7zr
     CONFIG.hash_list.parent.mkdir(parents=True, exist_ok=True)
-    archive = CONFIG.names_dir / "latest-hashes.7z"
-    say("téléchargement de la liste des noms (Bond-Hashes)…")
-    download(NAMES_URL, archive, lambda d, t: count and count(d, t), cancel)
-    say("décompression…")
-    with py7zr.SevenZipFile(archive) as z:
-        z.extract(path=CONFIG.hash_list.parent, targets=["hash_list.txt"])
-    archive.unlink(missing_ok=True)
+    fetch_hash_list(NAMES_REPO, NAMES_RELEASE, CONFIG.hash_list.parent, say, count, cancel, latest)
     if release is not None:
         release()
     CONFIG.names_db.unlink(missing_ok=True)

@@ -6,9 +6,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Security
 
-- Updates are signed: the release key (ed25519) signs `SHA256SUMS.txt` and omni installs an update only when that
-  signature and the installer's checksum are both right. A release without signature or sums is refused (it used to be
-  installed unchecked when the sums file was missing).
+- Every download made while preparing a game is pinned and checked: Oodle comes from a fixed commit, the Bond-Hashes and
+  Hitman-Hashes names from a fixed release with its SHA-256, the community Unreal mappings from a fixed commit with a
+  SHA-256 per file. "Mettre à jour la liste" takes the latest names release only when GitHub publishes its SHA-256.
 
 ## [1.0.5] - 2026-10-18
 
