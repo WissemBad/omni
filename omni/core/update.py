@@ -32,7 +32,7 @@ CACHE_SECONDS = 6 * 3600
 SUMS = "SHA256SUMS.txt"
 SIGNATURE = SUMS + ".sig"
 # public key of the release signatures (hex, 32 bytes): ``python scripts/release_sign.py public <seed file>``
-RELEASE_KEY = ""
+RELEASE_KEY = "8cfd8af96cf3eaac45c2073dcba48e84f2e260570b3b2f2567a05ec7d1759c04"
 _cache: dict = {"at": 0.0, "value": None}
 
 
