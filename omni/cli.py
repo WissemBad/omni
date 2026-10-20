@@ -16,7 +16,7 @@ def _source(name: str):
     try:
         return get_source(name)
     except KeyError as e:
-        raise SystemExit(str(e))
+        raise SystemExit(str(e)) from e
 
 
 def cmd_search(a):
@@ -56,6 +56,7 @@ def cmd_convert(a):
 
 def cmd_batch(a):
     import random
+
     from .pipeline import run_batch
     src = _source(a.source)
     pool = [i for i in src.list_models() if i.name and (a.match or "").lower() in i.name.lower()
@@ -148,6 +149,7 @@ def cmd_pm(a):
 
 def _families(src, match: str | None):
     from collections import defaultdict
+
     from .sources.glacier.outfit import OutfitResolver
     fam = defaultdict(list)
     for f, v, h, _n in OutfitResolver(src).outfits():
@@ -187,6 +189,7 @@ def cmd_pm_outfit(a):
 
 def cmd_sounds(a):
     from pathlib import Path
+
     from .targets.audio.export import export_sounds
     src = _source(a.source)
     out = Path(a.out) if a.out else CONFIG.sounds_dir(src.id)
@@ -215,6 +218,25 @@ def cmd_native(a):
         print("restart the command to load the new build")
         return
     print(json.dumps(native.status(), indent=1))
+
+
+def cmd_selfcheck(a):
+    """Import everything the application loads by name (every source of the registry, the Rust core): the check that a
+    package really contains its sources, run on the packaged Omni.exe by scripts/smoke_package.py. Exit code 1 on a failure."""
+    import importlib
+
+    from . import native
+    from .sources import registry
+    report = {"native": native.status()["native"], "native_error": native.NATIVE_ERROR, "sources": {}}
+    for sid, (module, cls) in {**registry.SOURCES, **{f"engine:{k}": v for k, v in registry.ENGINES.items()}}.items():
+        try:
+            getattr(importlib.import_module(module), cls)
+            report["sources"][sid] = "ok"
+        except Exception as e:  # noqa: BLE001 - reported, not raised: every failure is listed
+            report["sources"][sid] = f"{type(e).__name__}: {e}"
+    print(json.dumps(report, indent=1))
+    if not report["native"] or any(v != "ok" for v in report["sources"].values()):
+        raise SystemExit(1)
 
 
 def cmd_schema(a):
@@ -364,6 +386,7 @@ def main(argv=None):
     sc = sub.add_parser("schema", help="check omni's reading of the game's entities against the game's own class schemas, enums")
     sc.add_argument("--audit", type=int, default=0, metavar="N", help="also check the properties of N outfit templates")
     sc.set_defaults(fn=cmd_schema)
+    sub.add_parser("selfcheck", help="import every source and the Rust core (used to test a package)").set_defaults(fn=cmd_selfcheck)
     nv = sub.add_parser("native", help="status of the Rust core; --build compiles and installs it")
     nv.add_argument("--build", action="store_true")
     nv.set_defaults(fn=cmd_native)

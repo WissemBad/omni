@@ -30,13 +30,12 @@ import numpy as np
 
 from ...core.config import CONFIG, Config
 from ...core.naming import slug
+from ...sources.glacier.slots import SLOTS, slot_index
 from . import playermodel as pm
 from .build import deploy_file
 from .compile import compile_qc
 from .materials import TextureCache, convert_material
-from .pm_build import PMResult, register, _VISIBLE
-
-from ...sources.glacier.slots import SLOTS, slot_index
+from .pm_build import _VISIBLE, PMResult, register
 
 MAX_SKINS = 32                       # studiomdl MAXSTUDIOSKINS
 MAX_MATERIALS = 128                  # studiomdl: "Too many materials used, max 128"
@@ -298,7 +297,7 @@ def prepare(source, outfit_keys: list[int], opts, cfg: Config = CONFIG, name: st
         for col, v in row.items():
             src_vmt, dst = vdir / f"{v}.vmt", vdir / f"{col}.vmt"
             if src_vmt.exists() and not dst.exists():
-                dst.write_text(src_vmt.read_text())
+                dst.write_text(src_vmt.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
     columns = names
     skins = table
 
@@ -401,7 +400,7 @@ def _compile_plan(plan: Plan, res: PMResult, title: str = "") -> None:
     qc += pm.ik_qc(tpl)
     qc += [f'$includemodel "{Path(tpl.anim_include).name}"']
     qc += pm.collision_qc(tpl, volumes)
-    (work / "model.qc").write_text("\n".join(qc) + "\n")
+    (work / "model.qc").write_text("\n".join(qc) + "\n", encoding="utf-8")
 
     outdir = cfg.sandbox / "models" / Path(plan.mpath).parent
     dest = plan.addon / "models" / Path(plan.mpath).parent
@@ -466,7 +465,7 @@ def export_preview(plan: Plan, out_glb: Path, tex_size: int = 512) -> dict:
         if vmt_name in mat_index:
             return mat_index[vmt_name]
         vmt = (mroot / plan.vmt_cd / f"{vmt_name}.vmt")
-        text = vmt.read_text() if vmt.exists() else ""
+        text = vmt.read_text(encoding="utf-8", errors="replace") if vmt.exists() else ""
         entry = {"name": vmt_name, "base": None, "normal": None,
                  "alpha": "MASK" if "$alphatest" in text else ("BLEND" if "$translucent" in text else "OPAQUE")}
         for key, slot in (("$basetexture", "base"), ("$bumpmap", "normal")):

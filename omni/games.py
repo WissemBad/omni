@@ -195,7 +195,7 @@ def ensure_defaults() -> None:
         folder = CONFIG.game or detect_game()
         if folder and not any(g["id"] == "007fl" for g in load()):
             add(folder)
-    except Exception:  # noqa: BLE001 - the library is a convenience
+    except Exception:
         log.debug("default game not added", exc_info=True)
 
 

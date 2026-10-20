@@ -24,6 +24,10 @@ dev = [
     "ruff>=0.6",
     "httpx2>=2.13.1",
     "pytest",
+    "pyright>=1.1.414",
+    "import-linter>=2.15",
+    "pip-audit>=2.10.1",
+    "pytest-cov>=7.1.0",
 ]
 
 [tool.uv]
@@ -36,18 +40,105 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 160
 target-version = "py312"
-extend-exclude = ["web", "native", "build", "dist", ".venv"]
+extend-exclude = ["web", "native", "build", "dist", ".venv", "typings"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "B"]
+preview = true
+explicit-preview-rules = true
+select = ["E", "F", "W", "B", "I", "UP", "BLE", "RUF", "SIM", "PLW1514"]
 ignore = [
   "E501",    # long lines are fine in tables and docstrings
   "E701", "E702", "E731",
-  "B008", "B905", "B007", "B017", "B904", "B018", "B019", "B023", "E741",
-  "UP007", "UP037", "UP045",
+  "B008", "B905", "B007", "B017", "B018", "E741",
+  "UP007", "UP037", "UP045", "UP031",
+  "RUF001", "RUF002", "RUF003",    # French text: accents and typographic quotes are intended
+  "RUF005", "RUF012", "RUF059",
+  "SIM105", "SIM112",
   "W291", "W293",
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tools/*" = ["E402", "F401", "B018", "E741"]
 "tests/*" = ["E402", "E741"]
+
+[tool.pyright]
+include = ["omni", "scripts"]
+exclude = ["**/__pycache__", "omni/targets/blender/blender_script.py"]   # runs inside Blender (bpy)
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+reportMissingImports = "warning"
+
+[tool.importlinter]
+root_package = "omni"
+include_external_packages = false
+
+# Layers of omni, checked on direct imports. ``ignore_imports`` lists today's violations (see the architecture refactor in
+# the finalisation plan): a contract never gains an entry, and an entry goes away when its import does.
+
+[[tool.importlinter.contracts]]
+name = "targets know no game"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["omni.targets"]
+forbidden_modules = ["omni.sources.glacier", "omni.sources.unreal"]
+ignore_imports = [
+  "omni.targets.shading -> omni.sources.glacier.texture",
+  "omni.targets.source.textures -> omni.sources.glacier.texture",
+  "omni.targets.source.pm_outfit -> omni.sources.glacier.borg",
+  "omni.targets.source.pm_outfit -> omni.sources.glacier.outfit",
+  "omni.targets.source.pm_outfit -> omni.sources.glacier.slots",
+]
+
+[[tool.importlinter.contracts]]
+name = "sources do not import the Garry's Mod target"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["omni.sources"]
+forbidden_modules = ["omni.targets.source"]
+ignore_imports = [
+  "omni.sources.glacier.hitman -> omni.targets.source.humanoid",
+  "omni.sources.glacier.hitman -> omni.targets.source.playermodel",
+  "omni.sources.glacier.hitman -> omni.targets.source.pm_build",
+  "omni.sources.unreal.adapter -> omni.targets.source.humanoid",
+  "omni.sources.unreal.adapter -> omni.targets.source.pm_build",
+  "omni.sources.unreal.adapter -> omni.targets.source.textures",
+]
+
+[[tool.importlinter.contracts]]
+name = "core is the bottom layer"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["omni.core"]
+forbidden_modules = ["omni.ui", "omni.targets", "omni.pipeline", "omni.cli"]
+ignore_imports = [
+  "omni.core.settings -> omni.targets.source.textures",
+]
+
+[[tool.importlinter.contracts]]
+name = "the pipeline does not call the command line"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["omni.pipeline"]
+forbidden_modules = ["omni.cli"]
+ignore_imports = [
+  "omni.pipeline -> omni.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "targets do not call the pipeline or the interface"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["omni.targets"]
+forbidden_modules = ["omni.pipeline", "omni.ui"]
+ignore_imports = [
+  "omni.targets.gltf.export -> omni.pipeline",
+]
+
+[tool.coverage.run]
+source = ["omni"]
+omit = ["omni/targets/blender/blender_script.py"]      # runs inside Blender
+
+[tool.coverage.report]
+# a ratchet: raise it with the tests, never lower it (finalisation plan: 60 % of omni/)
+fail_under = 37
+skip_covered = true

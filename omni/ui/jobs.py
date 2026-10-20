@@ -309,7 +309,7 @@ class Jobs:
         for cb in list(self.on_finish):
             try:
                 cb(job)
-            except Exception:  # noqa: BLE001 - a notification must never break the queue
+            except Exception:
                 log.exception("job finish callback failed")
         self._pump()
 
@@ -333,7 +333,7 @@ class Jobs:
         def wrap():
             try:
                 self.finish(job, summary=fn(job))
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 log.exception("job %s (%s) failed", job["id"], job["label"])
                 self.log(job, traceback.format_exc(limit=4))
                 self.finish(job, f"{type(e).__name__}: {e}")

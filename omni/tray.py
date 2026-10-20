@@ -26,7 +26,7 @@ class Tray:
             self.icon = pystray.Icon("omni", image, "omni", menu=menu)
             self.icon.run_detached()
             return True
-        except Exception:  # noqa: BLE001 - optional comfort, never a reason not to start
+        except Exception:
             log.warning("tray icon unavailable", exc_info=True)
             self.icon = None
             return False
@@ -36,7 +36,7 @@ class Tray:
             return
         try:
             self.icon.notify(message, title)
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.debug("notification failed", exc_info=True)
 
     def stop(self) -> None:

@@ -42,10 +42,10 @@ def ensure_sandbox(sandbox: Path) -> None:
     ]
     text = "\n".join(lines) + "\n"
     gi = sandbox / "gameinfo.txt"
-    if gi.exists() and gi.read_text() == text:
+    if gi.exists() and gi.read_text(encoding="utf-8") == text:
         return
     tmp = gi.with_name(f"gameinfo.{os.getpid()}.{threading.get_ident()}.tmp")
-    tmp.write_text(text)
+    tmp.write_text(text, encoding="utf-8")
     try:
         os.replace(tmp, gi)               # never a half-written file under a running studiomdl
     except OSError:
