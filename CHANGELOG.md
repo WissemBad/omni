@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Security
+
+- Every download made while preparing a game is pinned and checked: Oodle comes from a fixed commit, the Bond-Hashes and
+  Hitman-Hashes names from a fixed release with its SHA-256, the community Unreal mappings from a fixed commit with a
+  SHA-256 per file. "Mettre à jour la liste" takes the latest names release only when GitHub publishes its SHA-256.
+
 ## [1.0.5] - 2026-10-18
 
 ### Changed

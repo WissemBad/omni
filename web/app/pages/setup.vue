@@ -108,7 +108,9 @@ watch(
 async function start(step: 'extract' | 'names' | 'studiomdl' | 'auto') {
   busy.value = step
   try {
-    const { job } = await api<{ job: string }>(`/setup/${step}`, { method: 'POST' })
+    // names already there: "Mettre à jour" takes the latest release (checked against its published SHA-256)
+    const latest = step === 'names' && status.value?.names.ok ? '?latest=true' : ''
+    const { job } = await api<{ job: string }>(`/setup/${step}${latest}`, { method: 'POST' })
     await jobs.track(job)
   } catch (e) {
     toast.add({ title: 'Impossible de lancer', description: apiError(e), color: 'error' })
