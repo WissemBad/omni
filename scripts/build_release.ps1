@@ -15,6 +15,7 @@
 
     OMNI_RELEASE_KEY names the file of the release key (scripts/release_sign.py keygen, kept offline): SHA256SUMS.txt
     is signed with it into SHA256SUMS.txt.sig, which the updater requires. -Publish refuses to run without it.
+    Set it in the environment or in a .env file at the repository root (OMNI_RELEASE_KEY=C:\path\to\omni-release.key).
 #>
 param(
     [Parameter(Mandatory)][string]$Version,
@@ -36,7 +37,13 @@ Step 'Version matches pyproject.toml' {
     if ($declared -ne $Version) { throw "pyproject.toml says $declared, not $Version" }
 }
 
+# OMNI_RELEASE_KEY may also be a line of the .env file at the repository root (ignored by git)
+if (-not $env:OMNI_RELEASE_KEY -and (Test-Path .env)) {
+    $line = Get-Content .env | Where-Object { $_ -match '^\s*OMNI_RELEASE_KEY\s*=' } | Select-Object -First 1
+    if ($line) { $env:OMNI_RELEASE_KEY = ($line -replace '^\s*OMNI_RELEASE_KEY\s*=\s*', '').Trim().Trim('"', "'") }
+}
 $sign = [bool]$env:OMNI_RELEASE_KEY
+if ($sign -and -not (Test-Path $env:OMNI_RELEASE_KEY)) { throw "OMNI_RELEASE_KEY: $env:OMNI_RELEASE_KEY does not exist" }
 if ($Publish -and -not $sign) {
     throw 'OMNI_RELEASE_KEY (path of the release key, scripts/release_sign.py) is required to publish: the updater refuses unsigned releases'
 }
