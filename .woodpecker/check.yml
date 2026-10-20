@@ -1,3 +1,5 @@
+# Linux checks of every push and pull request. The Windows-only part (package, installer, native Windows code) is
+# .woodpecker/windows.yml. Everything here is also run locally by scripts/check.ps1.
 when:
   - event: [push, pull_request]
 
@@ -23,26 +25,42 @@ steps:
     depends_on:
       - web-install
 
-  - name: rust-test
-    image: rust:1-bookworm
+  - name: rust-check
+    image: rust:1.99.0-bookworm
     commands:
+      - cargo fmt --manifest-path native/Cargo.toml -- --check
+      - cargo clippy --manifest-path native/Cargo.toml --all-targets --no-default-features -- -D warnings
       - cargo test --manifest-path native/Cargo.toml --no-default-features
+      # cargo-deny, pinned by version and SHA-256 (licences, advisories, sources)
+      - curl -fsSL -o /tmp/deny.tgz https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz
+      - echo "9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f  /tmp/deny.tgz" | sha256sum -c -
+      - tar -xzf /tmp/deny.tgz -C /tmp
+      - /tmp/cargo-deny-0.20.2-x86_64-unknown-linux-musl/cargo-deny --manifest-path native/Cargo.toml check --config native/deny.toml
 
-  - name: python-lint
+  - name: python-check
     image: ghcr.io/astral-sh/uv:python3.12-bookworm
     commands:
       - uv lock --check
       - uv sync --locked
       - uv run --no-sync ruff check
+      - uv run --no-sync lint-imports
+      - uv run --no-sync python scripts/typecheck.py
+      - uv run --no-sync python scripts/release.py --check
+      - uv run --no-sync pip-audit --skip-editable
 
   - name: python-test
-    image: rust:1-bookworm
+    image: rust:1.99.0-bookworm
     environment:
       UV_PROJECT_ENVIRONMENT: /tmp/venv
       VIRTUAL_ENV: /tmp/venv
+      OMNI_REQUIRE_NATIVE: "1"
     commands:
-      - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - export PATH="$HOME/.local/bin:$PATH"
+      # uv, pinned by version and SHA-256
+      - curl -fsSL -o /tmp/uv.tgz https://github.com/astral-sh/uv/releases/download/0.12.18/uv-x86_64-unknown-linux-gnu.tar.gz
+      - echo "89eadd7c76fc063887959510d5ba0ab1264dfd5f1143b925ddb73021a40acf16  /tmp/uv.tgz" | sha256sum -c -
+      - tar -xzf /tmp/uv.tgz -C /tmp
+      - export PATH="/tmp/uv-x86_64-unknown-linux-gnu:$PATH"
       - uv sync --locked --inexact
-      - uvx maturin develop --release -m native/Cargo.toml --uv
-      - uv run --no-sync pytest -q
+      - uvx maturin@1.15.0 develop --release -m native/Cargo.toml --uv
+      - cargo clippy --manifest-path native/Cargo.toml --all-targets -- -D warnings
+      - uv run --no-sync pytest -q --cov=omni --cov-report=term

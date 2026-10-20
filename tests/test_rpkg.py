@@ -3,10 +3,10 @@ import random
 from pathlib import Path
 
 import pytest
+from rpkg_builder import Res, build
 
 from omni.native import N
 from omni.sources.glacier.meta import parse_meta
-from rpkg_builder import Res, build
 
 pytestmark = pytest.mark.skipif(N is None or not hasattr(N, "rpkg_extract"), reason="native module without rpkg")
 

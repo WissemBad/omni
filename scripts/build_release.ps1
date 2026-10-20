@@ -79,7 +79,10 @@ if ($sign) {
     Step 'Release key matches the one the app trusts' { uv run --no-sync python scripts\release_sign.py check $env:OMNI_RELEASE_KEY }
 }
 
-Step 'Tests' { uv run --no-sync pytest -q }
+Step 'Tests' {
+    $env:OMNI_REQUIRE_NATIVE = '1'      # a missing Rust core fails the tests instead of skipping them
+    uv run --no-sync pytest -q
+}
 
 Step 'Application' {
     uv run --no-sync pyinstaller packaging/omni.spec --noconfirm --distpath dist --workpath build/pyi
