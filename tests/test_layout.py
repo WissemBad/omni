@@ -195,6 +195,22 @@ def test_data_reset_keeps_settings_library_tools_and_names(tmp_path):
     assert all(f.exists() for f in keep)
 
 
+def test_data_reset_leaves_what_omni_did_not_write(tmp_path):
+    """The exports folder may be shared with other files (setting paths.exports): only omni's own entries go."""
+    from omni.core import reset
+    cfg = _cfg(tmp_path)
+    (cfg.workspace / "games" / "g").mkdir(parents=True)
+    mine = [cfg.addon_dir("g") / "models" / "a.mdl", cfg.textures_dir("g") / "t.png", cfg.blend_dir("g") / "b.blend", cfg.gma_path("g")]
+    foreign = [cfg.exports / "Photos" / "gltf" / "keep.glb", cfg.exports / "Photos" / "sounds" / "keep.ogg",
+               cfg.export_dir("g") / "notes.txt", cfg.exports / "readme.txt"]
+    for f in mine + foreign:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("x", encoding="utf-8")
+    res = reset.reset_data(cfg)
+    assert res["failed"] == 0 and not any(f.exists() for f in mine) and cfg.addon_dir("g").is_dir()
+    assert all(f.exists() for f in foreign)
+
+
 def test_settings_reset_forgets_window_and_viewer_roots(tmp_path, monkeypatch):
     from omni.core import reset, settings
     cfg = _cfg(tmp_path)

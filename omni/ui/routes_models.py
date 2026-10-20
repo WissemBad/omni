@@ -135,10 +135,18 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
         return {"total": total, "items": items}
 
     @app.get("/api/{sid}/props/keys")
-    def prop_keys(sid: str, q: str = "", cat: str = "", statues: str = "all", named: int = 1, limit: int = 50000):
+    def prop_keys(sid: str, q: str = "", cat: str = "", statues: str = "all", named: int = 1, limit: int = 50000,
+                  done: str = ""):
+        """Keys of every prop the list shows, the "converted / not converted" filter included."""
         need(sid, "props")
-        sk, nm = _flt(statues, named)
-        return catalog_of(sid).keys(q, cat, sk, nm, min(limit, 50000))
+        c, (sk, nm) = catalog_of(sid), _flt(statues, named)
+        limit = min(limit, 50000)
+        if not done:
+            return c.keys(q, cat, sk, nm, limit)
+        from ..targets.source.build import _model_path
+        conv = converted(sid)
+        rows = c.search(q, cat, sk, nm, 100000, 0)
+        return [r["key"] for r in rows if (_model_path(sid, r["rel"], r["key"]) in conv) == (done == "yes")][:limit]
 
     @app.get("/api/{sid}/props/{key}/glb")
     def prop_glb(sid: str, key: str):
@@ -379,7 +387,7 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
         except Exception as e:  # noqa: BLE001
             state.update(status="error", error=f"{type(e).__name__}: {e}")
 
-    @app.get("/api/{sid}/characters/{cid}/preview")
+    @app.post("/api/{sid}/characters/{cid}/preview")
     def character_preview(sid: str, cid: str, refresh: int = 0):
         """Bodygroups, skins, presets and materials of a character (+ its GLB, see ``/glb``). Preparing a family
         converts its materials (light quality, in a scratch addon) and poses its meshes, which takes seconds to a

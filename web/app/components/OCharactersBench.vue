@@ -165,7 +165,10 @@ async function select(c: Character) {
     const t0 = Date.now()
     let m: CharacterPreview | PreviewBuilding
     // the first visit of a family builds its preview in the background: poll until it is ready
-    while ((m = await api<CharacterPreview | PreviewBuilding>(url)).status === 'building') {
+    while (
+      (m = await api<CharacterPreview | PreviewBuilding>(url, { method: 'POST' })).status ===
+      'building'
+    ) {
       if (mine !== pick) return
       const s = Math.round((Date.now() - t0) / 1000)
       busy.value = `Préparation du personnage : ${m.stage || 'matériaux, pose du squelette'}… ${s} s. Une seule fois par personnage, ensuite c’est instantané.`
@@ -192,6 +195,7 @@ watch(
     if (!c || !meta.value) return
     const m = await api<CharacterPreview | PreviewBuilding>(
       `/${sid.value}/characters/${encodeURIComponent(c.id)}/preview`,
+      { method: 'POST' },
     ).catch(() => null)
     if (m?.status === 'ready' && meta.value) meta.value.built = m.built
   },

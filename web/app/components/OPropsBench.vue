@@ -181,12 +181,15 @@ function step(delta: number) {
 
 // ---- selection
 let lastTicked = -1
+// the checkbox reports only its new value: the Shift key is read from the pointer that ticked it
+let shiftHeld = false
 function tick(p: Prop, index: number, shift: boolean) {
   if (shift && lastTicked >= 0) {
     const [a, b] = [Math.min(lastTicked, index), Math.max(lastTicked, index)]
     selection.add(Object.fromEntries(items.value.slice(a, b + 1).map((x) => [x.key, x.rel])))
   } else selection.toggle(p.key, p.rel)
   lastTicked = index
+  shiftHeld = false
 }
 
 const selectingAll = ref(false)
@@ -208,6 +211,7 @@ async function selectAllMatching() {
       cat: cat.value,
       statues: statues.value,
       named: named.value ? '1' : '0',
+      ...(done.value && { done: done.value }),
     })
     const keys = await api<string[]>(`/${sid.value}/props/keys?${params}`)
     selection.add(Object.fromEntries(keys.map((k) => [k, k])))
@@ -404,7 +408,8 @@ const DONE = [
             :model-value="selection.has((item as Prop).key)"
             aria-label="Sélectionner"
             @click.stop
-            @update:model-value="tick(item as Prop, index, ($event as unknown as { shiftKey?: boolean })?.shiftKey ?? false)"
+            @pointerdown="shiftHeld = $event.shiftKey"
+            @update:model-value="tick(item as Prop, index, shiftHeld)"
           />
           <UUser
             :name="titleCase(leaf((item as Prop).rel))"

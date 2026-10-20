@@ -15,6 +15,7 @@ pub mod eta;
 pub mod gltf;
 pub mod geom;
 pub mod lbs;
+pub mod limits;
 pub mod modellist;
 pub mod skin;
 pub mod smd;
@@ -28,6 +29,7 @@ pub mod par;
 pub mod mate;
 pub mod scan;
 pub mod schema;
+pub mod sign;
 pub mod source_anim;
 #[cfg(test)]
 mod fuzz;

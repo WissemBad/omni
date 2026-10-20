@@ -66,7 +66,7 @@ git tag -a vX.Y.Z -m vX.Y.Z; git push origin vX.Y.Z    # once that pull request 
 .\scripts\build_release.ps1 <x.y.z> -Publish           # installer, archive, checksums and the GitHub release
 ```
 
-It needs the tools listed at the top of the script (Bun, Rust with the MSVC toolchain, Inno Setup 6, the GitHub CLI).
+It needs the tools listed at the top of the script (Bun, Rust with the MSVC toolchain, Inno Setup 6, the GitHub CLI) and `OMNI_RELEASE_KEY`, the path of the release signing key (`scripts/release_sign.py`): the updater refuses unsigned releases.
 
 ## Contributing
 

@@ -4,7 +4,8 @@
 use super::assets::bulk_header;
 use super::mesh::{bulk_array, color_buffer, strip, vertex_buffers, Bone, Lod, Mesh, Section};
 use super::props::{self, Ctx};
-use super::reader::{err, Reader, Result};
+use super::reader::{err, Error, Reader, Result};
+use crate::limits::checked_len;
 use super::zen::Package;
 use super::Game;
 
@@ -17,14 +18,14 @@ fn multisize_indices(r: &mut Reader) -> Result<Vec<u32>> {
     let size = r.u8()?;
     let (es, _cnt, data) = bulk_array(r)?;
     Ok(if size == 2 || es == 2 {
-        data.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]]) as u32).collect()
+        data.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes([c[0], c[1]]) as u32).collect()
     } else {
-        data.chunks_exact(4).map(|c| u32::from_le_bytes(c.try_into().unwrap())).collect()
+        data.as_chunks::<4>().0.iter().map(|c| u32::from_le_bytes(*c)).collect()
     })
 }
 
 /// FSkinWeightVertexBuffer (UE 4.25+ layout): per vertex bone indices (section bone map) then weights.
-fn skin_weights(r: &mut Reader, lod: &mut Lod, ue5: i32) -> Result<()> {
+pub(crate) fn skin_weights(r: &mut Reader, lod: &mut Lod, ue5: i32) -> Result<()> {
     strip(r)?;
     let variable = r.u32()? != 0;
     let max_inf = r.u32()? as usize;
@@ -35,21 +36,27 @@ fn skin_weights(r: &mut Reader, lod: &mut Lod, ue5: i32) -> Result<()> {
     let (_es, _cnt, data) = bulk_array(r)?;
     strip(r)?;
     let _nlookup = r.i32()?;
-    let (_les, lcnt, ldata) = bulk_array(r)?;
+    let (les, lcnt, ldata) = bulk_array(r)?;
     if max_inf == 0 || max_inf > 16 {
         return err(format!("skin weights with {max_inf} influences"));
+    }
+    let ib = if idx16 { 2 } else { 1 };
+    let wb = if w16 { 2 } else { 1 };
+    // every vertex has a lookup entry (variable influences) or a fixed-size record: the data bounds the count
+    if variable {
+        if lcnt > 0 && les != 4 {
+            return err(format!("skin weight lookup element size {les}"));
+        }
+        checked_len(nverts, 4, ldata.len()).map_err(Error)?;
+    } else {
+        checked_len(nverts, max_inf * (ib + wb), data.len()).map_err(Error)?;
     }
     let keep = max_inf.min(8);
     lod.influences = keep;
     lod.bone_indices = vec![0; nverts * keep];
     lod.bone_weights = vec![0; nverts * keep];
-    let ib = if idx16 { 2 } else { 1 };
-    let wb = if w16 { 2 } else { 1 };
     for v in 0..nverts {
         let (start, count) = if variable {
-            if v >= lcnt {
-                break;
-            }
             let l = u32::from_le_bytes(ldata[v * 4..v * 4 + 4].try_into().unwrap());
             ((l >> 8) as usize, (l & 0xFF) as usize)
         } else {

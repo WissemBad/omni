@@ -23,7 +23,8 @@ from . import hm3
 from .adapter import GlacierSource
 from .store import StoreArchive, packages_of
 
-NAMES_URL = "https://github.com/glacier-modding/Hitman-Hashes/releases/latest/download/latest-hashes.7z"
+NAMES_REPO = "glacier-modding/Hitman-Hashes"
+NAMES_RELEASE = ("v378", "d589341ab5e29b79125cd2d4f7a8908eca7a3d1a05aadfc09352195fe2b1aa8a")   # tag, SHA-256 of the .7z
 _CHARACTER_ROOTS = ("hero", "individuals", "workers", "civilians", "guards", "crowd", "elusivetargets", "evergreen")
 
 

@@ -217,7 +217,9 @@ export function useUpdate() {
   const confirm = useConfirm()
   async function check(force = false) {
     try {
-      info.value = await api<UpdateInfo>(`/update${force ? '?force=true' : ''}`)
+      info.value = await (force
+        ? api<UpdateInfo>('/update/check', { method: 'POST' })
+        : api<UpdateInfo>('/update'))
     } catch {
       /* offline */
     }
