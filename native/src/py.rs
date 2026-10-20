@@ -287,9 +287,32 @@ fn mesh_volume<'py>(py: Python<'py>, vertices: PyReadonlyArray2<'py, f64>, trian
     py.detach(|| geom::mesh_volume(&v, &t)).map_err(err)
 }
 
+/// ``verify_signature(public, message, signature) -> bool``: ed25519 signature of a release (``sign.rs``).
+#[pyfunction]
+fn verify_signature(public: &[u8], message: &[u8], signature: &[u8]) -> bool {
+    crate::sign::verify(public, message, signature)
+}
+
+/// ``sign_release(secret, message) -> bytes``: the release script's signature (64 bytes) with the 32-byte seed.
+#[pyfunction]
+fn sign_release<'py>(py: Python<'py>, secret: &[u8], message: &[u8]) -> PyResult<Bound<'py, PyBytes>> {
+    let sig = crate::sign::sign(secret, message).map_err(PyValueError::new_err)?;
+    Ok(PyBytes::new(py, &sig))
+}
+
+/// ``release_public_key(secret) -> bytes``: the public key (32 bytes) of a seed.
+#[pyfunction]
+fn release_public_key<'py>(py: Python<'py>, secret: &[u8]) -> PyResult<Bound<'py, PyBytes>> {
+    let key = crate::sign::public_key(secret).map_err(PyValueError::new_err)?;
+    Ok(PyBytes::new(py, &key))
+}
+
 #[pymodule]
 pub fn omni_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
+    m.add_function(wrap_pyfunction!(verify_signature, m)?)?;
+    m.add_function(wrap_pyfunction!(sign_release, m)?)?;
+    m.add_function(wrap_pyfunction!(release_public_key, m)?)?;
     m.add_function(wrap_pyfunction!(decode_texture, m)?)?;
     m.add_function(wrap_pyfunction!(to_rgba, m)?)?;
     m.add_function(wrap_pyfunction!(parse_collision, m)?)?;

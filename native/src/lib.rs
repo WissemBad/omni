@@ -28,6 +28,7 @@ pub mod par;
 pub mod mate;
 pub mod scan;
 pub mod schema;
+pub mod sign;
 pub mod source_anim;
 #[cfg(test)]
 mod fuzz;
