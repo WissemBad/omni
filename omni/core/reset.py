@@ -6,6 +6,7 @@ removed; the addon folder keeps existing (Garry's Mod's link to it stays valid) 
 """
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -16,6 +17,31 @@ _GAME_FILES = ("catalog.sqlite", "catalog.sqlite-wal", "catalog.sqlite-shm", "te
                "textures.sqlite-shm", "characters.json")
 
 
+def _game_ids(cfg: Config) -> list[str]:
+    """Games omni knows: the library, the built-in 007 and those it keeps a workspace folder for."""
+    ids = {"007fl"}
+    try:
+        ids |= {g["id"] for g in json.loads(cfg.games_file.read_text(encoding="utf-8")) if isinstance(g, dict) and g.get("id")}
+    except (OSError, ValueError, TypeError):
+        pass
+    games = cfg.workspace / "games"
+    if games.is_dir():
+        ids |= {g.name for g in games.iterdir() if g.is_dir()}
+    return sorted(ids)
+
+
+def _export_targets(cfg: Config, game: str) -> list[Path]:
+    """What omni writes in a game's export folder, and nothing else: the exports folder can be a folder the user shares
+    with other files (setting ``paths.exports``), so an entry omni does not name is never removed."""
+    out: list[Path] = []
+    addon = cfg.export_dir(game) / "garrysmod-addon"
+    if addon.is_dir() and not addon.is_symlink():
+        # the addon folder stays (the link Garry's Mod follows keeps working): its content goes
+        out += sorted(addon.iterdir())
+    out += [cfg.gltf_dir(game), cfg.sounds_dir(game), cfg.textures_dir(game), cfg.blend_dir(game), cfg.gma_path(game)]
+    return out
+
+
 def data_targets(cfg: Config = CONFIG, exports: bool = True) -> list[Path]:
     """What a data reset removes (only what exists)."""
     out = [cfg.workspace / d for d in _WORKSPACE_DIRS]
@@ -23,10 +49,8 @@ def data_targets(cfg: Config = CONFIG, exports: bool = True) -> list[Path]:
     for g in sorted(games.glob("*")) if games.is_dir() else []:
         out += [g / n for n in _GAME_FILES]
     if exports and cfg.exports.is_dir():
-        for game in sorted(p for p in cfg.exports.iterdir() if p.is_dir()):
-            for entry in sorted(game.iterdir()):
-                # the addon folder stays (the link Garry's Mod follows keeps working): its content goes
-                out += sorted(entry.iterdir()) if entry.name == "garrysmod-addon" and not entry.is_symlink() else [entry]
+        for game in _game_ids(cfg):
+            out += _export_targets(cfg, game)
     return [p for p in out if p.exists() or p.is_symlink()]
 
 

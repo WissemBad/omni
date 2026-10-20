@@ -4,6 +4,11 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+
+- Resetting the data removes only what omni wrote in the exports folder (addon content, glTF, sounds, textures, Blender
+  files and the `.gma` of each known game): other files kept in a shared exports folder stay.
+
 ## [1.0.5] - 2026-10-18
 
 ### Changed
