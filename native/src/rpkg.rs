@@ -200,7 +200,7 @@ pub fn open(path: &Path) -> Result<Package, String> {
     // a corrupt header must be an error, never a multi-gigabyte allocation (which aborts the whole process)
     let file_len = f.metadata().map_err(|e| e.to_string())?.len();
     let tables = offset_table as u64 + meta_table as u64 + header_len as u64;
-    if file_count.checked_mul(20).map_or(true, |n| n > offset_table)
+    if file_count.checked_mul(20).is_none_or(|n| n > offset_table)
         || file_count > MAX_FILES
         || offset_table > MAX_TABLE
         || meta_table > MAX_TABLE
@@ -264,9 +264,12 @@ fn read_at(f: &File, buf: &mut [u8], off: u64) -> std::io::Result<()> {
 pub fn read_resource(f: &File, e: &Entry) -> Result<Vec<u8>, String> {
     let stored = e.stored_size();
     let bad = |why: &str| format!("resource {:016X}: {why}", e.hash);
-    // LZ4 cannot expand more than 255 times; anything beyond is a corrupt header, not data worth allocating for
-    if stored > MAX_RESOURCE || (e.compressed != 0 && e.data_size as u64 > stored * 255 + 64) {
+    if stored > MAX_RESOURCE {
         return Err(bad("implausible size"));
+    }
+    // LZ4 cannot expand more than 255 times; anything beyond is a corrupt header, not data worth allocating for
+    if e.compressed != 0 {
+        crate::limits::checked_len(e.data_size as usize, 1, stored as usize * 255 + 64).map_err(|why| bad(&format!("implausible size: {why}")))?;
     }
     if stored > (64 << 20) {
         let len = f.metadata().map_err(|err| bad(&err.to_string()))?.len();
@@ -528,7 +531,7 @@ mod tests {
             assert_eq!(p.entries[0].refs.len(), 2);
             let out = dir.join("Sorted");
             let types: HashSet<String> = ["PRIM", "TEXT"].iter().map(|s| s.to_string()).collect();
-            let st = extract(&[pkg.clone()], &out, &types).unwrap();
+            let st = extract(std::slice::from_ref(&pkg), &out, &types).unwrap();
             assert_eq!(st.written, 2, "{:?}", st.errors);
             assert!(st.errors.is_empty());
             let prim = fs::read(out.join("chunk0/PRIM/0100000000000001.PRIM")).unwrap();

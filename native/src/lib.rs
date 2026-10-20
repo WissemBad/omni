@@ -15,6 +15,7 @@ pub mod eta;
 pub mod gltf;
 pub mod geom;
 pub mod lbs;
+pub mod limits;
 pub mod modellist;
 pub mod skin;
 pub mod smd;

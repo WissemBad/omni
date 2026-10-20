@@ -74,6 +74,30 @@ pub fn get<'a>(props: &'a Props, name: &str) -> Option<&'a Value> {
     props.iter().find(|(n, _)| n == name).map(|(_, v)| v)
 }
 
+thread_local! {
+    static DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Nesting level of `Ctx::value` on this thread, released on drop.
+struct Depth;
+
+impl Depth {
+    fn enter() -> Result<Depth> {
+        let d = DEPTH.with(|c| c.get());
+        if d >= crate::limits::MAX_DEPTH {
+            return err(format!("properties nested deeper than {}", crate::limits::MAX_DEPTH));
+        }
+        DEPTH.with(|c| c.set(d + 1));
+        Ok(Depth)
+    }
+}
+
+impl Drop for Depth {
+    fn drop(&mut self) {
+        DEPTH.with(|c| c.set(c.get() - 1));
+    }
+}
+
 pub struct Ctx<'s> {
     pub schema: &'s Schema,
     pub names: &'s [String],
@@ -293,6 +317,9 @@ impl<'s> Ctx<'s> {
 
     /// Value of one property in unversioned form.
     pub fn value(&self, ty: &Ty, r: &mut Reader) -> Result<Value> {
+        // structs nest through here (value -> struct_value -> properties -> value): a self-referencing layout must
+        // end in an error, not a stack overflow
+        let _depth = Depth::enter()?;
         Ok(match ty {
             Ty::Bool => Value::Bool(r.u8()? != 0),
             Ty::Byte(Some(e)) => {
@@ -451,10 +478,8 @@ impl<'s> Ctx<'s> {
 pub fn read_object(ctx: &Ctx, class: &str, data: &[u8], is_cdo: bool) -> Result<(Props, usize)> {
     let mut r = Reader::new(data);
     let props = ctx.properties(class, &mut r)?;
-    if !is_cdo && r.left() >= 4 {
-        if r.u32()? != 0 && r.left() >= 16 {
-            r.skip(16)?;
-        }
+    if !is_cdo && r.left() >= 4 && r.u32()? != 0 && r.left() >= 16 {
+        r.skip(16)?;
     }
     Ok((props, r.pos))
 }
