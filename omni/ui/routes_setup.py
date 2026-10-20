@@ -20,6 +20,25 @@ class Paths(BaseModel):
     blender: str | None = None
 
 
+def clean_paths(paths: dict) -> dict:
+    """External locations checked and normalised (``""`` = automatic): folders must exist, executables must be existing
+    ``.exe`` files given by their full path, the game folder must hold its packages. Shared by ``/api/setup/paths`` and
+    ``PUT /api/settings``: omni runs these programs, so no route may store an arbitrary one."""
+    patch = {k: str(v).strip().strip('"') for k, v in paths.items() if v is not None}
+    for k, v in patch.items():
+        if v and k in ("game", "gmod") and not Path(v).is_dir():
+            raise HTTPException(400, f"Ce dossier n’existe pas : {v}")
+        if v and k in ("studiomdl", "ffmpeg", "blender"):
+            exe = Path(v)
+            if not (exe.is_absolute() and exe.suffix.lower() == ".exe" and exe.is_file()):
+                raise HTTPException(400, f"Programme introuvable (chemin complet d’un .exe attendu) : {v}")
+    if patch.get("game"):
+        if not setup.game_packages(patch["game"]):
+            raise HTTPException(400, "Aucun fichier chunk*.rpkg trouvé : choisis le dossier du jeu (il contient Runtime\\chunk0.rpkg).")
+        patch["game"] = str(setup.game_packages(patch["game"])[0].parent)
+    return patch
+
+
 def register(app: FastAPI, *, jobs, reset_runtime) -> None:
     @app.get("/api/setup/status")
     def status():
@@ -41,17 +60,7 @@ def register(app: FastAPI, *, jobs, reset_runtime) -> None:
 
     @app.post("/api/setup/paths")
     def set_paths(body: Paths):
-        patch = {k: v.strip().strip('"') for k, v in body.model_dump().items() if v is not None}
-        for k, v in patch.items():
-            if v and k in ("game", "gmod") and not Path(v).is_dir():
-                raise HTTPException(400, f"Ce dossier n’existe pas : {v}")
-            if v and k in ("studiomdl", "ffmpeg", "blender") and not Path(v).is_file():
-                raise HTTPException(400, f"Ce fichier n’existe pas : {v}")
-        if patch.get("game"):
-            if not setup.game_packages(patch["game"]):
-                raise HTTPException(400, "Aucun fichier chunk*.rpkg trouvé : choisis le dossier du jeu (il contient Runtime\\chunk0.rpkg).")
-            patch["game"] = str(setup.game_packages(patch["game"])[0].parent)
-        settings.save({"paths": patch})
+        settings.save({"paths": clean_paths(body.model_dump())})
         return setup.status()
 
     @app.post("/api/setup/pick")

@@ -19,9 +19,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def get(url: str):
-    with urllib.request.urlopen(url, timeout=5) as r:
-        return r.status, r.read()
+def get(url: str, headers: dict | None = None):
+    with urllib.request.urlopen(urllib.request.Request(url, headers=headers or {}), timeout=5) as r:
+        return r.status, r.read(), r.headers
 
 
 def main() -> int:
@@ -57,10 +57,23 @@ def main() -> int:
                 problems.append(f"native module not loaded: {info['rust'].get('native_error')}")
             if not next((t["ok"] for t in info["tools"] if t["key"] == "web"), False):
                 problems.append("interface not found in the package")
-            status, page = get(base + "/")
+            status, page, headers = get(base + "/")
             if status != 200 or b"<html" not in page.lower():
                 problems.append("the interface page does not load")
-            urllib.request.urlopen(urllib.request.Request(base + "/api/shutdown", data=b"", method="POST"), timeout=5)
+            # the page hands out the session cookie; the rest of the API refuses a caller without it
+            cookie = next((c.split(";", 1)[0] for c in headers.get_all("Set-Cookie") or [] if c.startswith("omni_session_")), "")
+            if not cookie:
+                problems.append("the interface page sets no session cookie")
+            try:
+                get(base + "/api/jobs")
+                problems.append("/api/jobs answers without the session cookie")
+            except urllib.error.HTTPError as e:
+                if e.code != 403:
+                    problems.append(f"/api/jobs without the session cookie: {e.code}, 403 expected")
+            if get(base + "/api/jobs", {"Cookie": cookie})[0] != 200:
+                problems.append("/api/jobs refuses the session cookie")
+            urllib.request.urlopen(urllib.request.Request(base + "/api/shutdown", data=b"", method="POST",
+                                                          headers={"Cookie": cookie}), timeout=5)
             for _ in range(40):
                 if proc.poll() is not None:
                     break

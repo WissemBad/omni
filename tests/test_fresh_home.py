@@ -18,6 +18,7 @@ SCRIPT = textwrap.dedent("""
 
     settings.apply()
     c = TestClient(create_app(jobs_db="auto"), base_url="http://127.0.0.1:8770")
+    c.get("/")
     out = {}
     out["system"] = c.get("/api/system").status_code
     home = c.get("/api/home").json()

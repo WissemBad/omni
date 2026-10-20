@@ -19,6 +19,7 @@ import socket
 import sys
 import threading
 import time
+import urllib.parse
 import urllib.request
 import webbrowser
 from pathlib import Path
@@ -44,8 +45,19 @@ WEBVIEW_HELP = ("omni utilise Microsoft Edge WebView2 pour sa fenêtre, mais il 
 
 
 # ---------------------------------------------------------------------------------------------------- helpers
+def _session(url: str) -> dict:
+    """The session cookie of the omni serving ``url``, from its ``run.json`` (the API asks for it outside /api/system)."""
+    from .ui import security
+    try:
+        info = json.loads(_run_file().read_text(encoding="utf-8"))
+        port = urllib.parse.urlsplit(url).port
+        return security.header(info.get("token", ""), port) if info.get("port") == port else {}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
 def _get(url: str, timeout: float = 1.5):
-    with urllib.request.urlopen(url, timeout=timeout) as r:
+    with urllib.request.urlopen(urllib.request.Request(url, headers=_session(url)), timeout=timeout) as r:
         return json.loads(r.read())
 
 
@@ -122,7 +134,8 @@ def _focus_running() -> bool:
     for _ in range(40):
         try:
             info = json.loads(_run_file().read_text(encoding="utf-8"))
-            req = urllib.request.Request(f"http://127.0.0.1:{info['port']}/api/focus", data=b"", method="POST")
+            url = f"http://127.0.0.1:{info['port']}/api/focus"
+            req = urllib.request.Request(url, data=b"", method="POST", headers=_session(url))
             with urllib.request.urlopen(req, timeout=2):
                 return True
         except Exception:  # noqa: BLE001
@@ -211,7 +224,8 @@ class Server:
             time.sleep(0.05)
         try:
             _run_file().parent.mkdir(parents=True, exist_ok=True)
-            _run_file().write_text(json.dumps({"pid": os.getpid(), "port": self.port}), encoding="utf-8")
+            _run_file().write_text(json.dumps({"pid": os.getpid(), "port": self.port,
+                                               "token": self.app.state.session_token}), encoding="utf-8")
         except OSError:
             pass
         return self

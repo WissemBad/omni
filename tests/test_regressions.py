@@ -40,6 +40,7 @@ def test_sound_export_job_runs_with_the_sound_settings(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "_file", lambda: tmp_path / "settings.json")
     monkeypatch.setattr(registry, "get_source", lambda sid: Fake())
     c = TestClient(create_app(jobs_db=None), base_url="http://127.0.0.1:8770")
+    c.get("/")
     job = c.post("/api/fake/sounds/export", json={}).json()["job"]
     for _ in range(100):
         j = c.get(f"/api/jobs/{job}").json()

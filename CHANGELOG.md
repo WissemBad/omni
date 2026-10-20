@@ -4,13 +4,11 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
-### Fixed
+### Security
 
-- A corrupt or hostile game file can no longer crash omni on Windows by asking for a huge buffer: every size the native
-  parsers read from a file (Unreal skin weights, vertex and UV buffers, BC6H mips, Bink Audio sample counts, IoStore
-  ranges, `.usmap` mappings, RPKG LZ4 output, Wwise media ranges) is now checked against the data that must back it,
-  and nested Unreal properties and types are cut off at a fixed depth instead of overflowing the stack. Such files are
-  reported as errors. The native test suite now refuses any allocation above 512 MiB, so these cases fail on Linux too.
+- The local API now requires a per-launch session cookie (HttpOnly, SameSite=Strict) on every `/api` route, reads included, so another web page can no longer trigger previews, catalog builds or other work.
+- Tool locations saved from the settings (StudioMDL, ffmpeg, Blender, game and Garry's Mod folders) go through the same checks as the setup page: an executable must be an existing `.exe` given by its full path.
+- Character previews and forced update checks are started with POST instead of GET.
 
 ## [1.0.5] - 2026-10-18
 

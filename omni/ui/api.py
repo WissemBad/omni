@@ -394,6 +394,12 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
 
     @app.put("/api/settings")
     def settings_put(body: dict):
+        paths = body.get("paths")
+        if isinstance(paths, dict):
+            # the set-up page's checks, on what changes: a saved location that has since vanished does not block the rest
+            current = settings.load()["paths"]
+            changed = {k: v for k, v in paths.items() if v != current.get(k)}
+            body = {**body, "paths": {**paths, **routes_setup.clean_paths(changed)}}
         return {"values": settings.save(body), "defaults": settings.DEFAULTS}
 
     @app.post("/api/settings/reset")
@@ -519,10 +525,16 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         return {"job": job["id"]}
 
     @app.get("/api/update")
-    def update_info(force: bool = False):
-        """The latest release and whether it is newer (cached six hours; ``force`` asks GitHub again)."""
+    def update_info():
+        """The latest release and whether it is newer (cached six hours)."""
         from ..core import update
-        return update.check(force)
+        return update.check()
+
+    @app.post("/api/update/check")
+    def update_check():
+        """The same, asking GitHub again past the cache."""
+        from ..core import update
+        return update.check(force=True)
 
     @app.post("/api/update/install")
     def update_install():
