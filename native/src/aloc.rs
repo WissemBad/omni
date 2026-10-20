@@ -18,11 +18,35 @@ pub type Q4 = [f32; 4];
 
 #[derive(Debug, Clone)]
 pub enum Shape {
-    Convex { points: Vec<V3>, pos: V3, quat: Q4, material: u32 },
-    Mesh { verts: Vec<V3>, tris: Vec<[u32; 3]> },
-    Box { half: V3, pos: V3, quat: Q4, material: u32 },
-    Sphere { radius: f32, pos: V3, quat: Q4, material: u32 },
-    Capsule { radius: f32, half_height: f32, pos: V3, quat: Q4, material: u32 },
+    Convex {
+        points: Vec<V3>,
+        pos: V3,
+        quat: Q4,
+        material: u32,
+    },
+    Mesh {
+        verts: Vec<V3>,
+        tris: Vec<[u32; 3]>,
+    },
+    Box {
+        half: V3,
+        pos: V3,
+        quat: Q4,
+        material: u32,
+    },
+    Sphere {
+        radius: f32,
+        pos: V3,
+        quat: Q4,
+        material: u32,
+    },
+    Capsule {
+        radius: f32,
+        half_height: f32,
+        pos: V3,
+        quat: Q4,
+        material: u32,
+    },
 }
 
 #[derive(Debug, Clone, Default)]
@@ -37,10 +61,14 @@ struct R<'a>(&'a [u8]);
 
 impl<'a> R<'a> {
     fn u32(&self, o: usize) -> Option<u32> {
-        self.0.get(o..o + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        self.0
+            .get(o..o + 4)
+            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
     }
     fn u16(&self, o: usize) -> Option<u16> {
-        self.0.get(o..o + 2).map(|b| u16::from_le_bytes([b[0], b[1]]))
+        self.0
+            .get(o..o + 2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]]))
     }
     fn f32(&self, o: usize) -> Option<f32> {
         self.u32(o).map(f32::from_bits)
@@ -49,7 +77,12 @@ impl<'a> R<'a> {
         Some([self.f32(o)?, self.f32(o + 4)?, self.f32(o + 8)?])
     }
     fn q4(&self, o: usize) -> Option<Q4> {
-        Some([self.f32(o)?, self.f32(o + 4)?, self.f32(o + 8)?, self.f32(o + 12)?])
+        Some([
+            self.f32(o)?,
+            self.f32(o + 4)?,
+            self.f32(o + 8)?,
+            self.f32(o + 12)?,
+        ])
     }
     fn tag(&self, o: usize, t: &[u8]) -> bool {
         self.0.get(o..o + t.len()) == Some(t)
@@ -62,7 +95,11 @@ fn finite(v: &[f32]) -> bool {
 
 fn sane_quat(q: Q4) -> Q4 {
     let n = (q.iter().map(|x| x * x).sum::<f32>()).sqrt();
-    if finite(&q) && (n - 1.0).abs() < 0.05 { q } else { [0.0, 0.0, 0.0, 1.0] }
+    if finite(&q) && (n - 1.0).abs() < 0.05 {
+        q
+    } else {
+        [0.0, 0.0, 0.0, 1.0]
+    }
 }
 
 fn find_all(d: &[u8], pat: &[u8]) -> Vec<usize> {
@@ -154,22 +191,51 @@ fn primitives(r: &R, at: usize, out: &mut Vec<Shape>) -> bool {
         let (shape, size) = if r.tag(o, b"BOX\0") {
             let (half, mat, pos, q) = (r.v3(o + 4), r.u32(o + 16), r.v3(o + 24), r.q4(o + 36));
             match (half, mat, pos, q) {
-                (Some(half), Some(m), Some(pos), Some(q)) if finite(&half) && finite(&pos) => {
-                    (Shape::Box { half, pos, quat: sane_quat(q), material: m }, 52)
-                }
+                (Some(half), Some(m), Some(pos), Some(q)) if finite(&half) && finite(&pos) => (
+                    Shape::Box {
+                        half,
+                        pos,
+                        quat: sane_quat(q),
+                        material: m,
+                    },
+                    52,
+                ),
                 _ => return false,
             }
         } else if r.tag(o, b"SPH\0") {
             match (r.f32(o + 4), r.u32(o + 8), r.v3(o + 16), r.q4(o + 28)) {
-                (Some(rad), Some(m), Some(pos), Some(q)) if finite(&[rad]) && finite(&pos) => {
-                    (Shape::Sphere { radius: rad, pos, quat: sane_quat(q), material: m }, 44)
-                }
+                (Some(rad), Some(m), Some(pos), Some(q)) if finite(&[rad]) && finite(&pos) => (
+                    Shape::Sphere {
+                        radius: rad,
+                        pos,
+                        quat: sane_quat(q),
+                        material: m,
+                    },
+                    44,
+                ),
                 _ => return false,
             }
         } else if r.tag(o, b"CAP\0") {
-            match (r.f32(o + 4), r.f32(o + 8), r.u32(o + 12), r.v3(o + 20), r.q4(o + 32)) {
-                (Some(rad), Some(hh), Some(m), Some(pos), Some(q)) if finite(&[rad, hh]) && finite(&pos) => {
-                    (Shape::Capsule { radius: rad, half_height: hh, pos, quat: sane_quat(q), material: m }, 48)
+            match (
+                r.f32(o + 4),
+                r.f32(o + 8),
+                r.u32(o + 12),
+                r.v3(o + 20),
+                r.q4(o + 32),
+            ) {
+                (Some(rad), Some(hh), Some(m), Some(pos), Some(q))
+                    if finite(&[rad, hh]) && finite(&pos) =>
+                {
+                    (
+                        Shape::Capsule {
+                            radius: rad,
+                            half_height: hh,
+                            pos,
+                            quat: sane_quat(q),
+                            material: m,
+                        },
+                        48,
+                    )
                 }
                 _ => return false,
             }
@@ -190,14 +256,26 @@ pub fn parse(d: &[u8]) -> Result<Collision, String> {
     if !r.tag(8, b"ID") || !r.tag(14, b"PhysX") {
         return Err("not a PhysX collision resource".into());
     }
-    let mut c = Collision { kind, layer, ..Default::default() };
+    let mut c = Collision {
+        kind,
+        layer,
+        ..Default::default()
+    };
     for nxs in find_all(d, b"NXS\x01") {
         if r.tag(nxs + 4, b"CVXM") {
-            let pos = r.v3(nxs.wrapping_sub(28)).filter(|p| finite(p)).unwrap_or([0.0; 3]);
+            let pos = r
+                .v3(nxs.wrapping_sub(28))
+                .filter(|p| finite(p))
+                .unwrap_or([0.0; 3]);
             let quat = sane_quat(r.q4(nxs.wrapping_sub(16)).unwrap_or([0.0, 0.0, 0.0, 1.0]));
             let material = r.u32(nxs.wrapping_sub(32)).unwrap_or(0);
             match convex(&r, nxs) {
-                Some(points) => c.shapes.push(Shape::Convex { points, pos, quat, material }),
+                Some(points) => c.shapes.push(Shape::Convex {
+                    points,
+                    pos,
+                    quat,
+                    material,
+                }),
                 None => c.warnings.push(format!("convex at {nxs:#x} not decoded")),
             }
         } else if r.tag(nxs + 4, b"MESH") {
@@ -252,7 +330,16 @@ mod tests {
 }
 
 fn jv(v: &[f32]) -> String {
-    let parts: Vec<String> = v.iter().map(|x| if x.is_finite() { format!("{x}") } else { "0".into() }).collect();
+    let parts: Vec<String> = v
+        .iter()
+        .map(|x| {
+            if x.is_finite() {
+                format!("{x}")
+            } else {
+                "0".into()
+            }
+        })
+        .collect();
     format!("[{}]", parts.join(","))
 }
 
@@ -288,6 +375,16 @@ pub fn to_json(c: &Collision) -> String {
             ),
         })
         .collect();
-    let warns: Vec<String> = c.warnings.iter().map(|w| format!("\"{}\"", w.replace('\\', "\\\\").replace('"', "\\\""))).collect();
-    format!("{{\"kind\":{},\"layer\":{},\"shapes\":[{}],\"warnings\":[{}]}}", c.kind, c.layer, shapes.join(","), warns.join(","))
+    let warns: Vec<String> = c
+        .warnings
+        .iter()
+        .map(|w| format!("\"{}\"", w.replace('\\', "\\\\").replace('"', "\\\"")))
+        .collect();
+    format!(
+        "{{\"kind\":{},\"layer\":{},\"shapes\":[{}],\"warnings\":[{}]}}",
+        c.kind,
+        c.layer,
+        shapes.join(","),
+        warns.join(",")
+    )
 }

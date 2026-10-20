@@ -34,10 +34,14 @@ pub fn format_name(fmt: u16) -> Option<&'static str> {
 }
 
 fn rd_u16(d: &[u8], o: usize) -> Result<u16, String> {
-    d.get(o..o + 2).map(|b| u16::from_le_bytes([b[0], b[1]])).ok_or_else(|| "truncated".to_string())
+    d.get(o..o + 2)
+        .map(|b| u16::from_le_bytes([b[0], b[1]]))
+        .ok_or_else(|| "truncated".to_string())
 }
 fn rd_u32(d: &[u8], o: usize) -> Result<u32, String> {
-    d.get(o..o + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]])).ok_or_else(|| "truncated".to_string())
+    d.get(o..o + 4)
+        .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        .ok_or_else(|| "truncated".to_string())
 }
 
 pub fn parse_header(d: &[u8]) -> Result<Header, String> {
@@ -48,14 +52,23 @@ pub fn parse_header(d: &[u8]) -> Result<Header, String> {
     let height = rd_u16(d, 0x0E)? as u32;
     let fmt = rd_u16(d, 0x10)?;
     let mips = rd_u16(d, 0x12)? as u32;
-    if !(1..=16384).contains(&width) || !(1..=16384).contains(&height) || !(1..=14).contains(&mips) {
+    if !(1..=16384).contains(&width) || !(1..=16384).contains(&height) || !(1..=14).contains(&mips)
+    {
         return Err("invalid TEXT header".into());
     }
     let mut comp = [0u32; 14];
     for (i, c) in comp.iter_mut().enumerate() {
         *c = rd_u32(d, 0x50 + 4 * i)?;
     }
-    Ok(Header { width, height, fmt, mips, first_text_mip: d[0x91] as u32, atlas: rd_u32(d, 0x88)?, comp })
+    Ok(Header {
+        width,
+        height,
+        fmt,
+        mips,
+        first_text_mip: d[0x91] as u32,
+        atlas: rd_u32(d, 0x88)?,
+        comp,
+    })
 }
 
 pub fn mip_nbytes(name: &str, w: u32, h: u32) -> usize {
@@ -72,15 +85,23 @@ pub fn mip_nbytes(name: &str, w: u32, h: u32) -> usize {
 }
 
 /// All decodable mips, largest first: (width, height, raw bytes in the source format).
-pub fn decode_mips(text: &[u8], texd: Option<&[u8]>) -> Result<(Header, Vec<(u32, u32, Vec<u8>)>), String> {
+pub fn decode_mips(
+    text: &[u8],
+    texd: Option<&[u8]>,
+) -> Result<(Header, Vec<(u32, u32, Vec<u8>)>), String> {
     decode_mips_only(text, texd, None)
 }
 
 /// Like `decode_mips`, but with `only = Some(level)` just that mip is decompressed (a preview needs one level, not
 /// the whole chain of a 4K texture).
-pub fn decode_mips_only(text: &[u8], texd: Option<&[u8]>, only: Option<usize>) -> Result<(Header, Vec<(u32, u32, Vec<u8>)>), String> {
+pub fn decode_mips_only(
+    text: &[u8],
+    texd: Option<&[u8]>,
+    only: Option<usize>,
+) -> Result<(Header, Vec<(u32, u32, Vec<u8>)>), String> {
     let hd = parse_header(text)?;
-    let name = format_name(hd.fmt).ok_or_else(|| format!("unsupported texture format 0x{:02X}", hd.fmt))?;
+    let name = format_name(hd.fmt)
+        .ok_or_else(|| format!("unsupported texture format 0x{:02X}", hd.fmt))?;
     let start = 0x98usize + hd.atlas as usize;
     let mut out = Vec::new();
     let mut prev = 0u32;
@@ -102,8 +123,17 @@ pub fn decode_mips_only(text: &[u8], texd: Option<&[u8]>, only: Option<usize>) -
                 }
             }
         } else {
-            let base = if ftm > 0 { hd.comp[ftm - 1] as usize } else { 0 };
-            let off = start + if i > 0 { (hd.comp[i - 1] as usize).saturating_sub(base) } else { 0 };
+            let base = if ftm > 0 {
+                hd.comp[ftm - 1] as usize
+            } else {
+                0
+            };
+            let off = start
+                + if i > 0 {
+                    (hd.comp[i - 1] as usize).saturating_sub(base)
+                } else {
+                    0
+                };
             text.get(off.min(text.len())..(off + size_c).min(text.len()))
         };
         let chunk = match chunk {
@@ -162,7 +192,7 @@ pub fn to_rgba(name: &str, w: u32, h: u32, data: &[u8]) -> Result<Vec<u8>, Strin
         "BC7" => (texture2ddecoder::decode_bc7, 16),
         _ => return Err(format!("unsupported format {name}")),
     };
-    if w == 0 || h == 0 || w.checked_mul(h).map_or(true, |n| n > 1 << 29) {
+    if w == 0 || h == 0 || w.checked_mul(h).is_none_or(|n| n > 1 << 29) {
         return Err(format!("invalid texture size {w}x{h}"));
     }
     let bw = w.div_ceil(4);
@@ -172,30 +202,48 @@ pub fn to_rgba(name: &str, w: u32, h: u32, data: &[u8]) -> Result<Vec<u8>, Strin
         return Err("not enough block data".into());
     }
     let mut out = vec![0u8; w * h * 4];
-    out.par_chunks_mut(w * 4 * 4).enumerate().try_for_each(|(by, dst)| -> Result<(), String> {
-        let rh = (h - by * 4).min(4);
-        let mut px = vec![0u32; w * rh];
-        f(&data[by * row_bytes..(by + 1) * row_bytes], w, rh, &mut px).map_err(|e| e.to_string())?;
-        for (o, p) in dst.chunks_exact_mut(4).zip(px.iter()) {
-            let [b, g, r, a] = p.to_le_bytes();
-            o.copy_from_slice(&[r, g, b, a]);
-        }
-        Ok(())
-    })?;
+    out.par_chunks_mut(w * 4 * 4)
+        .enumerate()
+        .try_for_each(|(by, dst)| -> Result<(), String> {
+            let rh = (h - by * 4).min(4);
+            let mut px = vec![0u32; w * rh];
+            f(&data[by * row_bytes..(by + 1) * row_bytes], w, rh, &mut px)
+                .map_err(|e| e.to_string())?;
+            for (o, p) in dst.chunks_exact_mut(4).zip(px.iter()) {
+                let [b, g, r, a] = p.to_le_bytes();
+                o.copy_from_slice(&[r, g, b, a]);
+            }
+            Ok(())
+        })?;
     Ok(out)
 }
 
 /// RGBA8 -> DXT1 (alpha = false) or DXT5. `quality`: 0 = range fit (fast), 1 = cluster fit, 2 = iterative
 /// cluster fit (best). Perceptual colour weights for colour maps, uniform ones for normal maps.
-pub fn encode_dxt(rgba: &[u8], w: usize, h: usize, alpha: bool, quality: u8, normal: bool) -> Vec<u8> {
-    let fmt = if alpha { texpresso::Format::Bc3 } else { texpresso::Format::Bc1 };
+pub fn encode_dxt(
+    rgba: &[u8],
+    w: usize,
+    h: usize,
+    alpha: bool,
+    quality: u8,
+    normal: bool,
+) -> Vec<u8> {
+    let fmt = if alpha {
+        texpresso::Format::Bc3
+    } else {
+        texpresso::Format::Bc1
+    };
     let params = texpresso::Params {
         algorithm: match quality {
             0 => texpresso::Algorithm::RangeFit,
             1 => texpresso::Algorithm::ClusterFit,
             _ => texpresso::Algorithm::IterativeClusterFit,
         },
-        weights: if normal { texpresso::COLOUR_WEIGHTS_UNIFORM } else { texpresso::COLOUR_WEIGHTS_PERCEPTUAL },
+        weights: if normal {
+            texpresso::COLOUR_WEIGHTS_UNIFORM
+        } else {
+            texpresso::COLOUR_WEIGHTS_PERCEPTUAL
+        },
         weigh_colour_by_alpha: false,
     };
     let mut out = vec![0u8; fmt.compressed_size(w, h)];
@@ -213,18 +261,28 @@ pub fn encode_dxt(rgba: &[u8], w: usize, h: usize, alpha: bool, quality: u8, nor
 
 /// The largest mip not larger than `max_dim` (0 = full size) as RGBA8; BC5/BC4/RG8 normals get Z rebuilt when
 /// `normal`.
-pub fn top_rgba(text: &[u8], texd: Option<&[u8]>, max_dim: usize, normal: bool) -> Result<(usize, usize, Vec<u8>), String> {
+pub fn top_rgba(
+    text: &[u8],
+    texd: Option<&[u8]>,
+    max_dim: usize,
+    normal: bool,
+) -> Result<(usize, usize, Vec<u8>), String> {
     let head = parse_header(text)?;
     let lim = if max_dim == 0 { usize::MAX } else { max_dim };
     let levels = head.mips.max(1) as usize;
     // first level that fits, else the smallest: only that one is decompressed
-    let want = (0..levels).find(|&i| ((head.width >> i).max(1).max((head.height >> i).max(1))) as usize <= lim).unwrap_or(levels - 1);
+    let want = (0..levels)
+        .find(|&i| ((head.width >> i).max(1).max((head.height >> i).max(1))) as usize <= lim)
+        .unwrap_or(levels - 1);
     let (hd, mips) = match decode_mips_only(text, texd, Some(want)) {
         Ok(r) if !r.1.is_empty() => r,
-        _ => decode_mips(text, texd)?,                 // that level is not stored: fall back to what is
+        _ => decode_mips(text, texd)?, // that level is not stored: fall back to what is
     };
     let name = format_name(hd.fmt).unwrap_or("?");
-    let (w, h, raw) = mips.iter().find(|m| m.0.max(m.1) as usize <= lim).unwrap_or(mips.last().unwrap());
+    let (w, h, raw) = mips
+        .iter()
+        .find(|m| m.0.max(m.1) as usize <= lim)
+        .unwrap_or(mips.last().unwrap());
     let mut px = to_rgba(name, *w, *h, raw)?;
     if normal {
         normal_map(&mut px, two_channel(name), false);
@@ -265,10 +323,10 @@ mod tests {
     fn normal_map_rebuilds_z_and_flips_green() {
         let mut px = vec![128u8, 128, 0, 0, 255, 128, 0, 0, 128, 200, 7, 9];
         normal_map(&mut px, true, false);
-        assert_eq!(&px[0..4], &[128, 128, 255, 255]);   // flat: Z = 1
-        assert!(px[6] < 140);                            // fully tilted on X: Z ~ 0
+        assert_eq!(&px[0..4], &[128, 128, 255, 255]); // flat: Z = 1
+        assert!(px[6] < 140); // fully tilted on X: Z ~ 0
         let mut g = vec![10u8, 20, 30, 40];
         normal_map(&mut g, false, true);
-        assert_eq!(g, vec![10, 235, 30, 40]);            // only green changes, the alpha (phong mask) is kept
+        assert_eq!(g, vec![10, 235, 30, 40]); // only green changes, the alpha (phong mask) is kept
     }
 }

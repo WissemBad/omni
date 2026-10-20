@@ -25,7 +25,9 @@ impl GlacierStore {
     fn new(py: Python<'_>, packages: Vec<String>) -> PyResult<Self> {
         let paths: Vec<PathBuf> = packages.into_iter().map(PathBuf::from).collect();
         let store = py.detach(|| Store::open(&paths)).map_err(err)?;
-        Ok(GlacierStore { store: Arc::new(store) })
+        Ok(GlacierStore {
+            store: Arc::new(store),
+        })
     }
 
     fn __len__(&self) -> usize {
@@ -53,7 +55,9 @@ impl GlacierStore {
 
     /// (type, data size, [(hash, flag)]) of a resource, None when absent.
     fn meta(&self, hash: u64) -> Option<(String, u32, Vec<(u64, u8)>)> {
-        self.store.entry(hash).map(|e| (e.type_name(), e.data_size, e.refs.clone()))
+        self.store
+            .entry(hash)
+            .map(|e| (e.type_name(), e.data_size, e.refs.clone()))
     }
 
     fn type_of(&self, hash: u64) -> Option<String> {
@@ -74,7 +78,15 @@ impl GlacierStore {
         Ok(py.detach(|| {
             p.install(|| {
                 use rayon::prelude::*;
-                hashes.par_iter().map(|h| store.read(*h).map(|d| crate::scan::wem_label_of(&d)).unwrap_or_default()).collect()
+                hashes
+                    .par_iter()
+                    .map(|h| {
+                        store
+                            .read(*h)
+                            .map(|d| crate::scan::wem_label_of(&d))
+                            .unwrap_or_default()
+                    })
+                    .collect()
             })
         }))
     }
@@ -85,7 +97,11 @@ impl GlacierStore {
 
     #[getter]
     fn packages(&self) -> Vec<String> {
-        self.store.packages.iter().map(|p| p.display().to_string()).collect()
+        self.store
+            .packages
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect()
     }
 }
 
@@ -93,20 +109,31 @@ impl GlacierStore {
 /// parallel (opening a file costs milliseconds under a real-time antivirus).
 #[pyfunction]
 #[pyo3(signature = (paths, threads=0))]
-fn prim_headers(py: Python<'_>, paths: Vec<String>, threads: usize) -> PyResult<Vec<Option<(u64, u32)>>> {
+fn prim_headers(
+    py: Python<'_>,
+    paths: Vec<String>,
+    threads: usize,
+) -> PyResult<Vec<Option<(u64, u32)>>> {
     let p = pool(threads)?;
     Ok(py.detach(|| p.install(|| crate::scan::prim_headers(&paths))))
 }
 
 fn pool(threads: usize) -> PyResult<rayon::ThreadPool> {
-    rayon::ThreadPoolBuilder::new().num_threads(if threads == 0 { 32 } else { threads }).build().map_err(err)
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(if threads == 0 { 32 } else { threads })
+        .build()
+        .map_err(err)
 }
 
 /// wem_labels([(file, offset, size)], threads=0) -> [original Wwise name or ""], one parallel pass over the chunk
 /// headers of the sounds.
 #[pyfunction]
 #[pyo3(signature = (items, threads=0))]
-fn wem_labels(py: Python<'_>, items: Vec<(String, u64, i64)>, threads: usize) -> PyResult<Vec<String>> {
+fn wem_labels(
+    py: Python<'_>,
+    items: Vec<(String, u64, i64)>,
+    threads: usize,
+) -> PyResult<Vec<String>> {
     let p = pool(threads)?;
     Ok(py.detach(|| p.install(|| crate::scan::wem_labels(&items))))
 }
@@ -114,7 +141,11 @@ fn wem_labels(py: Python<'_>, items: Vec<(String, u64, i64)>, threads: usize) ->
 /// meta_refs_flags(paths, threads=0) -> [[(hash, flag)] | None] for each "<path>.meta".
 #[pyfunction]
 #[pyo3(signature = (paths, threads=0))]
-fn meta_refs_flags(py: Python<'_>, paths: Vec<String>, threads: usize) -> PyResult<Vec<Option<Vec<(u64, u8)>>>> {
+fn meta_refs_flags(
+    py: Python<'_>,
+    paths: Vec<String>,
+    threads: usize,
+) -> PyResult<Vec<Option<Vec<(u64, u8)>>>> {
     let p = pool(threads)?;
     Ok(py.detach(|| p.install(|| crate::scan::meta_refs_flags_many(&paths))))
 }
@@ -122,10 +153,17 @@ fn meta_refs_flags(py: Python<'_>, paths: Vec<String>, threads: usize) -> PyResu
 /// read_files(paths, threads=0) -> [bytes | None]: whole files read in parallel.
 #[pyfunction]
 #[pyo3(signature = (paths, threads=0))]
-fn read_files<'py>(py: Python<'py>, paths: Vec<String>, threads: usize) -> PyResult<Vec<Option<Bound<'py, PyBytes>>>> {
+fn read_files<'py>(
+    py: Python<'py>,
+    paths: Vec<String>,
+    threads: usize,
+) -> PyResult<Vec<Option<Bound<'py, PyBytes>>>> {
     let p = pool(threads)?;
     let data = py.detach(|| p.install(|| crate::scan::read_files(&paths)));
-    Ok(data.into_iter().map(|d| d.map(|b| PyBytes::new(py, &b))).collect())
+    Ok(data
+        .into_iter()
+        .map(|d| d.map(|b| PyBytes::new(py, &b)))
+        .collect())
 }
 
 /// mate_slots(data) -> [(slot, meaning | None)]: the texture slots of a material class (see `mate.rs`).
@@ -145,7 +183,8 @@ fn class_schema(py: Python<'_>, data: &[u8]) -> PyResult<Vec<(u32, String, bool)
 /// blueprint_class(data) -> class name of a CBLU.
 #[pyfunction]
 fn blueprint_class(py: Python<'_>, data: &[u8]) -> PyResult<String> {
-    py.detach(|| crate::schema::blueprint_class(data)).map_err(pyo3::exceptions::PyValueError::new_err)
+    py.detach(|| crate::schema::blueprint_class(data))
+        .map_err(pyo3::exceptions::PyValueError::new_err)
 }
 
 /// enum_def(data) -> (name, [(member, value)], former names) of an ENUM.

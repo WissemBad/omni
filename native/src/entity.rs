@@ -7,13 +7,15 @@ use std::collections::HashSet;
 const TYPE_TABLE: u32 = 0x3989BF9F;
 
 fn u32_at(d: &[u8], o: usize) -> Option<u32> {
-    d.get(o..o + 4).map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+    d.get(o..o + 4)
+        .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
 }
 fn i32_at(d: &[u8], o: usize) -> Option<i32> {
     u32_at(d, o).map(|v| v as i32)
 }
 fn u64_at(d: &[u8], o: usize) -> Option<u64> {
-    d.get(o..o + 8).map(|b| u64::from_le_bytes(b.try_into().unwrap()))
+    d.get(o..o + 8)
+        .map(|b| u64::from_le_bytes(b.try_into().unwrap()))
 }
 fn i64_at(d: &[u8], o: usize) -> Option<i64> {
     u64_at(d, o).map(|v| v as i64)
@@ -47,7 +49,9 @@ pub fn parse_bin1(d: &[u8]) -> Result<(&[u8], Vec<String>), String> {
             for _ in 0..cnt {
                 let ln = u32_at(seg, q + 8).ok_or("bad type table")? as usize;
                 q += 12;
-                let s = seg.get(q..q + ln.saturating_sub(1)).ok_or("bad type table")?;
+                let s = seg
+                    .get(q..q + ln.saturating_sub(1))
+                    .ok_or("bad type table")?;
                 types.push(s.iter().map(|&c| c as char).collect());
                 q = (q + ln + 3) & !3;
             }
@@ -58,7 +62,9 @@ pub fn parse_bin1(d: &[u8]) -> Result<(&[u8], Vec<String>), String> {
 }
 
 pub fn zstring(d: &[u8], o: usize) -> String {
-    let (Some(ln), Some(ptr)) = (u32_at(d, o), i64_at(d, o + 8)) else { return String::new() };
+    let (Some(ln), Some(ptr)) = (u32_at(d, o), i64_at(d, o + 8)) else {
+        return String::new();
+    };
     let ln = (ln & 0x3FFF_FFFF) as usize;
     if ptr < 0 || ln == 0 {
         return String::new();
@@ -84,11 +90,18 @@ pub struct ERef {
 
 fn eref(d: &[u8], o: usize) -> Result<ERef, String> {
     let (idx, eid, ext) = (i64_at(d, o), i64_at(d, o + 8), i32_at(d, o + 32));
-    let (Some(mut idx), Some(eid), Some(ext)) = (idx, eid, ext) else { return Err("entity ref out of range".into()) };
+    let (Some(mut idx), Some(eid), Some(ext)) = (idx, eid, ext) else {
+        return Err("entity ref out of range".into());
+    };
     if idx >= 0x8000_0000 {
         idx = -1;
     }
-    Ok(ERef { index: idx, entity_id: eid, exposed: zstring(d, o + 16), external_scene: ext })
+    Ok(ERef {
+        index: idx,
+        entity_id: eid,
+        exposed: zstring(d, o + 16),
+        external_scene: ext,
+    })
 }
 
 #[derive(Clone, Debug)]
@@ -105,7 +118,11 @@ pub enum Value {
 }
 
 fn value(d: &[u8], types: &[String], tidx: i64, ptr: i64, refs: &[u64]) -> (String, Value) {
-    let t = if tidx >= 0 && (tidx as usize) < types.len() { types[tidx as usize].clone() } else { format!("?{tidx}") };
+    let t = if tidx >= 0 && (tidx as usize) < types.len() {
+        types[tidx as usize].clone()
+    } else {
+        format!("?{tidx}")
+    };
     if ptr < 0 {
         return (t, Value::None);
     }
@@ -149,7 +166,9 @@ fn value(d: &[u8], types: &[String], tidx: i64, ptr: i64, refs: &[u64]) -> (Stri
                 Value::Refs(v)
             }
             s if s.starts_with("TArray<") => Value::None,
-            s if s.len() > 1 && s.as_bytes()[0] == b'E' && s.as_bytes()[1].is_ascii_uppercase() => Value::Int(i32_at(d, p)? as i64),
+            s if s.len() > 1 && s.as_bytes()[0] == b'E' && s.as_bytes()[1].is_ascii_uppercase() => {
+                Value::Int(i32_at(d, p)? as i64)
+            }
             _ => Value::None,
         })
     })();
@@ -163,7 +182,9 @@ fn props(d: &[u8], types: &[String], o: usize, refs: &[u64]) -> Result<Vec<RawPr
     let mut out = Vec::new();
     let mut x = b;
     while x < e {
-        let (Some(pid), Some(tidx), Some(ptr)) = (u32_at(d, x), i64_at(d, x + 8), i64_at(d, x + 16)) else {
+        let (Some(pid), Some(tidx), Some(ptr)) =
+            (u32_at(d, x), i64_at(d, x + 8), i64_at(d, x + 16))
+        else {
             return Err("property out of range".into());
         };
         let (t, v) = value(d, types, tidx, ptr, refs);
@@ -196,7 +217,11 @@ pub fn parse_temp(bin: &[u8], refs: &[u64]) -> Result<RawTemplate, String> {
         let t = i32_at(data, o + 0x28).ok_or("sub out of range")?;
         subs.push(RawSub {
             parent: eref(data, o)?,
-            type_ref: if t >= 0 && (t as usize) < refs.len() { refs[t as usize] } else { 0 },
+            type_ref: if t >= 0 && (t as usize) < refs.len() {
+                refs[t as usize]
+            } else {
+                0
+            },
             props: props(data, &types, o + 0x30, refs)?,
             post: props(data, &types, o + 0x48, refs)?,
         });
@@ -207,14 +232,22 @@ pub fn parse_temp(bin: &[u8], refs: &[u64]) -> Result<RawTemplate, String> {
     let mut o = b;
     while o < e {
         let owner = eref(data, o)?;
-        let (Some(pid), Some(tidx), Some(ptr)) = (u32_at(data, o + 40), i64_at(data, o + 48), i64_at(data, o + 56)) else {
+        let (Some(pid), Some(tidx), Some(ptr)) = (
+            u32_at(data, o + 40),
+            i64_at(data, o + 48),
+            i64_at(data, o + 56),
+        ) else {
             return Err("override out of range".into());
         };
         let (t, v) = value(data, &types, tidx, ptr, refs);
         overrides.push((owner, (pid, t, v)));
         o += 64;
     }
-    Ok(RawTemplate { blueprint_index: bp, subs, overrides })
+    Ok(RawTemplate {
+        blueprint_index: bp,
+        subs,
+        overrides,
+    })
 }
 
 pub struct RawBlueprintSub {
@@ -236,10 +269,18 @@ pub fn parse_tblu(bin: &[u8]) -> Result<(i32, Vec<RawBlueprintSub>), String> {
         let mut aliases = Vec::new();
         let mut x = ab;
         while x < ae {
-            aliases.push((zstring(data, x), i64_at(data, x + 16).ok_or("alias out of range")?, zstring(data, x + 24)));
+            aliases.push((
+                zstring(data, x),
+                i64_at(data, x + 16).ok_or("alias out of range")?,
+                zstring(data, x + 24),
+            ));
             x += 40;
         }
-        out.push(RawBlueprintSub { entity_id, name, aliases });
+        out.push(RawBlueprintSub {
+            entity_id,
+            name,
+            aliases,
+        });
         o += 0xB0;
     }
     Ok((root, out))
@@ -261,13 +302,24 @@ pub fn meta_refs(data: &[u8]) -> Option<Vec<u64>> {
 
 /// Rows (prim, template) for templates referencing 1..=max_prims of `prims` (larger ones are level scenes).
 /// `temps`: (template hash, path of the TEMP resource); the `.meta` files are read in parallel.
-pub fn template_index(temps: &[(u64, String)], prims: &HashSet<u64>, max_prims: usize) -> Vec<(u64, u64)> {
+pub fn template_index(
+    temps: &[(u64, String)],
+    prims: &HashSet<u64>,
+    max_prims: usize,
+) -> Vec<(u64, u64)> {
     temps
         .par_iter()
         .flat_map_iter(|(h, p)| {
-            let refs = std::fs::read(format!("{p}.meta")).ok().and_then(|d| meta_refs(&d)).unwrap_or_default();
+            let refs = std::fs::read(format!("{p}.meta"))
+                .ok()
+                .and_then(|d| meta_refs(&d))
+                .unwrap_or_default();
             let pr: Vec<u64> = refs.into_iter().filter(|r| prims.contains(r)).collect();
-            let rows: Vec<(u64, u64)> = if !pr.is_empty() && pr.len() <= max_prims { pr.into_iter().map(|r| (r, *h)).collect() } else { vec![] };
+            let rows: Vec<(u64, u64)> = if !pr.is_empty() && pr.len() <= max_prims {
+                pr.into_iter().map(|r| (r, *h)).collect()
+            } else {
+                vec![]
+            };
             rows.into_iter()
         })
         .collect()

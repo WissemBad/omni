@@ -70,7 +70,9 @@ pub(crate) fn bulk_array<'a>(r: &mut Reader<'a>) -> Result<(usize, usize, &'a [u
     if size < 0 || count < 0 {
         return err("negative bulk array");
     }
-    let n = (size as usize).checked_mul(count as usize).ok_or(Error("bulk array size".into()))?;
+    let n = (size as usize)
+        .checked_mul(count as usize)
+        .ok_or(Error("bulk array size".into()))?;
     Ok((size as usize, count as usize, r.bytes(n)?))
 }
 
@@ -87,12 +89,23 @@ fn half(h: u16) -> f32 {
     let s = if h & 0x8000 != 0 { -1.0 } else { 1.0 };
     let e = ((h >> 10) & 0x1F) as i32;
     let m = (h & 0x3FF) as f32;
-    s * if e == 0 { m * 2f32.powi(-24) } else if e == 31 { f32::INFINITY } else { (1.0 + m / 1024.0) * 2f32.powi(e - 15) }
+    s * if e == 0 {
+        m * 2f32.powi(-24)
+    } else if e == 31 {
+        f32::INFINITY
+    } else {
+        (1.0 + m / 1024.0) * 2f32.powi(e - 15)
+    }
 }
 
 fn packed8(v: u32) -> [f32; 4] {
     let b = v.to_le_bytes();
-    [b[0] as i8 as f32 / 127.0, b[1] as i8 as f32 / 127.0, b[2] as i8 as f32 / 127.0, b[3] as i8 as f32 / 127.0]
+    [
+        b[0] as i8 as f32 / 127.0,
+        b[1] as i8 as f32 / 127.0,
+        b[2] as i8 as f32 / 127.0,
+        b[3] as i8 as f32 / 127.0,
+    ]
 }
 
 /// Position, tangent and UV buffers (FPositionVertexBuffer, FStaticMeshVertexBuffer).
@@ -102,9 +115,19 @@ pub(crate) fn vertex_buffers(r: &mut Reader, lod: &mut Lod) -> Result<()> {
     let nverts = r.i32()?.max(0) as usize;
     let (es, cnt, data) = bulk_array(r)?;
     if es == 12 {
-        lod.positions = data.as_chunks::<4>().0.iter().map(|c| f32::from_le_bytes(*c)).collect();
+        lod.positions = data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| f32::from_le_bytes(*c))
+            .collect();
     } else if es == 24 {
-        lod.positions = data.as_chunks::<8>().0.iter().map(|c| f64::from_le_bytes(*c) as f32).collect();
+        lod.positions = data
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|c| f64::from_le_bytes(*c) as f32)
+            .collect();
     } else if cnt > 0 {
         return err(format!("position element size {es}"));
     }
@@ -135,9 +158,13 @@ pub(crate) fn vertex_buffers(r: &mut Reader, lod: &mut Lod) -> Result<()> {
             let c = |k: usize| i16::from_le_bytes([v[k * 2], v[k * 2 + 1]]) as f32 / 32767.0;
             ([c(0), c(1), c(2), c(3)], [c(4), c(5), c(6), c(7)])
         } else {
-            (packed8(u32::from_le_bytes(v[0..4].try_into().unwrap())), packed8(u32::from_le_bytes(v[4..8].try_into().unwrap())))
+            (
+                packed8(u32::from_le_bytes(v[0..4].try_into().unwrap())),
+                packed8(u32::from_le_bytes(v[4..8].try_into().unwrap())),
+            )
         };
-        lod.tangents.extend_from_slice(&[t[0], t[1], t[2], if n[3] < 0.0 { -1.0 } else { 1.0 }]);
+        lod.tangents
+            .extend_from_slice(&[t[0], t[1], t[2], if n[3] < 0.0 { -1.0 } else { 1.0 }]);
         lod.normals.extend_from_slice(&[n[0], n[1], n[2]]);
     }
     let (_ues, ucnt, udata) = bulk_array(r)?;
@@ -152,11 +179,19 @@ pub(crate) fn vertex_buffers(r: &mut Reader, lod: &mut Lod) -> Result<()> {
         for vi in 0..nv {
             for t in 0..ntex {
                 let o = (vi * ntex + t) * item;
-                let Some(b) = udata.get(o..o + item) else { break };
+                let Some(b) = udata.get(o..o + item) else {
+                    break;
+                };
                 let (u, v) = if full_uv {
-                    (f32::from_le_bytes(b[0..4].try_into().unwrap()), f32::from_le_bytes(b[4..8].try_into().unwrap()))
+                    (
+                        f32::from_le_bytes(b[0..4].try_into().unwrap()),
+                        f32::from_le_bytes(b[4..8].try_into().unwrap()),
+                    )
                 } else {
-                    (half(u16::from_le_bytes([b[0], b[1]])), half(u16::from_le_bytes([b[2], b[3]])))
+                    (
+                        half(u16::from_le_bytes([b[0], b[1]])),
+                        half(u16::from_le_bytes([b[2], b[3]])),
+                    )
                 };
                 lod.uvs[t].push(u);
                 lod.uvs[t].push(v);
@@ -173,7 +208,12 @@ pub(crate) fn color_buffer(r: &mut Reader, lod: &mut Lod) -> Result<()> {
     if n > 0 {
         let (es, cnt, data) = bulk_array(r)?;
         if es == 4 {
-            lod.colors = data.as_chunks::<4>().0.iter().flat_map(|c| [c[2], c[1], c[0], c[3]]).collect();
+            lod.colors = data
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .flat_map(|c| [c[2], c[1], c[0], c[3]])
+                .collect();
         }
         let _ = cnt;
     }
@@ -186,9 +226,17 @@ fn index_buffer(r: &mut Reader, ue5: i32) -> Result<Vec<u32>> {
     let _ = ue5;
     r.u32()?; // bShouldExpandTo32Bit (4.25+)
     Ok(if is32 {
-        data.as_chunks::<4>().0.iter().map(|c| u32::from_le_bytes(*c)).collect()
+        data.as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| u32::from_le_bytes(*c))
+            .collect()
     } else {
-        data.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes([c[0], c[1]]) as u32).collect()
+        data.as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| u16::from_le_bytes([c[0], c[1]]) as u32)
+            .collect()
     })
 }
 
@@ -220,7 +268,13 @@ fn static_buffers(r: &mut Reader, lod: &mut Lod, nsections: usize, ue5: i32) -> 
     Ok(())
 }
 
-fn static_lod(game: &Game, pkg: &Package, pid: u64, r: &mut Reader, want_data: bool) -> Result<Lod> {
+fn static_lod(
+    game: &Game,
+    pkg: &Package,
+    pid: u64,
+    r: &mut Reader,
+    want_data: bool,
+) -> Result<Lod> {
     let ue5 = game.ue5_version;
     let (_g, _cls) = strip(r)?;
     let nsec = r.count(28)?;
@@ -270,7 +324,14 @@ fn static_lod(game: &Game, pkg: &Package, pid: u64, r: &mut Reader, want_data: b
     Ok(lod)
 }
 
-pub fn read_static_mesh(game: &Game, ctx: &Ctx, pkg: &Package, index: usize, class: &str, max_lods: usize) -> Result<Mesh> {
+pub fn read_static_mesh(
+    game: &Game,
+    ctx: &Ctx,
+    pkg: &Package,
+    index: usize,
+    class: &str,
+    max_lods: usize,
+) -> Result<Mesh> {
     let pid = game.package_id_of(&pkg.name).unwrap_or(0);
     let e = &pkg.exports[index];
     let (props, off) = props::read_object(ctx, class, pkg.export_data(index), e.flags & 0x10 != 0)?;
@@ -291,5 +352,10 @@ pub fn read_static_mesh(game: &Game, ctx: &Ctx, pkg: &Package, index: usize, cla
         lods.push(static_lod(game, pkg, pid, &mut r, i < max_lods)?);
     }
     let _ = flags::UNUSED;
-    Ok(Mesh { lods, bones: Vec::new(), materials: Vec::new(), props })
+    Ok(Mesh {
+        lods,
+        bones: Vec::new(),
+        materials: Vec::new(),
+        props,
+    })
 }

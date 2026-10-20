@@ -1,0 +1,26 @@
+# Windows build of the real package: the part of omni that only exists on Windows (native Oodle loader, PyInstaller,
+# Inno Setup, WebView2 shell). Runs on a Windows agent with the local backend (pwsh is the "image": the shell).
+#
+# Agent requirements (docs/release.md): labelled platform=windows/amd64, WOODPECKER_BACKEND_LOCAL_ISOLATED_HOME=false (the
+# toolchains live in the user profile), git, uv, bun, rustup (MSVC toolchain), Inno Setup 6, the GitHub CLI.
+# Secrets: github_packages_token (read:packages, @wissem-industries/ui), and for tags gh_token + omni_release_key (hex).
+labels:
+  platform: windows/amd64
+
+when:
+  - event: [pull_request, tag]
+  - event: push
+    branch: main
+
+steps:
+  - name: package
+    image: pwsh
+    environment:
+      GITHUB_PACKAGES_TOKEN:
+        from_secret: github_packages_token
+      GH_TOKEN:
+        from_secret: gh_token
+      OMNI_RELEASE_KEY_HEX:
+        from_secret: omni_release_key
+    commands:
+      - pwsh -NoProfile -File scripts/ci_windows.ps1

@@ -38,20 +38,30 @@ impl Glb {
     #[pyo3(signature = (frame="facing_z"))]
     fn new(frame: &str) -> PyResult<Self> {
         let f = Frame::parse(frame).ok_or_else(|| err(format!("unknown frame {frame:?}")))?;
-        Ok(Glb { inner: gltf::Glb::new(f) })
+        Ok(Glb {
+            inner: gltf::Glb::new(f),
+        })
     }
 
     /// texture(rgba (h, w, 4) uint8, max_size=0, jpeg=0) -> texture index. ``jpeg`` is a quality (1-100) for opaque
     /// colour maps, 0 keeps PNG; ``max_size`` shrinks the longest side.
     #[pyo3(signature = (rgba, max_size=0, jpeg=0))]
-    fn texture(&mut self, py: Python<'_>, rgba: PyReadonlyArray3<'_, u8>, max_size: usize, jpeg: u8) -> PyResult<usize> {
+    fn texture(
+        &mut self,
+        py: Python<'_>,
+        rgba: PyReadonlyArray3<'_, u8>,
+        max_size: usize,
+        jpeg: u8,
+    ) -> PyResult<usize> {
         let s = rgba.shape();
         if s[2] != 4 {
             return Err(err("expected (h, w, 4) RGBA"));
         }
         let (h, w) = (s[0], s[1]);
         let px = slice_of(&rgba);
-        let (data, mime) = py.detach(|| gltf::encode_image(&px, w, h, max_size, jpeg)).map_err(err)?;
+        let (data, mime) = py
+            .detach(|| gltf::encode_image(&px, w, h, max_size, jpeg))
+            .map_err(err)?;
         self.inner.add_encoded(&data, mime).map_err(err)
     }
 
@@ -60,9 +70,34 @@ impl Glb {
     /// `texture`).
     #[pyo3(signature = (name, base=None, normal=None, metal_rough=None, occlusion=None, alpha="OPAQUE", cutoff=0.5, double_sided=true, metallic=1.0, roughness=1.0, emissive=None))]
     #[allow(clippy::too_many_arguments)]
-    fn material(&mut self, name: &str, base: Option<usize>, normal: Option<usize>, metal_rough: Option<usize>, occlusion: Option<usize>, alpha: &str, cutoff: f64, double_sided: bool, metallic: f64, roughness: f64, emissive: Option<usize>) -> PyResult<usize> {
+    fn material(
+        &mut self,
+        name: &str,
+        base: Option<usize>,
+        normal: Option<usize>,
+        metal_rough: Option<usize>,
+        occlusion: Option<usize>,
+        alpha: &str,
+        cutoff: f64,
+        double_sided: bool,
+        metallic: f64,
+        roughness: f64,
+        emissive: Option<usize>,
+    ) -> PyResult<usize> {
         self.inner
-            .add_material(&MaterialSpec { name: name.into(), base, normal, metal_rough, occlusion, emissive, alpha: alpha.into(), cutoff, double_sided, metallic, roughness })
+            .add_material(&MaterialSpec {
+                name: name.into(),
+                base,
+                normal,
+                metal_rough,
+                occlusion,
+                emissive,
+                alpha: alpha.into(),
+                cutoff,
+                double_sided,
+                metallic,
+                roughness,
+            })
             .map_err(err)
     }
 
@@ -76,8 +111,16 @@ impl Glb {
         for p in &primitives {
             let get = |k: &str| array::<f32>(p, k);
             let need = |k: &str| get(k)?.ok_or_else(|| err(format!("primitive without {k}")));
-            owned.push([Some(need("positions")?), Some(need("normals")?), Some(need("uvs")?), get("tangents")?, get("weights")?]);
-            let i = p.get_item("indices")?.ok_or_else(|| err("primitive without indices"))?;
+            owned.push([
+                Some(need("positions")?),
+                Some(need("normals")?),
+                Some(need("uvs")?),
+                get("tangents")?,
+                get("weights")?,
+            ]);
+            let i = p
+                .get_item("indices")?
+                .ok_or_else(|| err("primitive without indices"))?;
             let i: numpy::PyReadonlyArray1<'_, u32> = i.extract()?;
             idx.push(slice_of(&i).into_owned());
             joints.push(match p.get_item("joints")? {
@@ -108,7 +151,12 @@ impl Glb {
     }
 
     /// skeleton(names, parents, world (n,4,4) float64) -> skin index; joint nodes are added to the scene.
-    fn skeleton(&mut self, names: Vec<String>, parents: Vec<i64>, world: PyReadonlyArray3<'_, f64>) -> PyResult<usize> {
+    fn skeleton(
+        &mut self,
+        names: Vec<String>,
+        parents: Vec<i64>,
+        world: PyReadonlyArray3<'_, f64>,
+    ) -> PyResult<usize> {
         if world.shape()[1..] != [4, 4] {
             return Err(err("world must be (n, 4, 4)"));
         }

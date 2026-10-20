@@ -57,7 +57,11 @@ fn at(base: usize, rel: i32) -> R<usize> {
 }
 fn cstr(d: &[u8], o: usize) -> R<String> {
     let s = d.get(o..).ok_or("string past the end")?;
-    let end = s.iter().take(256).position(|&c| c == 0).unwrap_or(s.len().min(256));
+    let end = s
+        .iter()
+        .take(256)
+        .position(|&c| c == 0)
+        .unwrap_or(s.len().min(256));
     Ok(s[..end].iter().map(|&c| c as char).collect())
 }
 fn count(d: &[u8], o: usize, max: usize) -> R<usize> {
@@ -125,7 +129,12 @@ fn bones(d: &[u8]) -> R<Vec<Bone>> {
             name: cstr(d, at(o, i32_at(d, o)?)?)?,
             parent: i32_at(d, o + 4)?,
             pos: v3_at(d, o + 32)?,
-            quat: [f32_at(d, o + 44)?, f32_at(d, o + 48)?, f32_at(d, o + 52)?, f32_at(d, o + 56)?],
+            quat: [
+                f32_at(d, o + 44)?,
+                f32_at(d, o + 48)?,
+                f32_at(d, o + 52)?,
+                f32_at(d, o + 56)?,
+            ],
             rot: v3_at(d, o + 60)?,
             posscale: v3_at(d, o + 72)?,
             rotscale: v3_at(d, o + 84)?,
@@ -145,7 +154,11 @@ fn desc_off(d: &[u8], i: usize) -> R<usize> {
 
 pub fn parse(d: &[u8]) -> R<Info> {
     header(d)?;
-    let mut info = Info { name: cstr(d, 12)?, bones: bones(d)?, ..Default::default() };
+    let mut info = Info {
+        name: cstr(d, 12)?,
+        bones: bones(d)?,
+        ..Default::default()
+    };
     let nanim = count(d, 180, 1 << 20)?;
     info.anims = nanim;
     let nseq = count(d, 188, 1 << 20)?;
@@ -156,9 +169,21 @@ pub fn parse(d: &[u8]) -> R<Info> {
         let ai = at(o, i32_at(d, o + 60)?)?;
         let (gx, gy) = (i32_at(d, o + 68)?.max(1), i32_at(d, o + 72)?.max(1));
         // the central blend: a walk cycle's blends span left to right, the middle one runs straight
-        let blend = if blends > 0 { ((gy as i64 / 2) * gx as i64 + gx as i64 / 2).clamp(0, blends as i64 - 1) as i32 } else { 0 };
-        let anim = if blends > 0 { i16_at(d, ai + 2 * blend as usize).map(|v| v as i32).unwrap_or(-1) } else { -1 };
-        let blend_anims: Vec<i32> = (0..blends.clamp(0, 64) as usize).filter_map(|k| i16_at(d, ai + 2 * k).ok().map(|v| v as i32)).collect();
+        let blend = if blends > 0 {
+            ((gy as i64 / 2) * gx as i64 + gx as i64 / 2).clamp(0, blends as i64 - 1) as i32
+        } else {
+            0
+        };
+        let anim = if blends > 0 {
+            i16_at(d, ai + 2 * blend as usize)
+                .map(|v| v as i32)
+                .unwrap_or(-1)
+        } else {
+            -1
+        };
+        let blend_anims: Vec<i32> = (0..blends.clamp(0, 64) as usize)
+            .filter_map(|k| i16_at(d, ai + 2 * k).ok().map(|v| v as i32))
+            .collect();
         let (fps, frames, anim_flags) = if anim >= 0 && (anim as usize) < nanim {
             let a = desc_off(d, anim as usize)?;
             if i32_at(d, a + 52)? > 0 || i32_at(d, a + 80)? != 0 {
@@ -202,7 +227,11 @@ pub struct Sampled {
 }
 
 fn half(h: u16) -> f32 {
-    let (s, e, m) = ((h >> 15) as u32, ((h >> 10) & 0x1F) as u32, (h & 0x3FF) as u32);
+    let (s, e, m) = (
+        (h >> 15) as u32,
+        ((h >> 10) & 0x1F) as u32,
+        (h & 0x3FF) as u32,
+    );
     let bits = if e == 0 {
         if m == 0 {
             s << 31
@@ -229,13 +258,24 @@ fn angle_quat(a: [f32; 3]) -> [f32; 4] {
     let (sr, cr) = (a[0] * 0.5).sin_cos();
     let (sr_cp, cr_sp) = (sr * cp, cr * sp);
     let (cr_cp, sr_sp) = (cr * cp, sr * sp);
-    [sr_cp * cy - cr_sp * sy, cr_sp * cy + sr_cp * sy, cr_cp * sy - sr_sp * cy, cr_cp * cy + sr_sp * sy]
+    [
+        sr_cp * cy - cr_sp * sy,
+        cr_sp * cy + sr_cp * sy,
+        cr_cp * sy - sr_sp * cy,
+        cr_cp * cy + sr_sp * sy,
+    ]
 }
 
 fn quat48(d: &[u8], o: usize) -> R<[f32; 4]> {
     let (x, y, z) = (u16_at(d, o)?, u16_at(d, o + 2)?, u16_at(d, o + 4)?);
-    let q = [(x as i32 - 32768) as f32 / 32768.0, (y as i32 - 32768) as f32 / 32768.0, ((z & 0x7FFF) as i32 - 16384) as f32 / 16384.0];
-    let w = (1.0 - q[0] * q[0] - q[1] * q[1] - q[2] * q[2]).max(0.0).sqrt();
+    let q = [
+        (x as i32 - 32768) as f32 / 32768.0,
+        (y as i32 - 32768) as f32 / 32768.0,
+        ((z & 0x7FFF) as i32 - 16384) as f32 / 16384.0,
+    ];
+    let w = (1.0 - q[0] * q[0] - q[1] * q[1] - q[2] * q[2])
+        .max(0.0)
+        .sqrt();
     Ok([q[0], q[1], q[2], if z & 0x8000 != 0 { -w } else { w }])
 }
 
@@ -243,7 +283,9 @@ fn quat64(d: &[u8], o: usize) -> R<[f32; 4]> {
     let v = u64::from_le_bytes(rd(d, o)?);
     let f = |s: u32| (((v >> s) & 0x1F_FFFF) as i64 - 1_048_576) as f32 / 1_048_576.5;
     let q = [f(0), f(21), f(42)];
-    let w = (1.0 - q[0] * q[0] - q[1] * q[1] - q[2] * q[2]).max(0.0).sqrt();
+    let w = (1.0 - q[0] * q[0] - q[1] * q[1] - q[2] * q[2])
+        .max(0.0)
+        .sqrt();
     Ok([q[0], q[1], q[2], if v >> 63 != 0 { -w } else { w }])
 }
 
@@ -253,7 +295,11 @@ fn rle(d: &[u8], mut p: usize, frame: i32, scale: f32) -> R<f32> {
     loop {
         let (valid, total) = (u8_at(d, p)? as i32, u8_at(d, p + 1)? as i32);
         if total > k {
-            let idx = if valid > k { 2 * (k as usize + 1) } else { 2 * valid as usize };
+            let idx = if valid > k {
+                2 * (k as usize + 1)
+            } else {
+                2 * valid as usize
+            };
             return Ok(i16_at(d, p + idx)? as f32 * scale);
         }
         k -= total;
@@ -273,7 +319,11 @@ struct Channel {
 fn chain(buf: &[u8], mut p: usize, nbones: usize) -> R<Vec<Option<Channel>>> {
     let mut out: Vec<Option<Channel>> = (0..nbones).map(|_| None).collect();
     for _ in 0..nbones * 2 + 4 {
-        let (bone, flags, next) = (u8_at(buf, p)? as usize, u8_at(buf, p + 1)?, i16_at(buf, p + 2)?);
+        let (bone, flags, next) = (
+            u8_at(buf, p)? as usize,
+            u8_at(buf, p + 1)?,
+            i16_at(buf, p + 2)?,
+        );
         if bone < nbones {
             out[bone] = Some(Channel { flags, at: p });
         }
@@ -292,14 +342,23 @@ pub fn sample(d: &[u8], ani: Option<&[u8]>, anim: usize) -> R<Sampled> {
     let a = desc_off(d, anim)?;
     let frames = i32_at(d, a + 16)?;
     if frames < 1 || frames as usize > MAX_FRAMES || bs.len() * frames as usize * 7 > MAX_FLOATS {
-        return Err(format!("implausible animation size ({frames} frames, {} bones)", bs.len()));
+        return Err(format!(
+            "implausible animation size ({frames} frames, {} bones)",
+            bs.len()
+        ));
     }
     let frames = frames as usize;
     let (fps, flags) = (f32_at(d, a + 8)?, i32_at(d, a + 12)?);
     let delta_anim = flags & ANIM_DELTA != 0;
     let nb = bs.len();
     let mut data = vec![0f32; frames * nb * 7];
-    let rest = |b: &Bone| -> ([f32; 3], [f32; 4]) { if delta_anim { ([0.0; 3], [0.0, 0.0, 0.0, 1.0]) } else { (b.pos, b.quat) } };
+    let rest = |b: &Bone| -> ([f32; 3], [f32; 4]) {
+        if delta_anim {
+            ([0.0; 3], [0.0, 0.0, 0.0, 1.0])
+        } else {
+            (b.pos, b.quat)
+        }
+    };
     if flags & (ANIM_ALLZEROS | ANIM_FRAMEANIM) != 0 {
         for f in 0..frames {
             for (i, b) in bs.iter().enumerate() {
@@ -308,7 +367,13 @@ pub fn sample(d: &[u8], ani: Option<&[u8]>, anim: usize) -> R<Sampled> {
                 data[(f * nb + i) * 7 + 3..][..4].copy_from_slice(&q);
             }
         }
-        return Ok(Sampled { frames, bones: nb, fps, flags, data });
+        return Ok(Sampled {
+            frames,
+            bones: nb,
+            fps,
+            flags,
+            data,
+        });
     }
     let (block, index) = (i32_at(d, a + 52)?, i32_at(d, a + 56)?);
     let (section_index, section_frames) = (i32_at(d, a + 80)?, i32_at(d, a + 84)?);
@@ -326,14 +391,22 @@ pub fn sample(d: &[u8], ani: Option<&[u8]>, anim: usize) -> R<Sampled> {
             return Err(format!("animation block {block} of {nblocks}"));
         }
         let ani = ani.ok_or("this animation lives in the .ani file, which is missing")?;
-        Ok(Some((ani, at(0, i32_at(d, blocks_at + block as usize * 8)?)? + index.max(0) as usize)))
+        Ok(Some((
+            ani,
+            at(0, i32_at(d, blocks_at + block as usize * 8)?)? + index.max(0) as usize,
+        )))
     };
     // chains per section (one entry when the animation is not split in sections), built when first needed
-    let mut chains: std::collections::HashMap<usize, (Vec<Option<Channel>>, &[u8])> = std::collections::HashMap::new();
+    let mut chains: std::collections::HashMap<usize, (Vec<Option<Channel>>, &[u8])> =
+        std::collections::HashMap::new();
     for f in 0..frames {
         let (key, frame) = if section_frames > 0 {
             let (sf, nf) = (section_frames, frames as i32);
-            if nf > sf && f as i32 == nf - 1 { ((nf / sf) as usize + 1, 0) } else { ((f as i32 / sf) as usize, f as i32 % sf) }
+            if nf > sf && f as i32 == nf - 1 {
+                ((nf / sf) as usize + 1, 0)
+            } else {
+                ((f as i32 / sf) as usize, f as i32 % sf)
+            }
         } else {
             (0, f as i32)
         };
@@ -357,12 +430,28 @@ pub fn sample(d: &[u8], ani: Option<&[u8]>, anim: usize) -> R<Sampled> {
             data[(f * nb + i) * 7 + 3..][..4].copy_from_slice(&quat);
         }
     }
-    Ok(Sampled { frames, bones: nb, fps, flags, data })
+    Ok(Sampled {
+        frames,
+        bones: nb,
+        fps,
+        flags,
+        data,
+    })
 }
 
-fn channel_value(buf: &[u8], c: Option<&Channel>, b: &Bone, delta_anim: bool, frame: i32) -> R<([f32; 3], [f32; 4])> {
+fn channel_value(
+    buf: &[u8],
+    c: Option<&Channel>,
+    b: &Bone,
+    delta_anim: bool,
+    frame: i32,
+) -> R<([f32; 3], [f32; 4])> {
     let Some(c) = c else {
-        return Ok(if delta_anim { ([0.0; 3], [0.0, 0.0, 0.0, 1.0]) } else { (b.pos, b.quat) });
+        return Ok(if delta_anim {
+            ([0.0; 3], [0.0, 0.0, 0.0, 1.0])
+        } else {
+            (b.pos, b.quat)
+        });
     };
     let delta = c.flags & DELTA != 0 || delta_anim;
     let base = c.at + 4;
@@ -374,7 +463,11 @@ fn channel_value(buf: &[u8], c: Option<&Channel>, b: &Bone, delta_anim: bool, fr
         let mut ang = [0f32; 3];
         for (j, a) in ang.iter_mut().enumerate() {
             let off = i16_at(buf, base + 2 * j)?;
-            let v = if off == 0 { 0.0 } else { rle(buf, at(base, off as i32)?, frame, b.rotscale[j])? };
+            let v = if off == 0 {
+                0.0
+            } else {
+                rle(buf, at(base, off as i32)?, frame, b.rotscale[j])?
+            };
             *a = if delta { v } else { v + b.rot[j] };
         }
         angle_quat(ang)
@@ -385,14 +478,24 @@ fn channel_value(buf: &[u8], c: Option<&Channel>, b: &Bone, delta_anim: bool, fr
     };
     // the SDK finds the position data after the raw rotation (raw positions) or after the rotation value pointers
     let pos = if c.flags & RAWPOS != 0 {
-        let o = base + if c.flags & RAWROT != 0 { 6 } else { 0 } + if c.flags & RAWROT2 != 0 { 8 } else { 0 };
-        [half(u16_at(buf, o)?), half(u16_at(buf, o + 2)?), half(u16_at(buf, o + 4)?)]
+        let o = base
+            + if c.flags & RAWROT != 0 { 6 } else { 0 }
+            + if c.flags & RAWROT2 != 0 { 8 } else { 0 };
+        [
+            half(u16_at(buf, o)?),
+            half(u16_at(buf, o + 2)?),
+            half(u16_at(buf, o + 4)?),
+        ]
     } else if c.flags & ANIMPOS != 0 {
         let ptr = base + if c.flags & ANIMROT != 0 { 6 } else { 0 };
         let mut p = [0f32; 3];
         for (j, v) in p.iter_mut().enumerate() {
             let off = i16_at(buf, ptr + 2 * j)?;
-            let x = if off == 0 { 0.0 } else { rle(buf, at(ptr, off as i32)?, frame, b.posscale[j])? };
+            let x = if off == 0 {
+                0.0
+            } else {
+                rle(buf, at(ptr, off as i32)?, frame, b.posscale[j])?
+            };
             *v = if delta { x } else { x + b.pos[j] };
         }
         p
@@ -422,7 +525,8 @@ pub(crate) mod tests {
         put(&mut d, 0, b"IDST");
         put(&mut d, 4, &48i32.to_le_bytes());
         put(&mut d, 12, b"test.mdl\0");
-        let (bones_at, anim_at, seq_at, data_at, strings) = (0x200usize, 0x400usize, 0x500usize, 0x600usize, 0x800usize);
+        let (bones_at, anim_at, seq_at, data_at, strings) =
+            (0x200usize, 0x400usize, 0x500usize, 0x600usize, 0x800usize);
         put(&mut d, 156, &2i32.to_le_bytes());
         put(&mut d, 160, &(bones_at as i32).to_le_bytes());
         put(&mut d, 180, &1i32.to_le_bytes());
@@ -430,7 +534,13 @@ pub(crate) mod tests {
         put(&mut d, 188, &1i32.to_le_bytes());
         put(&mut d, 192, &(seq_at as i32).to_le_bytes());
         put(&mut d, strings, b"root\0child\0idle\0");
-        for (i, (name, parent, pos)) in [(strings, -1i32, [1.0f32, 2.0, 3.0]), (strings + 5, 0, [0.0, 0.0, 10.0])].into_iter().enumerate() {
+        for (i, (name, parent, pos)) in [
+            (strings, -1i32, [1.0f32, 2.0, 3.0]),
+            (strings + 5, 0, [0.0, 0.0, 10.0]),
+        ]
+        .into_iter()
+        .enumerate()
+        {
             let o = bones_at + i * 216;
             put(&mut d, o, &((name - o) as i32).to_le_bytes());
             put(&mut d, o + 4, &parent.to_le_bytes());
@@ -446,13 +556,17 @@ pub(crate) mod tests {
         // animation description: 4 frames at 30 fps, data in this file (block 0) at data_at
         put(&mut d, anim_at + 8, &30f32.to_le_bytes());
         put(&mut d, anim_at + 16, &4i32.to_le_bytes());
-        put(&mut d, anim_at + 56, &((data_at - anim_at) as i32).to_le_bytes());
+        put(
+            &mut d,
+            anim_at + 56,
+            &((data_at - anim_at) as i32).to_le_bytes(),
+        );
         // record 0: bone 0, raw rotation and raw position, the next record 16 bytes further
         put(&mut d, data_at, &[0, RAWROT | RAWPOS]);
         put(&mut d, data_at + 2, &16i16.to_le_bytes());
         put(&mut d, data_at + 4, &[0, 0x80, 0, 0x80, 0, 0x40]); // x = y = z = 0 (w comes out as 1)
         put(&mut d, data_at + 10, &[0x00, 0x3C, 0x00, 0x40, 0x00, 0x42]); // halves 1.0, 2.0, 3.0
-        // record 1: bone 1, run-length rotation, last record
+                                                                          // record 1: bone 1, run-length rotation, last record
         let r1 = data_at + 16;
         put(&mut d, r1, &[1, ANIMROT]);
         put(&mut d, r1 + 4, &0i16.to_le_bytes());
@@ -464,7 +578,11 @@ pub(crate) mod tests {
             put(&mut d, z + 2 + 2 * k, &v.to_le_bytes());
         }
         // sequence "idle": one blend, animation 0, looping
-        put(&mut d, seq_at + 4, &((strings + 11 - seq_at) as i32).to_le_bytes());
+        put(
+            &mut d,
+            seq_at + 4,
+            &((strings + 11 - seq_at) as i32).to_le_bytes(),
+        );
         put(&mut d, seq_at + 12, &1i32.to_le_bytes());
         put(&mut d, seq_at + 56, &1i32.to_le_bytes());
         put(&mut d, seq_at + 60, &0x40i32.to_le_bytes());
@@ -478,8 +596,23 @@ pub(crate) mod tests {
     fn reads_bones_sequences_and_frames() {
         let d = model();
         let info = parse(&d).unwrap();
-        assert_eq!((info.bones.len(), info.bones[1].parent, info.bones[1].name.as_str()), (2, 0, "child"));
-        assert_eq!((info.seqs[0].name.as_str(), info.seqs[0].frames, info.seqs[0].anim, info.seqs[0].flags & 1), ("idle", 4, 0, 1));
+        assert_eq!(
+            (
+                info.bones.len(),
+                info.bones[1].parent,
+                info.bones[1].name.as_str()
+            ),
+            (2, 0, "child")
+        );
+        assert_eq!(
+            (
+                info.seqs[0].name.as_str(),
+                info.seqs[0].frames,
+                info.seqs[0].anim,
+                info.seqs[0].flags & 1
+            ),
+            ("idle", 4, 0, 1)
+        );
         let s = sample(&d, None, 0).unwrap();
         assert_eq!((s.frames, s.bones, s.fps), (4, 2, 30.0));
         let at = |f: usize, b: usize| s.data[(f * 2 + b) * 7..][..7].to_vec();
@@ -488,7 +621,10 @@ pub(crate) mod tests {
         // child: Z angle = 0.1 * value on top of the (zero) rest rotation, position at rest
         assert_eq!(&at(3, 1)[..3], &[0.0, 0.0, 10.0]);
         let ang = 1.5f32;
-        assert!((at(3, 1)[5] - (ang * 0.5).sin()).abs() < 1e-4 && (at(3, 1)[6] - (ang * 0.5).cos()).abs() < 1e-4);
+        assert!(
+            (at(3, 1)[5] - (ang * 0.5).sin()).abs() < 1e-4
+                && (at(3, 1)[6] - (ang * 0.5).cos()).abs() < 1e-4
+        );
         assert!(at(0, 1)[5].abs() < 1e-6);
     }
 

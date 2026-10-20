@@ -51,7 +51,10 @@ pub fn read_name_batch(r: &mut Reader) -> Result<Vec<String>> {
         let len = (h & 0x7FFF) as usize;
         if h & 0x8000 != 0 {
             let b = r.bytes(len * 2)?;
-            let w: Vec<u16> = b.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+            let w: Vec<u16> = b
+                .chunks_exact(2)
+                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                .collect();
             names.push(String::from_utf16_lossy(&w));
         } else {
             names.push(String::from_utf8_lossy(r.bytes(len)?).into_owned());
@@ -61,7 +64,10 @@ pub fn read_name_batch(r: &mut Reader) -> Result<Vec<String>> {
 }
 
 pub fn mapped_name(names: &[String], index: u32, number: u32) -> String {
-    let base = names.get((index & 0x3FFF_FFFF) as usize).map(|s| s.as_str()).unwrap_or("None");
+    let base = names
+        .get((index & 0x3FFF_FFFF) as usize)
+        .map(|s| s.as_str())
+        .unwrap_or("None");
     if number == 0 {
         base.to_string()
     } else {
@@ -161,7 +167,13 @@ impl Package {
             let size = r.i64()?;
             let n = r.check_count(size / 32, 32)?;
             bulk = r.n_of(n, 32, |r| {
-                let e = BulkEntry { offset: r.i64()?, dup_offset: r.i64()?, size: r.i64()?, flags: r.u32()?, cooked_index: r.u8()? };
+                let e = BulkEntry {
+                    offset: r.i64()?,
+                    dup_offset: r.i64()?,
+                    size: r.i64()?,
+                    flags: r.u32()?,
+                    cooked_index: r.u8()?,
+                };
                 r.skip(3)?;
                 Ok(e)
             })?;
@@ -172,9 +184,15 @@ impl Package {
             }
             Ok(o as usize)
         };
-        let (hashes_off, import_off, export_off, bundle_off) = (check(hashes_off)?, check(import_off)?, check(export_off)?, check(bundle_off)?);
+        let (hashes_off, import_off, export_off, bundle_off) = (
+            check(hashes_off)?,
+            check(import_off)?,
+            check(export_off)?,
+            check(bundle_off)?,
+        );
         let cell_import_off = check(cell_import_off)?;
-        if !(hashes_off <= import_off && import_off <= export_off && export_off <= cell_import_off) {
+        if !(hashes_off <= import_off && import_off <= export_off && export_off <= cell_import_off)
+        {
             return err("package header offsets out of order");
         }
         let mut r = Reader::at(&data, hashes_off);
@@ -195,11 +213,31 @@ impl Package {
             let public_hash = r.u64()?;
             let flags = r.u32()?;
             r.skip(4)?;
-            Ok(Export { name: mapped_name(&names, ni, nn), outer, class, super_index, template, public_hash, flags, serial_offset, serial_size, start: 0, end: 0 })
+            Ok(Export {
+                name: mapped_name(&names, ni, nn),
+                outer,
+                class,
+                super_index,
+                template,
+                public_hash,
+                flags,
+                serial_offset,
+                serial_size,
+                start: 0,
+                end: 0,
+            })
         })?;
-        let bundle_end = if dep_headers_off > 0 { check(dep_headers_off)? } else if graph_off > 0 { check(graph_off)? } else { bundle_off + n_exports * 16 };
+        let bundle_end = if dep_headers_off > 0 {
+            check(dep_headers_off)?
+        } else if graph_off > 0 {
+            check(graph_off)?
+        } else {
+            bundle_off + n_exports * 16
+        };
         let mut r = Reader::at(&data, bundle_off);
-        let entries = r.n_of(bundle_end.saturating_sub(bundle_off) / 8, 8, |r| Ok((r.u32()?, r.u32()?)))?;
+        let entries = r.n_of(bundle_end.saturating_sub(bundle_off) / 8, 8, |r| {
+            Ok((r.u32()?, r.u32()?))
+        })?;
         let mut exports_end = header_size;
         if header_version < 3 {
             let mut cur = header_size;
@@ -207,8 +245,12 @@ impl Package {
                 if *cmd != 1 {
                     continue;
                 }
-                let e = exports.get_mut(*idx as usize).ok_or(Error("export bundle names a missing export".into()))?;
-                let end = cur.checked_add(e.serial_size as usize).ok_or(Error("export size".into()))?;
+                let e = exports
+                    .get_mut(*idx as usize)
+                    .ok_or(Error("export bundle names a missing export".into()))?;
+                let end = cur
+                    .checked_add(e.serial_size as usize)
+                    .ok_or(Error("export size".into()))?;
                 if end > data.len() {
                     return err(format!("export '{}' outside the package", e.name));
                 }
@@ -219,8 +261,12 @@ impl Package {
             exports_end = cur;
         } else {
             for e in exports.iter_mut() {
-                let start = header_size.checked_add(e.serial_offset as usize).ok_or(Error("export offset".into()))?;
-                let end = start.checked_add(e.serial_size as usize).ok_or(Error("export size".into()))?;
+                let start = header_size
+                    .checked_add(e.serial_offset as usize)
+                    .ok_or(Error("export offset".into()))?;
+                let end = start
+                    .checked_add(e.serial_size as usize)
+                    .ok_or(Error("export size".into()))?;
                 if end > data.len() {
                     return err(format!("export '{}' outside the package", e.name));
                 }
@@ -235,7 +281,11 @@ impl Package {
             let base = read_name_batch(&mut r)?;
             for b in base {
                 let num = r.i32().unwrap_or(0);
-                imported_package_names.push(if num > 0 { format!("{b}_{}", num - 1) } else { b });
+                imported_package_names.push(if num > 0 {
+                    format!("{b}_{}", num - 1)
+                } else {
+                    b
+                });
             }
         }
         let name = mapped_name(&names, name_idx, name_num);

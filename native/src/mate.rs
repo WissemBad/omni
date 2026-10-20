@@ -12,7 +12,9 @@ pub fn slots(d: &[u8]) -> Vec<(String, Option<String>)> {
     let mut names: Vec<String> = Vec::new();
     let mut i = 0;
     while i < d.len() {
-        let starts = d.len() - i > 4 && &d[i..i + 3] == b"map" && (i == 0 || !(0x20..0x7F).contains(&d[i - 1]));
+        let starts = d.len() - i > 4
+            && &d[i..i + 3] == b"map"
+            && (i == 0 || !(0x20..0x7F).contains(&d[i - 1]));
         if starts {
             let end = d[i..].iter().take(200).position(|&c| c == 0);
             if let Some(e) = end {
@@ -37,7 +39,10 @@ pub fn slots(d: &[u8]) -> Vec<(String, Option<String>)> {
     let mut out = Vec::new();
     let mut k = 0;
     while k < names.len() {
-        if generic(&names[k]) && k + 1 < names.len() && !names[k + 1].to_ascii_lowercase().starts_with("maptexture") {
+        if generic(&names[k])
+            && k + 1 < names.len()
+            && !names[k + 1].to_ascii_lowercase().starts_with("maptexture")
+        {
             out.push((names[k].clone(), Some(names[k + 1].clone())));
             k += 2;
         } else {
@@ -55,7 +60,17 @@ mod tests {
     #[test]
     fn pairs_generic_slots_with_their_meaning() {
         let mut d = vec![1u8, 2, 3];
-        for s in ["mapTexture2D_01", "mapDiffuse", "ConstantVector1D_01_Value", "mapTexture2D_04", "mapEmissive", "mapTexture2D_02", "mapTexture2DNormal_01", "mapNormal", "mapTex_Basecolor"] {
+        for s in [
+            "mapTexture2D_01",
+            "mapDiffuse",
+            "ConstantVector1D_01_Value",
+            "mapTexture2D_04",
+            "mapEmissive",
+            "mapTexture2D_02",
+            "mapTexture2DNormal_01",
+            "mapNormal",
+            "mapTex_Basecolor",
+        ] {
             d.extend(s.as_bytes());
             d.push(0);
             d.push(0);
@@ -65,7 +80,10 @@ mod tests {
         assert_eq!(s[0], ("mapTexture2D_01".into(), Some("mapDiffuse".into())));
         assert_eq!(s[1], ("mapTexture2D_04".into(), Some("mapEmissive".into())));
         assert_eq!(s[2], ("mapTexture2D_02".into(), None));
-        assert_eq!(s[3], ("mapTexture2DNormal_01".into(), Some("mapNormal".into())));
+        assert_eq!(
+            s[3],
+            ("mapTexture2DNormal_01".into(), Some("mapNormal".into()))
+        );
         assert_eq!(s[4], ("mapTex_Basecolor".into(), None));
         assert_eq!(s.len(), 5);
     }

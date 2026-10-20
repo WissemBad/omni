@@ -24,20 +24,40 @@ pub struct Eta {
 impl Eta {
     #[new]
     #[pyo3(signature = (total, weights=None, workers=0, t=None))]
-    fn new(total: usize, weights: Option<HashMap<String, f64>>, workers: usize, t: Option<f64>) -> Self {
-        Eta { inner: Mutex::new(eta::Eta::new(total, weights.unwrap_or_default(), workers, t.unwrap_or_else(clock))) }
+    fn new(
+        total: usize,
+        weights: Option<HashMap<String, f64>>,
+        workers: usize,
+        t: Option<f64>,
+    ) -> Self {
+        Eta {
+            inner: Mutex::new(eta::Eta::new(
+                total,
+                weights.unwrap_or_default(),
+                workers,
+                t.unwrap_or_else(clock),
+            )),
+        }
     }
 
     #[pyo3(signature = (key=None, seconds=None, weight=None, t=None))]
     fn done(&self, key: Option<String>, seconds: Option<f64>, weight: Option<f64>, t: Option<f64>) {
         let now = t.unwrap_or_else(clock);
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).done(key.as_deref(), seconds, weight, now);
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).done(
+            key.as_deref(),
+            seconds,
+            weight,
+            now,
+        );
     }
 
     #[pyo3(signature = (t=None))]
     fn estimate(&self, t: Option<f64>) -> Option<f64> {
         let now = t.unwrap_or_else(clock);
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).estimate(now)
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .estimate(now)
     }
 }
 
@@ -51,19 +71,27 @@ pub struct Rate {
 impl Rate {
     #[new]
     fn new() -> Self {
-        Rate { inner: Mutex::new(eta::Rate::default()) }
+        Rate {
+            inner: Mutex::new(eta::Rate::default()),
+        }
     }
 
     #[pyo3(signature = (done, total=None, t=None))]
     fn update(&self, done: f64, total: Option<f64>, t: Option<f64>) {
         let now = t.unwrap_or_else(clock);
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).update(done, total, now);
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .update(done, total, now);
     }
 
     #[pyo3(signature = (t=None))]
     fn estimate(&self, t: Option<f64>) -> Option<f64> {
         let now = t.unwrap_or_else(clock);
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).estimate(now)
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .estimate(now)
     }
 }
 

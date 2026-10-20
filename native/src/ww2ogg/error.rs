@@ -21,9 +21,15 @@ impl std::fmt::Display for WemError {
             WemError::FileOpen { filename } => write!(f, "Error opening {filename}"),
             WemError::Parse { message } => write!(f, "Parse error: {message}"),
             WemError::SizeMismatch { expected, actual } => {
-                write!(f, "Parse error: expected {expected} bytes, read {actual} - likely wrong codebook")
+                write!(
+                    f,
+                    "Parse error: expected {expected} bytes, read {actual} - likely wrong codebook"
+                )
             }
-            WemError::InvalidCodebookId { id } => write!(f, "Parse error: invalid codebook id {id}, try --inline-codebooks"),
+            WemError::InvalidCodebookId { id } => write!(
+                f,
+                "Parse error: invalid codebook id {id}, try --inline-codebooks"
+            ),
             WemError::Codebook { message } => write!(f, "{message}"),
             WemError::Io(e) => write!(f, "I/O error: {e}"),
             WemError::EndOfStream { message } => write!(f, "Unexpected end of stream: {message}"),
