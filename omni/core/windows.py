@@ -89,7 +89,7 @@ def reveal(path: Path) -> None:
     if path.is_file():
         subprocess.Popen(["explorer", "/select,", str(path)])
     else:
-        os.startfile(str(path))                           # noqa: S606 - Windows only
+        os.startfile(str(path))
 
 
 def copy_image(path: Path) -> bool:

@@ -66,7 +66,11 @@ impl<'a> Reader<'a> {
     #[inline]
     pub fn bytes(&mut self, n: usize) -> Result<&'a [u8]> {
         if n > self.left() {
-            return err(format!("truncated data: need {n} bytes at {}, {} left", self.pos, self.left()));
+            return err(format!(
+                "truncated data: need {n} bytes at {}, {} left",
+                self.pos,
+                self.left()
+            ));
         }
         let s = &self.data[self.pos..self.pos + n];
         self.pos += n;
@@ -99,7 +103,10 @@ impl<'a> Reader<'a> {
         }
         let n = n as usize;
         if n.saturating_mul(elem.max(1)) > self.left() {
-            return err(format!("count {n} x {elem} bytes larger than the data at {}", self.pos));
+            return err(format!(
+                "count {n} x {elem} bytes larger than the data at {}",
+                self.pos
+            ));
         }
         Ok(n)
     }
@@ -117,7 +124,10 @@ impl<'a> Reader<'a> {
         } else {
             let n = (n as i64).unsigned_abs() as usize;
             let b = self.bytes(n.checked_mul(2).ok_or(Error("string length".into()))?)?;
-            let w: Vec<u16> = b.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+            let w: Vec<u16> = b
+                .chunks_exact(2)
+                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                .collect();
             let w = w.strip_suffix(&[0]).unwrap_or(&w);
             Ok(String::from_utf16_lossy(w))
         }
@@ -127,7 +137,11 @@ impl<'a> Reader<'a> {
         Ok(self.bytes(16)?.try_into().unwrap())
     }
 
-    pub fn array<T>(&mut self, elem: usize, mut f: impl FnMut(&mut Self) -> Result<T>) -> Result<Vec<T>> {
+    pub fn array<T>(
+        &mut self,
+        elem: usize,
+        mut f: impl FnMut(&mut Self) -> Result<T>,
+    ) -> Result<Vec<T>> {
         let n = self.count(elem)?;
         let mut v = Vec::with_capacity(n);
         for _ in 0..n {
@@ -136,7 +150,12 @@ impl<'a> Reader<'a> {
         Ok(v)
     }
 
-    pub fn n_of<T>(&mut self, n: usize, elem: usize, mut f: impl FnMut(&mut Self) -> Result<T>) -> Result<Vec<T>> {
+    pub fn n_of<T>(
+        &mut self,
+        n: usize,
+        elem: usize,
+        mut f: impl FnMut(&mut Self) -> Result<T>,
+    ) -> Result<Vec<T>> {
         self.check_count(n as i64, elem)?;
         let mut v = Vec::with_capacity(n);
         for _ in 0..n {
@@ -147,6 +166,8 @@ impl<'a> Reader<'a> {
 
     pub fn f32s(&mut self, n: usize) -> Result<Vec<f32>> {
         let b = self.bytes(n.checked_mul(4).ok_or(Error("size".into()))?)?;
-        Ok(b.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect())
+        Ok(b.chunks_exact(4)
+            .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+            .collect())
     }
 }

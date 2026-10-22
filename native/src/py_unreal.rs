@@ -7,8 +7,8 @@ use std::sync::Arc;
 use numpy::IntoPyArray;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::BoundObject;
 use pyo3::types::{PyBytes, PyDict, PyList};
+use pyo3::BoundObject;
 
 use crate::unreal::props::{Ctx, Value};
 use crate::unreal::reflect::Schema;
@@ -55,7 +55,11 @@ pub struct UnrealGame {
 
 impl UnrealGame {
     fn ctx<'a>(&'a self, pkg: &'a Package) -> Ctx<'a> {
-        Ctx { schema: &self.game.schema, names: &pkg.names, ue5: self.game.ue5_version }
+        Ctx {
+            schema: &self.game.schema,
+            names: &pkg.names,
+            ue5: self.game.ue5_version,
+        }
     }
 
     fn open_export(&self, path: &str, class: Option<&str>) -> PyResult<(Package, usize, String)> {
@@ -92,7 +96,11 @@ fn object_ref(game: &Game, pkg: &Package, i: i32) -> Option<String> {
             let imported = game.imported_packages(pkg, pid);
             let target = imported.get(pi as usize)?;
             let p = game.package_paths.get(target)?;
-            Some(p.trim_end_matches(".uasset").trim_end_matches(".umap").to_string())
+            Some(
+                p.trim_end_matches(".uasset")
+                    .trim_end_matches(".umap")
+                    .to_string(),
+            )
         }
         _ => None,
     }
@@ -104,10 +112,23 @@ fn value_py(py: Python<'_>, v: &Value, game: &Game, pkg: &Package) -> PyResult<P
         Value::Int(i) => i.into_pyobject(py)?.into_any().unbind(),
         Value::Float(f) => f.into_pyobject(py)?.into_any().unbind(),
         Value::Str(s) | Value::Name(s) | Value::Enum(s) => s.into_pyobject(py)?.into_any().unbind(),
-        Value::Object(i) => object_ref(game, pkg, *i).into_pyobject(py)?.into_any().unbind(),
-        Value::SoftObject(p, s) => if s.is_empty() { p.clone() } else { format!("{p}:{s}") }.into_pyobject(py)?.into_any().unbind(),
+        Value::Object(i) => object_ref(game, pkg, *i)
+            .into_pyobject(py)?
+            .into_any()
+            .unbind(),
+        Value::SoftObject(p, s) => if s.is_empty() {
+            p.clone()
+        } else {
+            format!("{p}:{s}")
+        }
+        .into_pyobject(py)?
+        .into_any()
+        .unbind(),
         Value::Floats(f) => f.clone().into_pyobject(py)?.into_any().unbind(),
-        Value::Struct(_, fields) => props_py(py, fields, game, pkg)?.into_pyobject(py)?.into_any().unbind(),
+        Value::Struct(_, fields) => props_py(py, fields, game, pkg)?
+            .into_pyobject(py)?
+            .into_any()
+            .unbind(),
         Value::Array(a) => {
             let l = PyList::empty(py);
             for x in a {
@@ -126,7 +147,12 @@ fn value_py(py: Python<'_>, v: &Value, game: &Game, pkg: &Package) -> PyResult<P
     })
 }
 
-fn props_py<'py>(py: Python<'py>, props: &[(String, Value)], game: &Game, pkg: &Package) -> PyResult<Bound<'py, PyDict>> {
+fn props_py<'py>(
+    py: Python<'py>,
+    props: &[(String, Value)],
+    game: &Game,
+    pkg: &Package,
+) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
     for (k, v) in props {
         d.set_item(k, value_py(py, v, game, pkg)?)?;
@@ -169,17 +195,32 @@ impl UnrealGame {
     /// UnrealGame(paks, engine="5.1", mappings="", aes_key="") — `mappings`: text from unreal_mappings().
     #[new]
     #[pyo3(signature = (paks, engine="5.1", mappings="", aes_key=""))]
-    fn new(py: Python<'_>, paks: &str, engine: &str, mappings: &str, aes_key: &str) -> PyResult<Self> {
-        let key = if aes_key.is_empty() { None } else { Some(crate::unreal::aes::parse_key(aes_key).ok_or_else(|| err("invalid AES key"))?) };
+    fn new(
+        py: Python<'_>,
+        paks: &str,
+        engine: &str,
+        mappings: &str,
+        aes_key: &str,
+    ) -> PyResult<Self> {
+        let key = if aes_key.is_empty() {
+            None
+        } else {
+            Some(crate::unreal::aes::parse_key(aes_key).ok_or_else(|| err("invalid AES key"))?)
+        };
         let (paks, engine, mappings) = (paks.to_string(), engine.to_string(), mappings.to_string());
-        let game = py.detach(move || -> Result<Game, String> {
-            let mut g = Game::open(Path::new(&paks), &engine, key).map_err(|e| e.to_string())?;
-            if !mappings.is_empty() {
-                g.schema = Schema::from_text(&mappings).map_err(|e| e.to_string())?;
-            }
-            Ok(g)
-        }).map_err(err)?;
-        Ok(UnrealGame { game: Arc::new(game) })
+        let game = py
+            .detach(move || -> Result<Game, String> {
+                let mut g =
+                    Game::open(Path::new(&paks), &engine, key).map_err(|e| e.to_string())?;
+                if !mappings.is_empty() {
+                    g.schema = Schema::from_text(&mappings).map_err(|e| e.to_string())?;
+                }
+                Ok(g)
+            })
+            .map_err(err)?;
+        Ok(UnrealGame {
+            game: Arc::new(game),
+        })
     }
 
     #[getter]
@@ -199,11 +240,19 @@ impl UnrealGame {
 
     /// package_path(id) -> game path of a package without extension.
     fn package_path(&self, id: u64) -> Option<String> {
-        self.game.package_paths.get(&id).map(|p| p.trim_end_matches(".uasset").trim_end_matches(".umap").to_string())
+        self.game.package_paths.get(&id).map(|p| {
+            p.trim_end_matches(".uasset")
+                .trim_end_matches(".umap")
+                .to_string()
+        })
     }
 
     /// texture_infos(paths) -> [(format, width, height, mip count, bytes) | None] read in parallel (no pixel data).
-    fn texture_infos(&self, py: Python<'_>, paths: Vec<String>) -> Vec<Option<(String, u32, u32, usize, u64)>> {
+    fn texture_infos(
+        &self,
+        py: Python<'_>,
+        paths: Vec<String>,
+    ) -> Vec<Option<(String, u32, u32, usize, u64)>> {
         let game = self.game.clone();
         py.detach(move || {
             use crate::par::*;
@@ -213,9 +262,23 @@ impl UnrealGame {
                     let pkg = game.package(p).ok()?;
                     let idx = main_export(&pkg)?;
                     let cls = game.class_name(&pkg, pkg.exports[idx].class);
-                    let ctx = Ctx { schema: &game.schema, names: &pkg.names, ue5: game.ue5_version };
+                    let ctx = Ctx {
+                        schema: &game.schema,
+                        names: &pkg.names,
+                        ue5: game.ue5_version,
+                    };
                     let t = assets::read_texture_opt(&game, &ctx, &pkg, idx, &cls, false).ok()?;
-                    let bytes: u64 = t.mips.iter().map(|m| crate::texture::mip_nbytes(assets::omni_format(&t.format), m.width, m.height) as u64).sum();
+                    let bytes: u64 = t
+                        .mips
+                        .iter()
+                        .map(|m| {
+                            crate::texture::mip_nbytes(
+                                assets::omni_format(&t.format),
+                                m.width,
+                                m.height,
+                            ) as u64
+                        })
+                        .sum();
                     Some((t.format, t.width, t.height, t.mips.len(), bytes))
                 })
                 .collect()
@@ -229,7 +292,11 @@ impl UnrealGame {
 
     /// index(classes) -> [(package path, export name, class, export size)] for the exports of those classes
     /// (class default objects excluded). Packages are read in parallel.
-    fn index(&self, py: Python<'_>, classes: Vec<String>) -> PyResult<Vec<(String, String, String, u64)>> {
+    fn index(
+        &self,
+        py: Python<'_>,
+        classes: Vec<String>,
+    ) -> PyResult<Vec<(String, String, String, u64)>> {
         let game = self.game.clone();
         py.detach(move || {
             use crate::par::*;
@@ -269,7 +336,12 @@ impl UnrealGame {
                     ObjKind::Export(i) => i as i64,
                     _ => -1,
                 };
-                (e.name.clone(), self.game.class_name(&pkg, e.class), outer, e.serial_size)
+                (
+                    e.name.clone(),
+                    self.game.class_name(&pkg, e.class),
+                    outer,
+                    e.serial_size,
+                )
             })
             .collect())
     }
@@ -277,36 +349,65 @@ impl UnrealGame {
     /// imports(path) -> referenced package paths / script objects.
     fn imports(&self, path: &str) -> PyResult<Vec<String>> {
         let pkg = self.game.package(path).map_err(err)?;
-        Ok((0..pkg.imports.len()).filter_map(|i| object_ref(&self.game, &pkg, -(i as i32) - 1)).collect())
+        Ok((0..pkg.imports.len())
+            .filter_map(|i| object_ref(&self.game, &pkg, -(i as i32) - 1))
+            .collect())
     }
 
     /// properties(path, class=None) -> (class, {name: value}) of the main export (or the first export of `class`).
     #[pyo3(signature = (path, class=None))]
-    fn properties<'py>(&self, py: Python<'py>, path: &str, class: Option<&str>) -> PyResult<(String, Bound<'py, PyDict>)> {
+    fn properties<'py>(
+        &self,
+        py: Python<'py>,
+        path: &str,
+        class: Option<&str>,
+    ) -> PyResult<(String, Bound<'py, PyDict>)> {
         let (pkg, idx, cls) = self.open_export(path, class)?;
         let ctx = self.ctx(&pkg);
         let e = &pkg.exports[idx];
-        let (props, _) = py.detach(|| crate::unreal::props::read_object(&ctx, &cls, pkg.export_data(idx), e.flags & 0x10 != 0)).map_err(err)?;
+        let (props, _) = py
+            .detach(|| {
+                crate::unreal::props::read_object(
+                    &ctx,
+                    &cls,
+                    pkg.export_data(idx),
+                    e.flags & 0x10 != 0,
+                )
+            })
+            .map_err(err)?;
         Ok((cls, props_py(py, &props, &self.game, &pkg)?))
     }
 
     /// texture(path, mip_limit=0) -> {format (omni name), source_format, width, height, mips: [(w, h, bytes)], props}
     /// Mips are largest first; `mip_limit` > 0 drops mips larger than that size when smaller ones exist.
     #[pyo3(signature = (path, max_dim=0))]
-    fn texture<'py>(&self, py: Python<'py>, path: &str, max_dim: u32) -> PyResult<Bound<'py, PyDict>> {
+    fn texture<'py>(
+        &self,
+        py: Python<'py>,
+        path: &str,
+        max_dim: u32,
+    ) -> PyResult<Bound<'py, PyDict>> {
         let (pkg, idx, cls) = self.open_export(path, None)?;
         let ctx = self.ctx(&pkg);
         let game = &self.game;
         let (tx, mips) = py
             .detach(|| -> Result<_, String> {
-                let tx = assets::read_texture(game, &ctx, &pkg, idx, &cls).map_err(|e| e.to_string())?;
+                let tx =
+                    assets::read_texture(game, &ctx, &pkg, idx, &cls).map_err(|e| e.to_string())?;
                 let mut out = Vec::new();
                 for m in &tx.mips {
                     let Some(d) = &m.data else { continue };
-                    if max_dim > 0 && m.width.max(m.height) > max_dim && tx.mips.iter().any(|x| x.data.is_some() && x.width.max(x.height) <= max_dim) {
+                    if max_dim > 0
+                        && m.width.max(m.height) > max_dim
+                        && tx
+                            .mips
+                            .iter()
+                            .any(|x| x.data.is_some() && x.width.max(x.height) <= max_dim)
+                    {
                         continue;
                     }
-                    let conv = assets::convert_mip(&tx.format, m.width, m.height, d).map_err(|e| e.to_string())?;
+                    let conv = assets::convert_mip(&tx.format, m.width, m.height, d)
+                        .map_err(|e| e.to_string())?;
                     out.push((m.width, m.height, conv));
                 }
                 Ok((tx, out))
@@ -328,37 +429,66 @@ impl UnrealGame {
     }
 
     /// sound(path) -> (format, bytes, props)
-    fn sound<'py>(&self, py: Python<'py>, path: &str) -> PyResult<(String, Bound<'py, PyBytes>, Bound<'py, PyDict>)> {
+    fn sound<'py>(
+        &self,
+        py: Python<'py>,
+        path: &str,
+    ) -> PyResult<(String, Bound<'py, PyBytes>, Bound<'py, PyDict>)> {
         let (pkg, idx, cls) = self.open_export(path, Some("SoundWave"))?;
         let ctx = self.ctx(&pkg);
         let game = &self.game;
-        let s = py.detach(|| assets::read_sound(game, &ctx, &pkg, idx, &cls)).map_err(err)?;
-        Ok((s.format, PyBytes::new(py, &s.data), props_py(py, &s.props, &self.game, &pkg)?))
+        let s = py
+            .detach(|| assets::read_sound(game, &ctx, &pkg, idx, &cls))
+            .map_err(err)?;
+        Ok((
+            s.format,
+            PyBytes::new(py, &s.data),
+            props_py(py, &s.props, &self.game, &pkg)?,
+        ))
     }
 
     /// static_mesh(path, max_lods=1) -> {lods: [...], props}; geometry in Unreal units (cm, Z up, left-handed).
     #[pyo3(signature = (path, max_lods=1))]
-    fn static_mesh<'py>(&self, py: Python<'py>, path: &str, max_lods: usize) -> PyResult<Bound<'py, PyDict>> {
+    fn static_mesh<'py>(
+        &self,
+        py: Python<'py>,
+        path: &str,
+        max_lods: usize,
+    ) -> PyResult<Bound<'py, PyDict>> {
         let (pkg, idx, cls) = self.open_export(path, Some("StaticMesh"))?;
         let ctx = self.ctx(&pkg);
         let game = &self.game;
-        let m = py.detach(|| mesh::read_static_mesh(game, &ctx, &pkg, idx, &cls, max_lods)).map_err(err)?;
+        let m = py
+            .detach(|| mesh::read_static_mesh(game, &ctx, &pkg, idx, &cls, max_lods))
+            .map_err(err)?;
         self.mesh_py(py, m, &pkg)
     }
 
     /// skeletal_mesh(path, max_lods=1) -> {lods, bones: [(name, parent, rotation xyzw, translation, scale)], props}
     #[pyo3(signature = (path, max_lods=1))]
-    fn skeletal_mesh<'py>(&self, py: Python<'py>, path: &str, max_lods: usize) -> PyResult<Bound<'py, PyDict>> {
+    fn skeletal_mesh<'py>(
+        &self,
+        py: Python<'py>,
+        path: &str,
+        max_lods: usize,
+    ) -> PyResult<Bound<'py, PyDict>> {
         let (pkg, idx, cls) = self.open_export(path, Some("SkeletalMesh"))?;
         let ctx = self.ctx(&pkg);
         let game = &self.game;
-        let m = py.detach(|| skel::read_skeletal_mesh(game, &ctx, &pkg, idx, &cls, max_lods)).map_err(err)?;
+        let m = py
+            .detach(|| skel::read_skeletal_mesh(game, &ctx, &pkg, idx, &cls, max_lods))
+            .map_err(err)?;
         self.mesh_py(py, m, &pkg)
     }
 }
 
 impl UnrealGame {
-    fn mesh_py<'py>(&self, py: Python<'py>, m: mesh::Mesh, pkg: &Package) -> PyResult<Bound<'py, PyDict>> {
+    fn mesh_py<'py>(
+        &self,
+        py: Python<'py>,
+        m: mesh::Mesh,
+        pkg: &Package,
+    ) -> PyResult<Bound<'py, PyDict>> {
         let d = PyDict::new(py);
         let lods = PyList::empty(py);
         let props = props_py(py, &m.props, &self.game, pkg)?;
@@ -368,16 +498,25 @@ impl UnrealGame {
         d.set_item("lods", lods)?;
         let bones = PyList::empty(py);
         for b in &m.bones {
-            bones.append((b.name.clone(), b.parent, b.rotation.to_vec(), b.translation.to_vec(), b.scale.to_vec()))?;
+            bones.append((
+                b.name.clone(),
+                b.parent,
+                b.rotation.to_vec(),
+                b.translation.to_vec(),
+                b.scale.to_vec(),
+            ))?;
         }
         d.set_item("bones", bones)?;
-        let mats: Vec<Option<String>> = m.materials.iter().map(|&i| object_ref(&self.game, pkg, i)).collect();
+        let mats: Vec<Option<String>> = m
+            .materials
+            .iter()
+            .map(|&i| object_ref(&self.game, pkg, i))
+            .collect();
         d.set_item("materials", mats)?;
         d.set_item("props", props)?;
         Ok(d)
     }
 }
-
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(oodle_load, m)?)?;

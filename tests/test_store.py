@@ -1,9 +1,9 @@
 """Direct reading of Glacier packages (native GlacierStore) on synthetic packages: patch priority, deletions,
 compressed and scrambled resources, references."""
 import pytest
+from rpkg_builder import Res, build
 
 from omni.native import N
-from rpkg_builder import Res, build
 
 pytestmark = pytest.mark.skipif(N is None or not hasattr(N, "GlacierStore"), reason="native module without the store")
 

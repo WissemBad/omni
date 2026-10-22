@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 CRATE = Path(__file__).resolve().parents[1] / "native"
 NATIVE_ERROR = ""
@@ -38,7 +39,7 @@ class _Guarded:
         def call(*args, **kwargs):
             try:
                 return attr(*args, **kwargs)
-            except BaseException as e:  # noqa: BLE001 - only the PyO3 panic type is converted
+            except BaseException as e:
                 if type(e).__name__ == "PanicException":
                     raise NativeError(f"{name}: {e}") from None
                 raise
@@ -55,16 +56,21 @@ class _Missing:
         raise RuntimeError(f"le cœur Rust (omni_native) est absent : python -m omni native --build ({NATIVE_ERROR})")
 
 
-try:
-    import omni_native as _raw
-    if not hasattr(_raw, "version"):        # an emptied package folder (uv sync removed the extension): not the core
-        raise ImportError("omni_native is installed without its extension module (uv sync removes it: use --inexact)")
-    N = _Guarded(_raw)
-except ImportError as e:  # pragma: no cover - depends on the local build
-    NATIVE_ERROR = str(e)
-    N = _Missing()
-
-AVAILABLE = not isinstance(N, _Missing)
+AVAILABLE: bool
+if TYPE_CHECKING:
+    import omni_native as N  # typings/omni_native.pyi (scripts/gen_native_stub.py): names and parameters
+    AVAILABLE = True
+else:
+    try:
+        import omni_native as _raw
+        if not hasattr(_raw, "version"):        # an emptied package folder (uv sync removed the extension): not the core
+            raise ImportError("omni_native is installed without its extension module (uv sync removes it: use --inexact)")
+        N = _Guarded(_raw)
+        AVAILABLE = True
+    except ImportError as e:  # pragma: no cover - depends on the local build
+        NATIVE_ERROR = str(e)
+        N = _Missing()
+        AVAILABLE = False
 
 
 def status() -> dict:

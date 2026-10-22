@@ -4,9 +4,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from rpkg_builder import Res, build
 
 from omni.native import N
-from rpkg_builder import Res, build
 
 
 def _sources():

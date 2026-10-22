@@ -5,9 +5,9 @@ use super::assets::bulk_header;
 use super::mesh::{bulk_array, color_buffer, strip, vertex_buffers, Bone, Lod, Mesh, Section};
 use super::props::{self, Ctx};
 use super::reader::{err, Error, Reader, Result};
-use crate::limits::checked_len;
 use super::zen::Package;
 use super::Game;
+use crate::limits::checked_len;
 
 fn skip_fixed(r: &mut Reader, elem: usize) -> Result<()> {
     let n = r.count(elem)?;
@@ -18,9 +18,17 @@ fn multisize_indices(r: &mut Reader) -> Result<Vec<u32>> {
     let size = r.u8()?;
     let (es, _cnt, data) = bulk_array(r)?;
     Ok(if size == 2 || es == 2 {
-        data.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes([c[0], c[1]]) as u32).collect()
+        data.as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| u16::from_le_bytes([c[0], c[1]]) as u32)
+            .collect()
     } else {
-        data.as_chunks::<4>().0.iter().map(|c| u32::from_le_bytes(*c)).collect()
+        data.as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| u32::from_le_bytes(*c))
+            .collect()
     })
 }
 
@@ -65,12 +73,16 @@ pub(crate) fn skin_weights(r: &mut Reader, lod: &mut Lod, ue5: i32) -> Result<()
         let wstart = start + count * ib;
         for k in 0..count.min(keep) {
             let bi = if idx16 {
-                data.get(start + k * 2..start + k * 2 + 2).map(|b| u16::from_le_bytes([b[0], b[1]])).unwrap_or(0)
+                data.get(start + k * 2..start + k * 2 + 2)
+                    .map(|b| u16::from_le_bytes([b[0], b[1]]))
+                    .unwrap_or(0)
             } else {
                 data.get(start + k).copied().unwrap_or(0) as u16
             };
             let w = if w16 {
-                data.get(wstart + k * 2..wstart + k * 2 + 2).map(|b| (u16::from_le_bytes([b[0], b[1]]) >> 8) as u8).unwrap_or(0)
+                data.get(wstart + k * 2..wstart + k * 2 + 2)
+                    .map(|b| (u16::from_le_bytes([b[0], b[1]]) >> 8) as u8)
+                    .unwrap_or(0)
             } else {
                 data.get(wstart + k).copied().unwrap_or(0)
             };
@@ -81,7 +93,13 @@ pub(crate) fn skin_weights(r: &mut Reader, lod: &mut Lod, ue5: i32) -> Result<()
     Ok(())
 }
 
-fn streamed(r: &mut Reader, lod: &mut Lod, has_colors: bool, has_cloth: bool, ue5: i32) -> Result<()> {
+fn streamed(
+    r: &mut Reader,
+    lod: &mut Lod,
+    has_colors: bool,
+    has_cloth: bool,
+    ue5: i32,
+) -> Result<()> {
     strip(r)?;
     lod.indices = multisize_indices(r)?;
     vertex_buffers(r, lod)?;
@@ -131,7 +149,14 @@ fn streamed(r: &mut Reader, lod: &mut Lod, has_colors: bool, has_cloth: bool, ue
     Ok(())
 }
 
-fn lod(game: &Game, pkg: &Package, pid: u64, r: &mut Reader, has_colors: bool, want: bool) -> Result<Lod> {
+fn lod(
+    game: &Game,
+    pkg: &Package,
+    pid: u64,
+    r: &mut Reader,
+    has_colors: bool,
+    want: bool,
+) -> Result<Lod> {
     let ue5 = game.ue5_version;
     strip(r)?;
     let cooked_out = r.u32()? != 0;
@@ -172,7 +197,15 @@ fn lod(game: &Game, pkg: &Package, pid: u64, r: &mut Reader, has_colors: bool, w
             skip_fixed(r, 8)?;
         }
         r.u32()?; // disabled
-        lod.sections.push(Section { material, first_index, num_triangles, bone_map, base_vertex, num_vertices, ..Default::default() });
+        lod.sections.push(Section {
+            material,
+            first_index,
+            num_triangles,
+            bone_map,
+            base_vertex,
+            num_vertices,
+            ..Default::default()
+        });
     }
     skip_fixed(r, 2)?; // active bone indices
     r.u32()?; // buffers size
@@ -207,7 +240,14 @@ fn lod(game: &Game, pkg: &Package, pid: u64, r: &mut Reader, has_colors: bool, w
     Ok(lod)
 }
 
-pub fn read_skeletal_mesh(game: &Game, ctx: &Ctx, pkg: &Package, index: usize, class: &str, max_lods: usize) -> Result<Mesh> {
+pub fn read_skeletal_mesh(
+    game: &Game,
+    ctx: &Ctx,
+    pkg: &Package,
+    index: usize,
+    class: &str,
+    max_lods: usize,
+) -> Result<Mesh> {
     let pid = game.package_id_of(&pkg.name).unwrap_or(0);
     let ue5 = game.ue5_version;
     let e = &pkg.exports[index];
@@ -234,13 +274,21 @@ pub fn read_skeletal_mesh(game: &Game, ctx: &Ctx, pkg: &Package, index: usize, c
     for _ in 0..nb {
         let name = ctx.fname(&mut r)?;
         let parent = r.i32()?;
-        bones.push(Bone { name, parent, ..Default::default() });
+        bones.push(Bone {
+            name,
+            parent,
+            ..Default::default()
+        });
     }
     let np = r.count(40)?;
     for i in 0..np {
         let mut f = [0f64; 10];
         for v in f.iter_mut() {
-            *v = if ue5 >= 1004 { r.f64()? } else { r.f32()? as f64 };
+            *v = if ue5 >= 1004 {
+                r.f64()?
+            } else {
+                r.f32()? as f64
+            };
         }
         if let Some(b) = bones.get_mut(i) {
             b.rotation = [f[0], f[1], f[2], f[3]];
@@ -258,5 +306,10 @@ pub fn read_skeletal_mesh(game: &Game, ctx: &Ctx, pkg: &Package, index: usize, c
     for i in 0..nlods {
         lods.push(lod(game, pkg, pid, &mut r, has_colors, i < max_lods)?);
     }
-    Ok(Mesh { lods, bones, materials, props })
+    Ok(Mesh {
+        lods,
+        bones,
+        materials,
+        props,
+    })
 }

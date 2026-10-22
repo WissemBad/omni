@@ -152,7 +152,7 @@ def register(app: FastAPI, *, jobs, need) -> None:
         summary = root / "summary.json"
         running = jobs.running("sounds", sid)
         return {"exported": idx.load(), "path": str(root), "count": len(idx.rows),
-                "summary": json.loads(summary.read_text()) if summary.exists() else None,
+                "summary": json.loads(summary.read_text(encoding="utf-8")) if summary.exists() else None,
                 "running": running[0]["id"] if running else None,
                 "tagged": bool(idx.rows) and "title" in idx.rows[0], "set": root.name if root.name in SETS else "",
                 "sets": [f for f in SETS if (CONFIG.sounds_dir(sid) / f / "index.csv").exists()]}
@@ -166,7 +166,7 @@ def register(app: FastAPI, *, jobs, need) -> None:
 
         def run(job):
             from ..targets.audio.export import export_sounds
-            say = lambda m: jobs.log(job, m)  # noqa: E731
+            say = lambda m: jobs.log(job, m)
             stage = jobs.stager(job, 3)
             stage("Liste des sons")
             refs = src.list_sounds(progress=say)
@@ -245,8 +245,8 @@ def register(app: FastAPI, *, jobs, need) -> None:
             raise HTTPException(404, "Introuvable")
         try:
             data, mime = lib.preview(id)
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(422, f"Lecture impossible : {e}")
+        except Exception as e:
+            raise HTTPException(422, f"Lecture impossible : {e}") from e
         return Response(data, media_type=mime, headers={"Cache-Control": "max-age=3600"})
 
     @app.get("/api/{sid}/sounds/file")

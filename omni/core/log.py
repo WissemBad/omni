@@ -85,7 +85,7 @@ def setup(name: str = "omni", console: bool = False) -> Path:
     sys.excepthook = excepthook
     threading.excepthook = thread_hook
     try:
-        fault = open(log_dir() / f"fault-{name}.log", "a", encoding="utf-8")    # kept open for the process lifetime
+        fault = open(log_dir() / f"fault-{name}.log", "a", encoding="utf-8")    # noqa: SIM115 - kept open for the process lifetime
         faulthandler.enable(file=fault, all_threads=True)
         _state["fault"] = fault
     except OSError:

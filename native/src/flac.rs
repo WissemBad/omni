@@ -15,14 +15,22 @@ struct Bits {
 
 impl Bits {
     fn new() -> Self {
-        Bits { out: Vec::new(), acc: 0, n: 0 }
+        Bits {
+            out: Vec::new(),
+            acc: 0,
+            n: 0,
+        }
     }
     #[inline]
     fn put(&mut self, v: u64, bits: u32) {
         if bits == 0 {
             return;
         }
-        let v = if bits == 64 { v } else { v & ((1u64 << bits) - 1) };
+        let v = if bits == 64 {
+            v
+        } else {
+            v & ((1u64 << bits) - 1)
+        };
         if self.n + bits > 64 {
             // flush whole bytes first
             while self.n >= 8 {
@@ -61,7 +69,11 @@ fn crc8(d: &[u8]) -> u8 {
     for &b in d {
         c ^= b;
         for _ in 0..8 {
-            c = if c & 0x80 != 0 { (c << 1) ^ 0x07 } else { c << 1 };
+            c = if c & 0x80 != 0 {
+                (c << 1) ^ 0x07
+            } else {
+                c << 1
+            };
         }
     }
     c
@@ -72,7 +84,11 @@ fn crc16(d: &[u8]) -> u16 {
     for &b in d {
         c ^= (b as u16) << 8;
         for _ in 0..8 {
-            c = if c & 0x8000 != 0 { (c << 1) ^ 0x8005 } else { c << 1 };
+            c = if c & 0x8000 != 0 {
+                (c << 1) ^ 0x8005
+            } else {
+                c << 1
+            };
         }
     }
     c
@@ -179,7 +195,11 @@ fn write_subframe(w: &mut Bits, x: &[i64], bps: u32) {
         let r = residual(x, order);
         let plan = plan_residual(&r, x.len(), order);
         let total = plan.2 + (order as u64) * bps as u64 + 6;
-        if best.as_ref().map(|b| total < b.2 .2 + b.0 as u64 * bps as u64 + 6).unwrap_or(true) {
+        if best
+            .as_ref()
+            .map(|b| total < b.2 .2 + b.0 as u64 * bps as u64 + 6)
+            .unwrap_or(true)
+        {
             best = Some((order, r, plan));
         }
     }
@@ -222,9 +242,22 @@ fn cost_estimate(x: &[i64]) -> u64 {
     residual(x, 2).iter().map(|v| v.unsigned_abs()).sum()
 }
 
-fn write_frame(out: &mut Vec<u8>, pcm: &[i16], channels: usize, start: usize, n: usize, frame_no: u64) {
+fn write_frame(
+    out: &mut Vec<u8>,
+    pcm: &[i16],
+    channels: usize,
+    start: usize,
+    n: usize,
+    frame_no: u64,
+) {
     let mut w = Bits::new();
-    let chans: Vec<Vec<i64>> = (0..channels).map(|c| (0..n).map(|i| pcm[(start + i) * channels + c] as i64).collect()).collect();
+    let chans: Vec<Vec<i64>> = (0..channels)
+        .map(|c| {
+            (0..n)
+                .map(|i| pcm[(start + i) * channels + c] as i64)
+                .collect()
+        })
+        .collect();
     // stereo decorrelation
     let mut assign = (channels - 1) as u64;
     let mut subs: Vec<(Vec<i64>, u32)> = chans.iter().map(|c| (c.clone(), 16)).collect();
@@ -232,7 +265,12 @@ fn write_frame(out: &mut Vec<u8>, pcm: &[i16], channels: usize, start: usize, n:
         let (l, r) = (&chans[0], &chans[1]);
         let side: Vec<i64> = l.iter().zip(r).map(|(a, b)| a - b).collect();
         let mid: Vec<i64> = l.iter().zip(r).map(|(a, b)| (a + b) >> 1).collect();
-        let (cl, cr, cs, cm) = (cost_estimate(l), cost_estimate(r), cost_estimate(&side), cost_estimate(&mid));
+        let (cl, cr, cs, cm) = (
+            cost_estimate(l),
+            cost_estimate(r),
+            cost_estimate(&side),
+            cost_estimate(&mid),
+        );
         let opts = [(cl + cr, 1u64), (cl + cs, 8), (cr + cs, 9), (cm + cs, 10)];
         let best = opts.iter().min_by_key(|o| o.0).unwrap().1;
         assign = best;
@@ -269,7 +307,12 @@ fn write_frame(out: &mut Vec<u8>, pcm: &[i16], channels: usize, start: usize, n:
 }
 
 /// Encode interleaved 16-bit PCM. `comments`: (key, value) written as a VORBIS_COMMENT block.
-pub fn encode(pcm: &[i16], channels: u16, rate: u32, comments: &[(String, String)]) -> Result<Vec<u8>, String> {
+pub fn encode(
+    pcm: &[i16],
+    channels: u16,
+    rate: u32,
+    comments: &[(String, String)],
+) -> Result<Vec<u8>, String> {
     let ch = channels as usize;
     if ch == 0 || ch > 8 || rate == 0 || rate >= 1 << 20 {
         return Err(format!("FLAC cannot hold {ch} channels at {rate} Hz"));
@@ -326,7 +369,11 @@ pub fn encode(pcm: &[i16], channels: u16, rate: u32, comments: &[(String, String
             body.extend(s.as_bytes());
         }
         out.push(0x80 | 4);
-        out.extend([(body.len() >> 16) as u8, (body.len() >> 8) as u8, body.len() as u8]);
+        out.extend([
+            (body.len() >> 16) as u8,
+            (body.len() >> 8) as u8,
+            body.len() as u8,
+        ]);
         out.extend(body);
     }
     out.extend(frames);
@@ -337,11 +384,15 @@ pub fn encode(pcm: &[i16], channels: u16, rate: u32, comments: &[(String, String
 
 pub fn md5(data: &[u8]) -> [u8; 16] {
     const S: [u32; 64] = [
-        7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23,
-        4, 11, 16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
+        7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9, 14, 20, 5,
+        9, 14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 6, 10,
+        15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
     ];
-    let k: Vec<u32> = (0..64).map(|i| ((i as f64 + 1.0).sin().abs() * 4294967296.0) as u32).collect();
-    let (mut a0, mut b0, mut c0, mut d0) = (0x67452301u32, 0xefcdab89u32, 0x98badcfeu32, 0x10325476u32);
+    let k: Vec<u32> = (0..64)
+        .map(|i| ((i as f64 + 1.0).sin().abs() * 4294967296.0) as u32)
+        .collect();
+    let (mut a0, mut b0, mut c0, mut d0) =
+        (0x67452301u32, 0xefcdab89u32, 0x98badcfeu32, 0x10325476u32);
     let mut msg = data.to_vec();
     let bitlen = (data.len() as u64).wrapping_mul(8);
     msg.push(0x80);
@@ -350,7 +401,10 @@ pub fn md5(data: &[u8]) -> [u8; 16] {
     }
     msg.extend(bitlen.to_le_bytes());
     for chunk in msg.chunks_exact(64) {
-        let m: Vec<u32> = chunk.chunks_exact(4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
+        let m: Vec<u32> = chunk
+            .chunks_exact(4)
+            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+            .collect();
         let (mut a, mut b, mut c, mut d) = (a0, b0, c0, d0);
         for i in 0..64 {
             let (f, g) = match i / 16 {
@@ -385,7 +439,10 @@ mod tests {
     #[test]
     fn md5_known() {
         let h = md5(b"abc");
-        assert_eq!(h.iter().map(|b| format!("{b:02x}")).collect::<String>(), "900150983cd24fb0d6963f7d28e17f72");
+        assert_eq!(
+            h.iter().map(|b| format!("{b:02x}")).collect::<String>(),
+            "900150983cd24fb0d6963f7d28e17f72"
+        );
     }
 
     #[test]

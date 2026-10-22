@@ -111,7 +111,11 @@ impl Schema {
     }
 
     pub fn enum_name(&self, e: &str, v: i64) -> Option<&str> {
-        self.enums.get(e)?.iter().find(|x| x.1 == v).map(|x| x.0.as_str())
+        self.enums
+            .get(e)?
+            .iter()
+            .find(|x| x.1 == v)
+            .map(|x| x.0.as_str())
     }
 
     // ---- text cache ---------------------------------------------------------------------------------------
@@ -121,9 +125,18 @@ impl Schema {
         names.sort();
         for n in names {
             let s = &self.structs[n];
-            out.push_str(&format!("S {} {}\n", s.name, s.super_name.as_deref().unwrap_or("-")));
+            out.push_str(&format!(
+                "S {} {}\n",
+                s.name,
+                s.super_name.as_deref().unwrap_or("-")
+            ));
             for p in &s.props {
-                out.push_str(&format!("P {} {} {}\n", p.array_dim, p.name, ty_text(&p.ty)));
+                out.push_str(&format!(
+                    "P {} {} {}\n",
+                    p.array_dim,
+                    p.name,
+                    ty_text(&p.ty)
+                ));
             }
         }
         let mut en: Vec<_> = self.enums.keys().collect();
@@ -154,14 +167,26 @@ impl Schema {
                     }
                     let name = it.next().unwrap_or("").to_string();
                     let sup = it.next().unwrap_or("-");
-                    cur = Some(StructDef { name, super_name: if sup == "-" { None } else { Some(sup.to_string()) }, props: vec![] });
+                    cur = Some(StructDef {
+                        name,
+                        super_name: if sup == "-" {
+                            None
+                        } else {
+                            Some(sup.to_string())
+                        },
+                        props: vec![],
+                    });
                 }
                 Some("P") => {
                     let dim: u16 = it.next().and_then(|x| x.parse().ok()).unwrap_or(1);
                     let name = it.next().unwrap_or("").to_string();
                     let ty = parse_ty(it.next().unwrap_or("?"));
                     if let Some(c) = cur.as_mut() {
-                        c.props.push(Prop { name, array_dim: dim, ty });
+                        c.props.push(Prop {
+                            name,
+                            array_dim: dim,
+                            ty,
+                        });
                     }
                 }
                 Some("E") => {
@@ -169,7 +194,10 @@ impl Schema {
                     let name = rest[0].to_string();
                     let vals = rest[1..]
                         .iter()
-                        .filter_map(|kv| kv.rsplit_once('=').and_then(|(k, v)| v.parse().ok().map(|v| (k.to_string(), v))))
+                        .filter_map(|kv| {
+                            kv.rsplit_once('=')
+                                .and_then(|(k, v)| v.parse().ok().map(|v| (k.to_string(), v)))
+                        })
                         .collect();
                     s.enums.insert(name, vals);
                 }
@@ -233,11 +261,17 @@ fn parse_ty_at(s: &str, depth: usize) -> Ty {
         return match head {
             "Byte" => Ty::Byte(Some(inner.to_string())),
             "Struct" => Ty::Struct(inner.to_string()),
-            "Enum" => Ty::Enum(a[0].to_string(), Box::new(parse_ty(a.get(1).copied().unwrap_or("Byte")))),
+            "Enum" => Ty::Enum(
+                a[0].to_string(),
+                Box::new(parse_ty(a.get(1).copied().unwrap_or("Byte"))),
+            ),
             "Array" => Ty::Array(Box::new(parse_ty(inner))),
             "Set" => Ty::Set(Box::new(parse_ty(inner))),
             "Optional" => Ty::Optional(Box::new(parse_ty(inner))),
-            "Map" => Ty::Map(Box::new(parse_ty(a[0])), Box::new(parse_ty(a.get(1).copied().unwrap_or("?")))),
+            "Map" => Ty::Map(
+                Box::new(parse_ty(a[0])),
+                Box::new(parse_ty(a.get(1).copied().unwrap_or("?"))),
+            ),
             _ => Ty::Unknown(0),
         };
     }
@@ -288,8 +322,16 @@ pub struct Image<'a> {
 
 impl<'a> Image<'a> {
     pub fn parse(data: &'a [u8]) -> Result<Image<'a>> {
-        let rd32 = |o: usize| -> Result<u32> { data.get(o..o + 4).map(|b| u32::from_le_bytes(b.try_into().unwrap())).ok_or(super::reader::Error("PE truncated".into())) };
-        let rd16 = |o: usize| -> Result<u16> { data.get(o..o + 2).map(|b| u16::from_le_bytes(b.try_into().unwrap())).ok_or(super::reader::Error("PE truncated".into())) };
+        let rd32 = |o: usize| -> Result<u32> {
+            data.get(o..o + 4)
+                .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+                .ok_or(super::reader::Error("PE truncated".into()))
+        };
+        let rd16 = |o: usize| -> Result<u16> {
+            data.get(o..o + 2)
+                .map(|b| u16::from_le_bytes(b.try_into().unwrap()))
+                .ok_or(super::reader::Error("PE truncated".into()))
+        };
         if data.get(0..2) != Some(b"MZ") {
             return err("not a Windows executable");
         }
@@ -303,7 +345,10 @@ impl<'a> Image<'a> {
         if rd16(opt)? != 0x20b {
             return err("not a 64-bit executable");
         }
-        let base = data.get(opt + 24..opt + 32).map(|b| u64::from_le_bytes(b.try_into().unwrap())).ok_or(super::reader::Error("PE truncated".into()))?;
+        let base = data
+            .get(opt + 24..opt + 32)
+            .map(|b| u64::from_le_bytes(b.try_into().unwrap()))
+            .ok_or(super::reader::Error("PE truncated".into()))?;
         let mut secs = Vec::new();
         for i in 0..nsec.min(96) {
             let s = opt + opt_size + i * 40;
@@ -312,9 +357,20 @@ impl<'a> Image<'a> {
             let raw_size = rd32(s + 16)? as usize;
             let raw = rd32(s + 20)? as usize;
             let ch = rd32(s + 36)?;
-            secs.push(Section { va: base.wrapping_add(va), size: vsize.max(raw_size as u64), raw, raw_size, exec: ch & 0x2000_0000 != 0, write: ch & 0x8000_0000 != 0 });
+            secs.push(Section {
+                va: base.wrapping_add(va),
+                size: vsize.max(raw_size as u64),
+                raw,
+                raw_size,
+                exec: ch & 0x2000_0000 != 0,
+                write: ch & 0x8000_0000 != 0,
+            });
         }
-        Ok(Image { data, _base: base, secs })
+        Ok(Image {
+            data,
+            _base: base,
+            secs,
+        })
     }
 
     fn sec(&self, va: u64) -> Option<&Section> {
@@ -338,10 +394,14 @@ impl<'a> Image<'a> {
         self.data.get(o..o + n)
     }
     pub fn q(&self, va: u64) -> u64 {
-        self.bytes(va, 8).map(|b| u64::from_le_bytes(b.try_into().unwrap())).unwrap_or(0)
+        self.bytes(va, 8)
+            .map(|b| u64::from_le_bytes(b.try_into().unwrap()))
+            .unwrap_or(0)
     }
     pub fn d(&self, va: u64) -> u32 {
-        self.bytes(va, 4).map(|b| u32::from_le_bytes(b.try_into().unwrap())).unwrap_or(0)
+        self.bytes(va, 4)
+            .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+            .unwrap_or(0)
     }
     pub fn is_code(&self, va: u64) -> bool {
         self.sec(va).is_some_and(|s| s.exec)
@@ -391,7 +451,10 @@ impl<'a> Image<'a> {
     fn follow(&self, mut va: u64) -> u64 {
         for _ in 0..4 {
             match self.bytes(va, 5) {
-                Some(b) if b[0] == 0xE9 => va = (va as i64 + 5 + i32::from_le_bytes([b[1], b[2], b[3], b[4]]) as i64) as u64,
+                Some(b) if b[0] == 0xE9 => {
+                    va =
+                        (va as i64 + 5 + i32::from_le_bytes([b[1], b[2], b[3], b[4]]) as i64) as u64
+                }
                 Some(b) if b[0] == 0xEB => va = (va as i64 + 2 + b[1] as i8 as i64) as u64,
                 _ => break,
             }
@@ -405,7 +468,8 @@ impl<'a> Image<'a> {
         let mut i = 0;
         while i + 7 <= code.len() {
             if code[i] == 0x48 && code[i + 1] == 0x8D && code[i + 2] == 0x15 {
-                let disp = i32::from_le_bytes([code[i + 3], code[i + 4], code[i + 5], code[i + 6]]) as i64;
+                let disp =
+                    i32::from_le_bytes([code[i + 3], code[i + 4], code[i + 5], code[i + 6]]) as i64;
                 let t = (f as i64 + i as i64 + 7 + disp) as u64;
                 if self.is_ptr(t) {
                     return Some(t);
@@ -441,7 +505,10 @@ impl<'a, 'b> Ctx<'a, 'b> {
         }
         let p = self.img.lea_rdx(f)?;
         let n = self.img.cstr(self.img.q(p + 24))?;
-        self.found_structs.borrow_mut().entry(n.clone()).or_insert(p);
+        self.found_structs
+            .borrow_mut()
+            .entry(n.clone())
+            .or_insert(p);
         Some(n)
     }
     fn enum_name_of_fn(&self, f: u64) -> Option<String> {
@@ -462,7 +529,9 @@ impl<'a, 'b> Ctx<'a, 'b> {
         *end -= 1;
         let p = ptrs[*end];
         let img = self.img;
-        let name = img.cstr(img.q(p)).unwrap_or_else(|| format!("prop_{:x}", p));
+        let name = img
+            .cstr(img.q(p))
+            .unwrap_or_else(|| format!("prop_{:x}", p));
         let gen = img.bytes(p + 24, 1).map(|b| b[0]).unwrap_or(0xFF);
         let dim = (img.d(p + 32) & 0xFFFF) as u16;
         let typed = img.q(p + self.layout.typed);
@@ -501,21 +570,30 @@ impl<'a, 'b> Ctx<'a, 'b> {
             0x1D => Ty::Text,
             0x1E => {
                 let u = self.take(ptrs, end, depth + 1)?.ty;
-                Ty::Enum(self.enum_name_of_fn(typed).unwrap_or_else(|| "?".into()), Box::new(u))
+                Ty::Enum(
+                    self.enum_name_of_fn(typed).unwrap_or_else(|| "?".into()),
+                    Box::new(u),
+                )
             }
             0x1F => Ty::FieldPath,
             0x20 => Ty::Double, // LargeWorldCoordinatesReal
             0x22 => Ty::Optional(Box::new(self.take(ptrs, end, depth + 1)?.ty)),
             x => Ty::Unknown(x),
         };
-        Some(Prop { name, array_dim: dim.max(1), ty })
+        Some(Prop {
+            name,
+            array_dim: dim.max(1),
+            ty,
+        })
     }
 
     fn props(&self, array: u64, count: usize) -> Vec<Prop> {
         if array == 0 || count == 0 || count > 4096 || !self.img.is_ptr(array) {
             return Vec::new();
         }
-        let ptrs: Vec<u64> = (0..count).map(|i| self.img.q(array + 8 * i as u64)).collect();
+        let ptrs: Vec<u64> = (0..count)
+            .map(|i| self.img.q(array + 8 * i as u64))
+            .collect();
         let mut end = ptrs.len();
         let mut out = Vec::new();
         while end > 0 {
@@ -540,10 +618,15 @@ fn scan_registrations(img: &Image) -> Vec<(Kind, u64, String)> {
     let mut out = Vec::new();
     for s in img.secs.iter().filter(|s| s.write && !s.exec) {
         let n = s.raw_size / 8;
-        let words: Vec<u64> = (0..n).map(|i| {
-            let o = s.raw + i * 8;
-            img.data.get(o..o + 8).map(|b| u64::from_le_bytes(b.try_into().unwrap())).unwrap_or(0)
-        }).collect();
+        let words: Vec<u64> = (0..n)
+            .map(|i| {
+                let o = s.raw + i * 8;
+                img.data
+                    .get(o..o + 8)
+                    .map(|b| u64::from_le_bytes(b.try_into().unwrap()))
+                    .unwrap_or(0)
+            })
+            .collect();
         let mut i = 0;
         while i + 4 < words.len() {
             let (a, b, c, d) = (words[i], words[i + 1], words[i + 2], words[i + 3]);
@@ -578,7 +661,10 @@ pub fn extract(exe: &[u8]) -> Result<Schema> {
     let mut classes: Vec<(String, u64)> = Vec::new();
     let mut class_fn: HashMap<u64, String> = HashMap::new();
     for (kind, f, name) in &regs {
-        if *kind != Kind::ClassOrStruct || name.len() < 2 || !matches!(name.as_bytes()[0], b'U' | b'A' | b'I') {
+        if *kind != Kind::ClassOrStruct
+            || name.len() < 2
+            || !matches!(name.as_bytes()[0], b'U' | b'A' | b'I')
+        {
             continue;
         }
         let Some(p) = img.lea_rdx(*f) else { continue };
@@ -615,7 +701,12 @@ pub fn extract(exe: &[u8]) -> Result<Schema> {
                 let pp = img.q(arr + 8 * k as u64);
                 if img.bytes(pp + 24, 1).map(|b| b[0] & 0x3F) == Some(0x19) {
                     let f = img.q(pp + cand);
-                    if img.is_code(f) && img.lea_rdx(f).and_then(|x| img.cstr(img.q(x + 24))).is_some() {
+                    if img.is_code(f)
+                        && img
+                            .lea_rdx(f)
+                            .and_then(|x| img.cstr(img.q(x + 24)))
+                            .is_some()
+                    {
                         ok += 1;
                     }
                 }
@@ -625,7 +716,12 @@ pub fn extract(exe: &[u8]) -> Result<Schema> {
             best = (ok, cand);
         }
     }
-    let ctx = Ctx { img: &img, layout: Layout { typed: best.1 }, found_structs: Default::default(), found_enums: Default::default() };
+    let ctx = Ctx {
+        img: &img,
+        layout: Layout { typed: best.1 },
+        found_structs: Default::default(),
+        found_enums: Default::default(),
+    };
     let mut schema = Schema::default();
     for (name, p) in &classes {
         let deps = img.q(p + 24);
@@ -635,12 +731,25 @@ pub fn extract(exe: &[u8]) -> Result<Schema> {
             sup = class_fn.get(&img.follow(img.q(deps))).cloned();
         }
         let props = ctx.props(img.q(p + 40), img.d(p + 64) as usize);
-        schema.structs.insert(name.clone(), StructDef { name: name.clone(), super_name: sup, props });
+        schema.structs.insert(
+            name.clone(),
+            StructDef {
+                name: name.clone(),
+                super_name: sup,
+                props,
+            },
+        );
     }
     // Structs, transitively (a struct's properties and super can name more structs).
     let mut done: std::collections::HashSet<String> = Default::default();
     loop {
-        let todo: Vec<(String, u64)> = ctx.found_structs.borrow().iter().filter(|(n, _)| !done.contains(*n)).map(|(n, p)| (n.clone(), *p)).collect();
+        let todo: Vec<(String, u64)> = ctx
+            .found_structs
+            .borrow()
+            .iter()
+            .filter(|(n, _)| !done.contains(*n))
+            .map(|(n, p)| (n.clone(), *p))
+            .collect();
         if todo.is_empty() {
             break;
         }
@@ -648,7 +757,11 @@ pub fn extract(exe: &[u8]) -> Result<Schema> {
             done.insert(name.clone());
             let sup = ctx.struct_name_of_fn(img.q(p + 8));
             let props = ctx.props(img.q(p + 48), img.d(p + 56) as usize);
-            schema.structs.entry(name.clone()).or_insert(StructDef { name, super_name: sup, props });
+            schema.structs.entry(name.clone()).or_insert(StructDef {
+                name,
+                super_name: sup,
+                props,
+            });
         }
     }
     for (name, p) in ctx.found_enums.borrow().iter() {
@@ -699,8 +812,14 @@ pub fn from_usmap(data: &[u8]) -> Result<Schema> {
     let raw = r.bytes(comp)?;
     if method == 1 {
         // Oodle expands well under 1:256; the bound keeps a corrupt header from asking for gigabytes
-        crate::limits::checked_len(size, 1, comp.saturating_mul(256).saturating_add(1 << 16).min(1 << 30))
-            .map_err(|e| super::reader::Error(format!("usmap size: {e}")))?;
+        crate::limits::checked_len(
+            size,
+            1,
+            comp.saturating_mul(256)
+                .saturating_add(1 << 16)
+                .min(1 << 30),
+        )
+        .map_err(|e| super::reader::Error(format!("usmap size: {e}")))?;
     }
     let body: Vec<u8> = match method {
         0 => raw.to_vec(),
@@ -709,24 +828,40 @@ pub fn from_usmap(data: &[u8]) -> Result<Schema> {
             super::oodle::decompress(raw, &mut out)?;
             out
         }
-        m => return err(format!("usmap compression {m} not supported (Brotli/Zstandard)")),
+        m => {
+            return err(format!(
+                "usmap compression {m} not supported (Brotli/Zstandard)"
+            ))
+        }
     };
     let mut r = Reader::new(&body);
     let nn = r.count(1)?;
     let mut names = Vec::with_capacity(nn);
     for _ in 0..nn {
-        let len = if version >= 2 { r.u16()? as usize } else { r.u8()? as usize };
+        let len = if version >= 2 {
+            r.u16()? as usize
+        } else {
+            r.u8()? as usize
+        };
         names.push(String::from_utf8_lossy(r.bytes(len)?).into_owned());
     }
     let name = |r: &mut Reader| -> Result<Option<String>> {
         let i = r.i32()?;
-        Ok(if i < 0 { None } else { names.get(i as usize).cloned() })
+        Ok(if i < 0 {
+            None
+        } else {
+            names.get(i as usize).cloned()
+        })
     };
     let mut schema = Schema::default();
     let ne = r.count(5)?;
     for _ in 0..ne {
         let en = name(&mut r)?.unwrap_or_default();
-        let n = if version >= 3 { r.u16()? as usize } else { r.u8()? as usize };
+        let n = if version >= 3 {
+            r.u16()? as usize
+        } else {
+            r.u8()? as usize
+        };
         let mut vals = Vec::with_capacity(n);
         for j in 0..n {
             if version >= 4 {
@@ -740,7 +875,11 @@ pub fn from_usmap(data: &[u8]) -> Result<Schema> {
         }
         schema.enums.entry(en).or_insert(vals);
     }
-    fn ty(r: &mut Reader, name: &dyn Fn(&mut Reader) -> Result<Option<String>>, depth: usize) -> Result<Ty> {
+    fn ty(
+        r: &mut Reader,
+        name: &dyn Fn(&mut Reader) -> Result<Option<String>>,
+        depth: usize,
+    ) -> Result<Ty> {
         if depth > 16 {
             return err("usmap type too deep");
         }
@@ -796,7 +935,11 @@ pub fn from_usmap(data: &[u8]) -> Result<Schema> {
             let pname = name(&mut r)?.unwrap_or_default();
             let t = ty(&mut r, &name, 0)?;
             if idx < slots.len() {
-                slots[idx] = Some(Prop { name: pname, array_dim: dim, ty: t });
+                slots[idx] = Some(Prop {
+                    name: pname,
+                    array_dim: dim,
+                    ty: t,
+                });
             }
         }
         // the schema walks properties by cumulative array dims: holes (not serialised) keep their width
@@ -809,12 +952,23 @@ pub fn from_usmap(data: &[u8]) -> Result<Schema> {
                     props.push(p);
                 }
                 None => {
-                    props.push(Prop { name: format!("_unused{i}"), array_dim: 1, ty: Ty::Unknown(0xFF) });
+                    props.push(Prop {
+                        name: format!("_unused{i}"),
+                        array_dim: 1,
+                        ty: Ty::Unknown(0xFF),
+                    });
                     i += 1;
                 }
             }
         }
-        schema.structs.insert(sname.clone(), StructDef { name: sname, super_name: sup, props });
+        schema.structs.insert(
+            sname.clone(),
+            StructDef {
+                name: sname,
+                super_name: sup,
+                props,
+            },
+        );
     }
     Ok(schema)
 }

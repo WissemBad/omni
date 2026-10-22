@@ -473,7 +473,7 @@ def read_phy(d: bytes) -> dict | None:
                         to = lo + 16 + t * 16
                         e = [struct.unpack_from("<I", d, to + 4 + i * 4)[0] & 0xFFFF for i in range(3)]
                         tri = np.array([struct.unpack_from("<3f", d, parr + e_ * 16) for e_ in e])
-                        tris.append(tri)
+                        tris.append(tri)    # noqa: B023 - walk() runs inside this iteration
                 else:
                     walk(node + 28)
                     walk(node + right)

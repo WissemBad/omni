@@ -5,7 +5,14 @@ use crate::par::*;
 
 /// `bones`/`weights`: n x k row-major. Returns (n x max_links bones, n x max_links weights). Unused links
 /// repeat the strongest bone with a zero weight; a vertex with no weight goes 100% to `fallback`.
-pub fn fold(bones: &[i64], weights: &[f64], n: usize, k: usize, max_links: usize, fallback: i64) -> (Vec<i64>, Vec<f64>) {
+pub fn fold(
+    bones: &[i64],
+    weights: &[f64],
+    n: usize,
+    k: usize,
+    max_links: usize,
+    fallback: i64,
+) -> (Vec<i64>, Vec<f64>) {
     if max_links == 0 || n == 0 || k == 0 {
         return (Vec::new(), Vec::new());
     }
@@ -51,7 +58,10 @@ mod tests {
     #[test]
     fn degenerate_arguments_do_not_panic() {
         assert_eq!(super::fold(&[], &[], 0, 4, 3, 0), (Vec::new(), Vec::new()));
-        assert_eq!(super::fold(&[1], &[1.0], 1, 1, 0, 0), (Vec::new(), Vec::new()));
+        assert_eq!(
+            super::fold(&[1], &[1.0], 1, 1, 0, 0),
+            (Vec::new(), Vec::new())
+        );
     }
 
     #[test]

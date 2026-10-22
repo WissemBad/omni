@@ -205,6 +205,7 @@ class EntityReader:
     def names(self) -> dict[int, str]:
         if self._names is None:
             import json
+
             from ...core.config import CONFIG
             cache = CONFIG.cache / f"property_names_{self.source.id}_v2.json"
             materials = self.archive.index("MATI")

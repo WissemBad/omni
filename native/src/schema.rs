@@ -26,16 +26,21 @@ pub struct EnumDef {
 }
 
 fn u32_at(d: &[u8], o: usize) -> Option<u32> {
-    d.get(o..o.checked_add(4)?).map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+    d.get(o..o.checked_add(4)?)
+        .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
 }
 fn i64_at(d: &[u8], o: usize) -> Option<i64> {
-    d.get(o..o.checked_add(8)?).map(|b| i64::from_le_bytes(b.try_into().unwrap()))
+    d.get(o..o.checked_add(8)?)
+        .map(|b| i64::from_le_bytes(b.try_into().unwrap()))
 }
 
 /// `TArray` at `o` -> (begin, element count); `elem` is the element size. Anything out of range is an error: a
 /// schema read half-way would hand wrong types to the callers.
 fn array(d: &[u8], o: usize, elem: usize) -> Result<(usize, usize), String> {
-    let (b, e) = (i64_at(d, o).ok_or("array out of range")?, i64_at(d, o + 8).ok_or("array out of range")?);
+    let (b, e) = (
+        i64_at(d, o).ok_or("array out of range")?,
+        i64_at(d, o + 8).ok_or("array out of range")?,
+    );
     if b < 0 || e < b {
         return Ok((0, 0)); // empty arrays are stored as -1/-1
     }
@@ -56,8 +61,15 @@ pub fn class_schema(d: &[u8]) -> Result<Vec<PropDef>, String> {
         let crc = u32_at(data, o).ok_or("truncated property")?;
         let tidx = i64_at(data, o + 8).ok_or("truncated property")?;
         let ptr = i64_at(data, o + 16).ok_or("truncated property")?;
-        let ty = usize::try_from(tidx).ok().and_then(|i| types.get(i)).ok_or("property type out of range")?;
-        out.push(PropDef { crc, ty: ty.clone(), default: ptr >= 0 });
+        let ty = usize::try_from(tidx)
+            .ok()
+            .and_then(|i| types.get(i))
+            .ok_or("property type out of range")?;
+        out.push(PropDef {
+            crc,
+            ty: ty.clone(),
+            default: ptr >= 0,
+        });
     }
     Ok(out)
 }
@@ -65,7 +77,10 @@ pub fn class_schema(d: &[u8]) -> Result<Vec<PropDef>, String> {
 /// Class name of a blueprint (CBLU).
 pub fn blueprint_class(d: &[u8]) -> Result<String, String> {
     let (_data, types) = parse_bin1(d)?;
-    types.into_iter().next().ok_or_else(|| "blueprint without class name".to_string())
+    types
+        .into_iter()
+        .next()
+        .ok_or_else(|| "blueprint without class name".to_string())
 }
 
 pub fn enum_def(d: &[u8]) -> Result<EnumDef, String> {
@@ -83,10 +98,20 @@ pub fn enum_def(d: &[u8]) -> Result<EnumDef, String> {
     let names: Vec<String> = (0..nn).map(|k| zstring(data, nb + 16 * k)).collect();
     let mut members = Vec::with_capacity(nn);
     for (k, n) in names.iter().enumerate() {
-        members.push((n.clone(), u32_at(data, vb + 4 * k).ok_or("truncated enum value")? as i32));
+        members.push((
+            n.clone(),
+            u32_at(data, vb + 4 * k).ok_or("truncated enum value")? as i32,
+        ));
     }
-    let legacy = (0..ln).map(|k| zstring(data, lb + 16 * k)).filter(|s| !s.is_empty() && !names.contains(s)).collect();
-    Ok(EnumDef { name, members, legacy })
+    let legacy = (0..ln)
+        .map(|k| zstring(data, lb + 16 * k))
+        .filter(|s| !s.is_empty() && !names.contains(s))
+        .collect();
+    Ok(EnumDef {
+        name,
+        members,
+        legacy,
+    })
 }
 
 #[cfg(test)]
@@ -120,7 +145,7 @@ pub(crate) mod tests {
         out
     }
 
-    fn zs(buf: &mut Vec<u8>, at: usize, s: &str, ptr: usize) {
+    fn zs(buf: &mut [u8], at: usize, s: &str, ptr: usize) {
         buf[at..at + 4].copy_from_slice(&(s.len() as u32 | 0x4000_0000).to_le_bytes());
         buf[at + 8..at + 16].copy_from_slice(&(ptr as u64).to_le_bytes());
     }
@@ -132,7 +157,10 @@ pub(crate) mod tests {
         data[8..16].copy_from_slice(&(begin as u64).to_le_bytes());
         data[16..24].copy_from_slice(&((begin + 48) as u64).to_le_bytes());
         data[24..32].copy_from_slice(&((begin + 48) as u64).to_le_bytes());
-        for (k, (crc, tidx, ptr)) in [(0xDC933FABu32, 1i64, -1i64), (0x1234, 0, 100)].iter().enumerate() {
+        for (k, (crc, tidx, ptr)) in [(0xDC933FABu32, 1i64, -1i64), (0x1234, 0, 100)]
+            .iter()
+            .enumerate()
+        {
             let o = begin + 24 * k;
             data[o..o + 4].copy_from_slice(&crc.to_le_bytes());
             data[o + 8..o + 16].copy_from_slice(&tidx.to_le_bytes());
@@ -140,16 +168,33 @@ pub(crate) mod tests {
         }
         let f = bin1(&data, &["float32", "TArray<ZEntityReference>"]);
         let s = class_schema(&f).unwrap();
-        assert_eq!(s, vec![
-            PropDef { crc: 0xDC933FAB, ty: "TArray<ZEntityReference>".into(), default: false },
-            PropDef { crc: 0x1234, ty: "float32".into(), default: true },
-        ]);
-        assert!(class_schema(&bin1(&data, &["float32"])).is_err(), "a type index out of the table is an error");
+        assert_eq!(
+            s,
+            vec![
+                PropDef {
+                    crc: 0xDC933FAB,
+                    ty: "TArray<ZEntityReference>".into(),
+                    default: false
+                },
+                PropDef {
+                    crc: 0x1234,
+                    ty: "float32".into(),
+                    default: true
+                },
+            ]
+        );
+        assert!(
+            class_schema(&bin1(&data, &["float32"])).is_err(),
+            "a type index out of the table is an error"
+        );
     }
 
     #[test]
     fn reads_the_class_name_of_a_blueprint() {
-        assert_eq!(blueprint_class(&bin1(&[0; 16], &["zbodypartentity"])).unwrap(), "zbodypartentity");
+        assert_eq!(
+            blueprint_class(&bin1(&[0; 16], &["zbodypartentity"])).unwrap(),
+            "zbodypartentity"
+        );
         assert!(blueprint_class(&bin1(&[0; 16], &[])).is_err());
         assert!(blueprint_class(b"nope").is_err());
     }
@@ -162,7 +207,7 @@ pub(crate) mod tests {
         let legacy_at = names_at + 32;
         let values_at = legacy_at + 32;
         let strs = values_at + 8;
-        let mut put = |data: &mut Vec<u8>, at: usize, s: &str, p: usize| {
+        let put = |data: &mut Vec<u8>, at: usize, s: &str, p: usize| {
             data[p..p + s.len()].copy_from_slice(s.as_bytes());
             zs(data, at, s, p);
         };
@@ -171,7 +216,11 @@ pub(crate) mod tests {
         put(&mut data, names_at + 16, "High", strs + 16);
         put(&mut data, legacy_at, "High", strs + 16);
         put(&mut data, legacy_at + 16, "Old", strs + 24);
-        for (o, b, n, sz) in [(0x10usize, legacy_at, 2usize, 16usize), (0x28, names_at, 2, 16), (0x40, values_at, 2, 4)] {
+        for (o, b, n, sz) in [
+            (0x10usize, legacy_at, 2usize, 16usize),
+            (0x28, names_at, 2, 16),
+            (0x40, values_at, 2, 4),
+        ] {
             data[o..o + 8].copy_from_slice(&(b as u64).to_le_bytes());
             data[o + 8..o + 16].copy_from_slice(&((b + n * sz) as u64).to_le_bytes());
         }
@@ -179,7 +228,10 @@ pub(crate) mod tests {
         data[values_at + 4..values_at + 8].copy_from_slice(&5i32.to_le_bytes());
         let e = enum_def(&bin1(&data, &[])).unwrap();
         assert_eq!(e.name, "grade");
-        assert_eq!(e.members, vec![("Low".to_string(), 0), ("High".to_string(), 5)]);
+        assert_eq!(
+            e.members,
+            vec![("Low".to_string(), 0), ("High".to_string(), 5)]
+        );
         assert_eq!(e.legacy, vec!["Old".to_string()]);
     }
 

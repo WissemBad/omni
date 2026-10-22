@@ -890,8 +890,7 @@ impl<R: Read + Seek> WwiseRiffVorbis<R> {
                             self.input.seek(SeekFrom::Start(next_packet.offset))?;
                             let mut next_bit_reader = BitReader::new(&mut self.input);
                             let next_mode_number = next_bit_reader.read_bits(mode_bits as u8)?;
-                            *mbf
-                                .get(next_mode_number as usize)
+                            *mbf.get(next_mode_number as usize)
                                 .ok_or_else(|| WemError::parse("packet uses an undefined mode"))?
                         } else {
                             false

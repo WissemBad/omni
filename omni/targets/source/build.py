@@ -1,21 +1,20 @@
 """Build one source model into a GMod addon folder: materials -> SMD/QC -> studiomdl -> addon."""
 from __future__ import annotations
 
+import copy
+import logging
 import os
 import shutil
-import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 
-from ...core.config import CONFIG, Config
 from ...core import geom
+from ...core.config import CONFIG, Config
 from . import collision, smd
 from .compile import compile_qc
-import copy
-
 from .materials import Options, TextureCache, convert_material, guess_surfaceprop
 
 UNITS_PER_METER = 39.37
@@ -287,7 +286,7 @@ def build_model(source, key: str, cfg: Config = CONFIG, opts: BuildOptions | Non
                 res.notes.append(f"collision: {method} ({len(hulls)} piece(s)), {mass:.1f} kg, {surf}")
             else:
                 res.notes.append("no collision model (scenery-sized object)" if method == "scenery" else "no collision hull")
-        (work / "model.qc").write_text("\n".join(qc + phys_qc) + "\n")
+        (work / "model.qc").write_text("\n".join(qc + phys_qc) + "\n", encoding="utf-8")
         res.seconds["write"] = round(time.perf_counter() - t, 3)
 
         outdir = cfg.sandbox / "models" / Path(mpath).parent
@@ -305,7 +304,7 @@ def build_model(source, key: str, cfg: Config = CONFIG, opts: BuildOptions | Non
         # the physics compiler hangs or fails on some degenerate/huge hulls: keep the model, drop its collision.
         # A timeout on a big mesh is the mesh itself, not the hulls: retrying without them would only cost it twice.
         if not cr.ok and phys_qc and not (cr.timed_out and res.triangles > BIG_MESH):
-            (work / "model.qc").write_text("\n".join(qc) + "\n")
+            (work / "model.qc").write_text("\n".join(qc) + "\n", encoding="utf-8")
             res.notes.append("collision removed: studiomdl could not build it (" + (cr.errors[:1] or ["?"])[0][:80] + ")")
             clear(outdir)
             cr = compile_qc(work / "model.qc", cfg.sandbox, cfg.studiomdl, timeout=timeout)
@@ -328,7 +327,7 @@ def build_model(source, key: str, cfg: Config = CONFIG, opts: BuildOptions | Non
         res.status = "PARTIAL" if (res.unknown_slots or cr.warnings) else "OK"
         if cr.warnings:
             res.notes += cr.warnings[:5]
-    except Exception as e:  # noqa: BLE001 - report per-asset failures instead of aborting the batch
+    except Exception as e:
         res.errors.append(f"{type(e).__name__}: {e}")
         logging.getLogger("omni.build").warning("%s failed", key, exc_info=True)       # the traceback goes to the worker's log
     finally:

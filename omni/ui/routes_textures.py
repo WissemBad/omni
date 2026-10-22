@@ -94,9 +94,9 @@ def register(app: FastAPI, *, jobs, need, texcat_of, catalog_of, converted) -> N
             try:
                 png = src.texture_png(key.upper(), channel, size, bool(normal))
             except FileNotFoundError:
-                raise HTTPException(404, "Texture introuvable")
-            except Exception as e:  # noqa: BLE001
-                raise HTTPException(415, f"{type(e).__name__}: {e}")
+                raise HTTPException(404, "Texture introuvable") from None
+            except Exception as e:
+                raise HTTPException(415, f"{type(e).__name__}: {e}") from e
             out.parent.mkdir(parents=True, exist_ok=True)
             tmp = out.with_suffix(".tmp")
             tmp.write_bytes(png)
