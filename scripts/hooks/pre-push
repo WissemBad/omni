@@ -1,0 +1,4 @@
+#!/bin/sh
+# Installed by scripts/install-hooks.ps1: a push only leaves this machine when the CI pipeline passes here too.
+# Skip once with `git push --no-verify`.
+exec powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci-local.ps1

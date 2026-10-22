@@ -65,6 +65,7 @@ ignore = [
 include = ["omni", "scripts"]
 exclude = ["**/__pycache__", "omni/targets/blender/blender_script.py"]   # runs inside Blender (bpy)
 pythonVersion = "3.12"
+pythonPlatform = "Windows"                       # omni is Windows-only: the CI checks on Linux must read ctypes.windll, os.startfile...
 typeCheckingMode = "standard"
 reportMissingImports = "warning"
 

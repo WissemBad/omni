@@ -35,7 +35,7 @@ steps:
       - curl -fsSL -o /tmp/deny.tgz https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz
       - echo "9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f  /tmp/deny.tgz" | sha256sum -c -
       - tar -xzf /tmp/deny.tgz -C /tmp
-      - /tmp/cargo-deny-0.20.2-x86_64-unknown-linux-musl/cargo-deny --manifest-path native/Cargo.toml check --config native/deny.toml
+      - /tmp/cargo-deny-0.20.2-x86_64-unknown-linux-musl/cargo-deny --manifest-path native/Cargo.toml --config native/deny.toml check
 
   - name: python-check
     image: ghcr.io/astral-sh/uv:python3.12-bookworm
