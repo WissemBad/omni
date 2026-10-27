@@ -11,7 +11,7 @@ dependencies = [
   "scipy>=1.18.1",
   "coacd>=1.0.14",
   "vpk>=1.4.0",
-  "py7zr>=0.22",
+  "py7zr>=1.1.4",
   "pywebview>=5.3",
   "pystray>=0.19.5",
 ]
@@ -21,8 +21,8 @@ dev = [
     "lz4",                     # tests/rpkg_builder.py writes LZ4-compressed test packages
     "pygltflib",               # tests read the .glb files the Rust writer produces
     "pyinstaller>=6.10",
-    "ruff>=0.6",
-    "httpx2>=2.13.1",
+    "ruff>=0.17.2",
+    "httpx2>=2.16.0",
     "pytest",
 ]
 
