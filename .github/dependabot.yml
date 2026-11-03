@@ -1,43 +1,74 @@
 version: 2
 updates:
   - package-ecosystem: uv
-    directory: "/"
+    directory: /
     schedule:
-      interval: weekly
-      day: tuesday
-      time: "06:00"
-      timezone: "Europe/Paris"
-    open-pull-requests-limit: 5
+      interval: cron
+      cronjob: 10 7 21 * *
+      timezone: Europe/Paris
+    open-pull-requests-limit: 1
     groups:
-      python-minor-patch:
+      uv-security:
+        applies-to: security-updates
+        patterns:
+          - '*'
+      uv-minor-patch:
+        patterns:
+          - '*'
         update-types:
-          - "minor"
-          - "patch"
-
+          - minor
+          - patch
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: '*'
+        update-types:
+          - version-update:semver-major
   - package-ecosystem: cargo
-    directory: "/native"
+    directory: /native
     schedule:
-      interval: weekly
-      day: tuesday
-      time: "06:00"
-      timezone: "Europe/Paris"
-    open-pull-requests-limit: 5
+      interval: cron
+      cronjob: 20 7 21 * *
+      timezone: Europe/Paris
+    open-pull-requests-limit: 1
     groups:
+      cargo-security:
+        applies-to: security-updates
+        patterns:
+          - '*'
       cargo-minor-patch:
+        patterns:
+          - '*'
         update-types:
-          - "minor"
-          - "patch"
-
+          - minor
+          - patch
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: '*'
+        update-types:
+          - version-update:semver-major
   - package-ecosystem: bun
-    directory: "/web"
+    directory: /web
     schedule:
-      interval: weekly
-      day: tuesday
-      time: "06:00"
-      timezone: "Europe/Paris"
-    open-pull-requests-limit: 5
+      interval: cron
+      cronjob: 30 7 21 * *
+      timezone: Europe/Paris
+    open-pull-requests-limit: 1
     groups:
+      bun-security:
+        applies-to: security-updates
+        patterns:
+          - '*'
       bun-minor-patch:
+        patterns:
+          - '*'
         update-types:
-          - "minor"
-          - "patch"
+          - minor
+          - patch
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: '*'
+        update-types:
+          - version-update:semver-major
