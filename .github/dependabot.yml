@@ -6,6 +6,7 @@ updates:
       interval: cron
       cronjob: 10 7 21 * *
       timezone: Europe/Paris
+    rebase-strategy: disabled
     open-pull-requests-limit: 1
     groups:
       uv-security:
@@ -30,6 +31,7 @@ updates:
       interval: cron
       cronjob: 20 7 21 * *
       timezone: Europe/Paris
+    rebase-strategy: disabled
     open-pull-requests-limit: 1
     groups:
       cargo-security:
@@ -54,6 +56,7 @@ updates:
       interval: cron
       cronjob: 30 7 21 * *
       timezone: Europe/Paris
+    rebase-strategy: disabled
     open-pull-requests-limit: 1
     groups:
       bun-security:
