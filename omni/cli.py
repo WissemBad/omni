@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -129,12 +130,37 @@ def _serve_only(port: int) -> int:
 
 def cmd_pick_folder(a):
     from .core import folderdialog
-    raise SystemExit(folderdialog.main([a.title]))
+    raise SystemExit(folderdialog.main([a.title], files=a.files))
 
 
 def cmd_app(a):
     from . import app as desktop
     raise SystemExit(desktop.run(a.port, browser=a.browser))
+
+
+def _openable(arg: str) -> bool:
+    """A path the user means to open (not a command name): a .mdl or .gma file, or a folder given as a path."""
+    if arg.startswith("-"):
+        return False
+    p = Path(arg)
+    if p.suffix.lower() in (".mdl", ".gma"):
+        return p.is_file()
+    return ("\\" in arg or "/" in arg) and p.is_dir()
+
+
+def view_path(target: str) -> str:
+    """The page of the interface that opens ``target`` (a folder, a .mdl or a .gma) in the viewer without a game."""
+    import urllib.parse
+    if not target:
+        return "/view"
+    return "/view?open=" + urllib.parse.quote(str(Path(target).expanduser().resolve()))
+
+
+def cmd_view(a):
+    from . import app as desktop
+    if a.target and not Path(a.target).expanduser().exists():
+        raise SystemExit(f"introuvable : {a.target}")
+    raise SystemExit(desktop.run(a.port, browser=a.browser, path=view_path(a.target)))
 
 
 def cmd_pm(a):
@@ -361,6 +387,11 @@ def main(argv=None):
     ap_.add_argument("--port", type=int, default=8770)
     ap_.add_argument("--browser", action="store_true", help="use the default browser instead of the built-in window")
     ap_.set_defaults(fn=cmd_app)
+    vw = sub.add_parser("view", help="open a folder, a .mdl or a .gma in the viewer, without any game")
+    vw.add_argument("target", nargs="?", default="", help="folder, .mdl or .gma")
+    vw.add_argument("--port", type=int, default=8770)
+    vw.add_argument("--browser", action="store_true", help="use the default browser instead of the built-in window")
+    vw.set_defaults(fn=cmd_view)
     pmp = sub.add_parser("pm", help="build a GMod player model from character parts (hash or path fragment)")
     pmp.add_argument("name"); pmp.add_argument("parts", nargs="+"); pmp.add_argument("--title")
     pmp.add_argument("--template", choices=["male", "female"], default="male")
@@ -409,12 +440,16 @@ def main(argv=None):
     su.set_defaults(fn=cmd_subset)
     pf = sub.add_parser("pick-folder", help=argparse.SUPPRESS)       # used by the server: the native folder dialog
     pf.add_argument("title", nargs="?", default="Choisir un dossier")
+    pf.add_argument("--files", default="", help="pick a file of these types instead: 'name|*.a;*.b'")
     pf.set_defaults(fn=cmd_pick_folder)
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if len(argv) == 1 and _openable(argv[0]):        # a file dropped on Omni.exe, or opened with it
+        argv = ["view", argv[0]]
     a = ap.parse_args(argv)
     if not getattr(a, "fn", None):                    # no command: the desktop window
         a = ap.parse_args(["app"])
     problems: list[str] = []
-    if a.fn in (cmd_app, cmd_ui):                     # data moves before any file of the workspace is opened
+    if a.fn in (cmd_app, cmd_ui, cmd_view):           # data moves before any file of the workspace is opened
         from .core import migrate
         for step in (migrate.finish_pending, migrate.migrate_installed):
             try:
@@ -424,7 +459,7 @@ def main(argv=None):
     if a.fn is not cmd_pick_folder:                   # every command uses the configured paths (assets, GMod...)
         from .core import settings
         settings.apply()
-    if a.fn in (cmd_app, cmd_ui):                     # the packaged app has no console: errors go to logs/omni.log
+    if a.fn in (cmd_app, cmd_ui, cmd_view):           # the packaged app has no console: errors go to logs/omni.log
         from .core import log
         log.setup(console=a.fn is cmd_ui)
         for p in problems:

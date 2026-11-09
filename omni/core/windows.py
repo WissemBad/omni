@@ -127,7 +127,8 @@ _picker = None
 
 
 def set_picker(fn) -> None:
-    """The desktop window registers its native dialog here (``fn(title) -> path``)."""
+    """The desktop window registers its native dialog here (``fn(title, file_types=()) -> path``: a folder, or a file
+    when ``file_types`` lists pywebview filters such as ``"Modèles (*.mdl;*.gma)"``)."""
     global _picker
     _picker = fn
 
@@ -142,6 +143,19 @@ def pick_folder(title: str = "Choisir un dossier") -> str:
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=600, creationflags=NOWINDOW)
     if r.returncode != 0:
         raise RuntimeError((r.stderr or "folder dialog failed").strip())
+    return r.stdout.strip()
+
+
+def pick_file(title: str, name: str, patterns: str) -> str:
+    """Native "open file" dialog limited to ``patterns`` (``"*.mdl;*.gma"``), named ``name`` in its type list."""
+    if _picker is not None:
+        return _picker(title, (f"{name} ({patterns})",)) or ""
+    import sys
+    args = ["pick-folder", "--files", f"{name}|{patterns}", title]
+    cmd = [sys.executable, *args] if getattr(sys, "frozen", False) else [sys.executable, "-m", "omni", *args]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=600, creationflags=NOWINDOW)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or "file dialog failed").strip())
     return r.stdout.strip()
 
 

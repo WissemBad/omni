@@ -199,7 +199,10 @@ onMounted(() => {
               <p class="mx-auto max-w-xl text-lg text-toned">
                 Les ressources de tes jeux, prêtes pour Garry’s Mod et pour Blender. Modèles, textures, sons : tout se lit sur ton PC, rien n’est envoyé nulle part.
               </p>
-              <UButton label="Commencer" trailing-icon="i-ri-arrow-right-line" size="xl" @click="go(1)" />
+              <div class="flex flex-col items-center gap-2">
+                <UButton label="Commencer" trailing-icon="i-ri-arrow-right-line" size="xl" @click="go(1)" />
+                <UButton label="Je veux seulement ouvrir des modèles Garry’s Mod" color="neutral" variant="link" @click="finish('/view')" />
+              </div>
             </section>
 
             <!-- 1 -->

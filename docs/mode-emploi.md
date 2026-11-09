@@ -1,12 +1,12 @@
 # Omni : mode d'emploi
 
-Omni transforme les fichiers de **ta** copie d'un jeu en contenu pour Garry's Mod (props, playermodels, textures), en modèles glTF pour Blender et en sons. Rien n'est envoyé nulle part.
+Omni transforme les fichiers de **ta** copie d'un jeu en contenu pour Garry's Mod (props, playermodels, textures), en modèles glTF pour Blender et en sons. Il sert aussi de visionneuse pour n'importe quel modèle Garry's Mod, sans jeu. Rien n'est envoyé nulle part.
 
 ## Démarrer
 
 1. Lance Omni (installeur ou archive portable ; depuis les sources : `Omni.cmd`).
-2. Page **Jeux** : choisis le dossier du jeu (ou prends celui que Steam a trouvé). Omni reconnaît le moteur et prépare tout le reste tout seul : outils, noms, index, catalogues. Attends la fin du travail dans le panneau des jobs.
-3. Les pages du jeu s'ouvrent : **Modèles**, **Textures**, **Visionneuse**, **Sons**, **Réglages**.
+2. *Convertir un jeu* : choisis le dossier du jeu (ou prends celui que Steam a trouvé). Omni reconnaît le moteur et prépare tout le reste tout seul : outils, noms, index, catalogues. Attends la fin du travail dans le panneau des travaux.
+3. Les onglets du jeu s'ouvrent : **Modèles**, **Textures**, **Sons**, **Visionneuse**, **Exports**. Le menu du jeu, en haut à gauche, mène à sa vue d'ensemble, aux autres jeux et à la bibliothèque. Le menu ⚙, en haut à droite, contient les réglages et les mises à jour.
 
 Garry's Mod est nécessaire pour convertir des modèles (Omni le trouve dans Steam).
 
@@ -33,11 +33,25 @@ Tout ce qui t'intéresse est dans `exports`. Rien d'autre n'est écrit ailleurs 
 
 **Reprendre d'anciennes données** : l'ancien dossier d'Omni est repris automatiquement. Pour un autre emplacement : `Omni.exe migrate "C:\ancien\dossier"` (rien n'est supprimé ni écrasé ; `--dry-run` montre ce qui bougerait).
 
+## Visionneuse sans jeu
+
+*Ouvrir des modèles* (premier écran, ou menu du jeu) ouvre :
+
+- un fichier `.mdl` : son addon s'ouvre, le modèle sélectionné ;
+- une archive `.gma` du Workshop, y compris les anciennes `_legacy.bin` ;
+- le dossier d'un addon ;
+- un addon déjà installé dans Garry's Mod, choisi dans la liste.
+
+On y voit le modèle tel que GMod le charge : squelette, hitboxes, collision, animations, matériaux et textures, avec les contrôles de ses fichiers. Rien n'est modifié ; une archive `.gma` est dépaquetée une fois dans `workspace\cache`.
+
+`Omni.exe view <fichier ou dossier>` ouvre directement la visionneuse, et un `.mdl` ou un `.gma` glissé sur `Omni.exe` aussi.
+
 ## Convertir
 
 - **Modèles** : coche des props (ou filtre puis « tout »), *Convertir*. L'addon est mis à jour et relié à Garry's Mod. *Ouvrir dans GMod* lance le jeu sur le modèle.
 - **Playermodels** : onglet *Personnages*, construis une famille ou toutes.
 - **glTF** : option dans les Réglages (*un .glb par modèle*) ou bouton dans l'inspecteur. Les modèles sont exportés en parallèle.
+- **Exports** : l'addon Garry's Mod (lien avec GMod, `.gma`, addon partiel) et l'export du jeu entier (tous les props, tous les playermodels, tous les sons) sont réunis sur cette page.
 - **Textures** : parcours toutes les textures du jeu, aperçu par canal, export PNG pleine résolution.
 - **Sons** : *Exporter* (ogg sans réencodage et flac, ou le format choisi). Le dossier suit les noms du jeu, avec tags et `index.csv`.
 
@@ -48,6 +62,7 @@ Un seul gros travail tourne à la fois, les autres attendent dans la file. Ferme
 `Omni.exe <commande>` (depuis les sources : `uv run --no-sync python -m omni <commande>`) :
 
 ```powershell
+Omni.exe view D:\Mods\addon.gma   # ouvrir un modèle, une archive ou un dossier dans la visionneuse
 Omni.exe home                     # où sont mes fichiers
 Omni.exe batch --limit 20         # convertir quelques props
 Omni.exe sounds --format auto     # exporter les sons
@@ -62,4 +77,4 @@ Omni.exe native                   # état du cœur Rust
 
 - Garry's Mod doit être fermé pour reconvertir ou déplacer l'addon (fichiers verrouillés).
 - Un chemin trop long (plus de 260 caractères) fait échouer StudioMDL : garde le dossier Omni près de la racine d'un disque si ça arrive.
-- Réglages, *Stockage et maintenance* : vider les aperçus, reconstruire les catalogues. Le journal est dans `workspace\logs`.
+- Vue d'ensemble du jeu, *Stockage et maintenance* : vider les aperçus, reconstruire les catalogues. Le journal est dans `workspace\logs`.

@@ -1,4 +1,5 @@
-"""The Windows "select folder" dialog (the modern IFileOpenDialog one), through ctypes: no Tk, no extra package.
+"""The Windows "select folder" and "open file" dialogs (the modern IFileOpenDialog), through ctypes: no Tk, no extra
+package.
 
 It runs in a child process (``omni pick-folder``), so the packaged app can use it without a window of its own and a
 fault in the COM calls can never take the server down.
@@ -16,9 +17,13 @@ FOS_PICKFOLDERS, FOS_FORCEFILESYSTEM, FOS_PATHMUSTEXIST = 0x20, 0x40, 0x800
 SIGDN_FILESYSPATH = 0x80058000
 ERROR_CANCELLED = 0x800704C7
 
-# vtable slots: IUnknown 0-2, IModalWindow::Show 3, IFileDialog::SetOptions 9, GetOptions 10, SetTitle 17, GetResult 20;
-# IShellItem::GetDisplayName 5
-SHOW, SET_OPTIONS, GET_OPTIONS, SET_TITLE, GET_RESULT, RELEASE, GET_DISPLAY_NAME = 3, 9, 10, 17, 20, 2, 5
+# vtable slots: IUnknown 0-2, IModalWindow::Show 3, IFileDialog::SetFileTypes 4, SetOptions 9, GetOptions 10,
+# SetTitle 17, GetResult 20; IShellItem::GetDisplayName 5
+SHOW, SET_FILE_TYPES, SET_OPTIONS, GET_OPTIONS, SET_TITLE, GET_RESULT, RELEASE, GET_DISPLAY_NAME = 3, 4, 9, 10, 17, 20, 2, 5
+
+
+class _FilterSpec(ctypes.Structure):
+    _fields_ = [("name", wintypes.LPCWSTR), ("spec", wintypes.LPCWSTR)]
 
 
 class _Guid(ctypes.Structure):
@@ -38,8 +43,9 @@ def _call(obj: c_void_p, slot: int, *args_and_types):
     return proto(fn)(obj, *[v for v, _t in args_and_types])
 
 
-def pick_folder(title: str = "Choisir un dossier") -> str:
-    """Path chosen by the user, or an empty string when the dialog is cancelled."""
+def pick_folder(title: str = "Choisir un dossier", files: tuple[str, str] | None = None) -> str:
+    """Path chosen by the user, or an empty string when the dialog is cancelled. With ``files`` (name, ``*.a;*.b``)
+    the dialog picks a file of those types instead of a folder."""
     ole32 = ctypes.windll.ole32
     ole32.CoInitializeEx(None, 2)                       # apartment threaded; a mode mismatch is harmless here
     dialog = c_void_p()
@@ -50,7 +56,11 @@ def pick_folder(title: str = "Choisir un dossier") -> str:
     try:
         opts = c_ulong()
         _call(dialog, GET_OPTIONS, (byref(opts), POINTER(c_ulong)))
-        _call(dialog, SET_OPTIONS, (opts.value | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST, c_ulong))
+        flags = opts.value | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST | (0 if files else FOS_PICKFOLDERS)
+        _call(dialog, SET_OPTIONS, (flags, c_ulong))
+        if files:
+            spec = _FilterSpec(*files)
+            _call(dialog, SET_FILE_TYPES, (1, ctypes.c_uint), (byref(spec), POINTER(_FilterSpec)))
         _call(dialog, SET_TITLE, (title, wintypes.LPCWSTR))
         owner = ctypes.windll.user32.GetForegroundWindow()
         hr = _call(dialog, SHOW, (owner, wintypes.HWND)) & 0xFFFFFFFF
@@ -72,10 +82,11 @@ def pick_folder(title: str = "Choisir un dossier") -> str:
         _call(dialog, RELEASE)
 
 
-def main(argv: list[str]) -> int:
-    """``omni pick-folder [title]``: print the chosen folder."""
+def main(argv: list[str], files: str = "") -> int:
+    """``omni pick-folder [--files "name|*.a;*.b"] [title]``: print the chosen folder (or file)."""
+    spec = tuple(files.split("|", 1)) if "|" in files else None
     try:
-        print(pick_folder(argv[0] if argv else "Choisir un dossier"), flush=True)
+        print(pick_folder(argv[0] if argv else "Choisir un dossier", spec), flush=True)  # type: ignore[arg-type]
         return 0
     except OSError as e:
         print(str(e), file=sys.stderr)

@@ -6,11 +6,14 @@ from __future__ import annotations
 class Shell:
     def __init__(self):
         self.focus = None           # () -> None: bring the window to the front
+        self.navigate = None        # (path) -> None: open a page of the interface in the window
         self.job_finished = None    # (job) -> None: tell the user a job ended while the window was not in front
 
-    def request_focus(self) -> bool:
+    def request_focus(self, path: str = "") -> bool:
         if self.focus is None:
             return False
+        if path and self.navigate is not None:
+            self.navigate(path)
         self.focus()
         return True
 

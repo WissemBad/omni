@@ -1,6 +1,12 @@
 import type { OutputCheck, OutputModel } from '~/utils/types'
 
 /** Folder the viewer is browsing ('' = what omni converted); the viewer page keeps it current. */
+/** The viewer without a game (`/view`): its API lives under `/api/view/output`. */
+export const VIEW_ID = 'view'
+
+/** `/view`, also reached as `/view/` when the static server adds the slash. */
+export const isViewPath = (path: string) => path.replace(/\/+$/, '') === '/view'
+
 export const viewerRoot = ref('')
 
 /** Query string of an `/api/<source>/output/<route>` URL. */

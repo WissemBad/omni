@@ -20,7 +20,7 @@ The parsers, texture codecs, audio converters, glTF writer and bulk readers are 
 ## What it does
 
 - **Props and player models**: each model becomes a complete Source model (`.mdl` with materials, collision and levels of detail), written into one addon linked to Garry's Mod. Characters become player models, their variations becoming bodygroups and skins.
-- **Viewer**: shows a converted model the way Garry's Mod loads it, with skeleton, hitboxes, collision and animations, and checks that its files are complete.
+- **Viewer**: shows a model the way Garry's Mod loads it, with skeleton, hitboxes, collision and animations, and checks that its files are complete. It needs no game: open any `.mdl`, a Workshop `.gma` or an installed addon (`Omni.exe view <path>`).
 - **Textures**: every texture of the game with its role and format, previewed per channel, exported to PNG or converted to VTF.
 - **Sounds**: the game's audio exported into a named folder tree (voices by language and conversation, effects by event), without duplicates, with tags and an index.
 - **Selection**: a separate addon holding only the models listed in a text file.

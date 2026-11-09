@@ -23,7 +23,7 @@ export function useSources() {
 /** Source id of the current route (`/<source>/props`). */
 export function useSourceId() {
   const route = useRoute()
-  return computed(() => String(route.params.source ?? ''))
+  return computed(() => String(route.params.source ?? (isViewPath(route.path) ? VIEW_ID : '')))
 }
 
 /** Details + GMod link state of the current source. */
