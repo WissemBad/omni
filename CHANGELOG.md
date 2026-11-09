@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-09
+
 ### Changed
 
 - The navigation is reorganised. The game is chosen from a menu on the left, which also opens its overview and the
