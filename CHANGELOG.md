@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-11-09
+
 ### Security
 
 - Updates are signed: the release key (ed25519) signs `SHA256SUMS.txt` and omni installs an update only when that

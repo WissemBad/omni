@@ -1,23 +1,26 @@
 # Release process
 
-A release is built and published by the Windows pipeline (`.woodpecker/windows.yml` -> `scripts/ci_windows.ps1` ->
-`scripts/build_release.ps1`). The same scripts run on a developer PC.
+Releases are built and published from a Windows PC with `scripts/build_release.ps1`. The Windows pipeline
+(`.woodpecker/windows.yml.off` -> `scripts/ci_windows.ps1` -> the same script) is ready but parked until the Windows
+agent described below exists; rename it to `windows.yml` to turn it on.
 
 ## Cutting a release
 
 ```powershell
 uv run --no-sync python scripts/release.py <x.y.z>      # versions, version resource of the exe, CHANGELOG, lockfiles
-# commit as "chore(release): vX.Y.Z", open the pull request, wait for both pipelines (Linux and Windows), merge
-git tag -a vX.Y.Z -m vX.Y.Z; git push origin vX.Y.Z      # the tag pipeline builds, signs and publishes
+# commit as "chore(release): vX.Y.Z", open the pull request, wait for the Linux pipeline, merge
+git switch main; git pull
+git tag -a vX.Y.Z -m vX.Y.Z; git push origin vX.Y.Z
+.\scripts\build_release.ps1 <x.y.z> -Publish           # installer, archive, signed checksums, GitHub release
 ```
 
 `scripts/release.py --check` (run by CI) fails when the versions of `pyproject.toml`, `omni/__init__.py`,
 `native/Cargo.toml`, `native/pyproject.toml`, `web/package.json` and `packaging/version.txt` disagree.
 
-## What a pull request builds
+## What the Windows pipeline builds
 
-Every pull request and every push to `main` builds the real package on Windows (without publishing): Rust checks on
-Windows, web build, Rust core, tests with the core required, PyInstaller, `Omni.exe selfcheck` (every source imports,
+Once enabled, every pull request and every push to `main` builds the real package on Windows (without publishing):
+Rust checks on Windows, web build, Rust core, tests with the core required, PyInstaller, `Omni.exe selfcheck` (every source imports,
 the core loads), a smoke test that adds the synthetic game and browses it through the API, the installer, the archive
 and the checksums. A packaging mistake is found before the tag, not after it.
 
