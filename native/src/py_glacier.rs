@@ -20,7 +20,7 @@ pub struct GlacierStore {
 
 #[pymethods]
 impl GlacierStore {
-    /// GlacierStore(packages) — every chunk*.rpkg / chunk*patch*.rpkg of the game.
+    /// GlacierStore(packages): every chunk*.rpkg / chunk*patch*.rpkg of the game.
     #[new]
     fn new(py: Python<'_>, packages: Vec<String>) -> PyResult<Self> {
         let paths: Vec<PathBuf> = packages.into_iter().map(PathBuf::from).collect();

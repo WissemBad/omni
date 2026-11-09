@@ -1,7 +1,7 @@
 """Preparing an Unreal game once it is added: everything omni needs is fetched or derived from the game folder.
 
 Steps (each skipped when already done, so preparing again is also the repair after a game update):
-  oodle      Epic's Oodle decompressor, downloaded and checked (SHA-256) — shared by every Unreal game
+  oodle      Epic's Oodle decompressor, downloaded and checked (SHA-256), shared by every Unreal game
   mappings   the property layouts, read from the shipping executable (cached with its size and date)
   index      the containers are opened and the packages of each asset class listed (cached with the .utoc dates)
   catalog    the props catalog and the playable characters (humanoid skeletal meshes)

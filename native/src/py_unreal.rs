@@ -192,7 +192,7 @@ fn lod_py<'py>(py: Python<'py>, l: mesh::Lod) -> PyResult<Bound<'py, PyDict>> {
 
 #[pymethods]
 impl UnrealGame {
-    /// UnrealGame(paks, engine="5.1", mappings="", aes_key="") — `mappings`: text from unreal_mappings().
+    /// UnrealGame(paks, engine="5.1", mappings="", aes_key=""): `mappings`: text from unreal_mappings().
     #[new]
     #[pyo3(signature = (paks, engine="5.1", mappings="", aes_key=""))]
     fn new(

@@ -1,6 +1,6 @@
 """HITMAN World of Assassination (Glacier 2, "HM3") resource decoders where they differ from 007 First Light.
 
-Layouts from the open-source RPKG-Tool (glacier-modding, written for HM3) — not verified on game data here:
+Layouts from the open-source RPKG-Tool (glacier-modding, written for HM3), not verified on game data here:
 
 PRIM  file[0:4] header offset; object header {u8 draw, u8 pack, u16 type, u32 flags (0x8 weighted, 0x200 high
       resolution), u32 BORG ref index, u32 object count, u32 object table offset, bbox}. Each object:

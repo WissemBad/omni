@@ -16,10 +16,23 @@ ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "pyright-baseline.json"
 
 
+def _run() -> dict:
+    """pyright's JSON report. The PyPI wrapper fetches Node and pyright on first use, which can fail on a cold CI runner:
+    one retry, then a readable error instead of a JSON traceback."""
+    p = None
+    for _ in range(2):
+        p = subprocess.run(["pyright", "--outputjson"], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+        try:
+            return json.loads(p.stdout)
+        except json.JSONDecodeError:
+            continue
+    detail = (p.stderr or p.stdout).strip() if p else ""
+    raise SystemExit(f"pyright gave no report (exit {p.returncode if p else '?'}):\n{detail}")
+
+
 def current() -> Counter:
-    out = subprocess.run(["pyright", "--outputjson"], cwd=ROOT, capture_output=True, text=True, encoding="utf-8").stdout
     counts: Counter = Counter()
-    for d in json.loads(out)["generalDiagnostics"]:
+    for d in _run()["generalDiagnostics"]:
         if d.get("severity") == "error":
             counts[f"{Path(d['file']).resolve().relative_to(ROOT).as_posix()}::{d.get('rule', '?')}"] += 1
     return counts

@@ -185,9 +185,6 @@ onMounted(() => {
       aria-modal="true"
       aria-label="Bienvenue dans omni"
     >
-      <div class="onb-blob onb-blob-a" />
-      <div class="onb-blob onb-blob-b" />
-
       <div class="relative mx-auto flex min-h-full w-full max-w-3xl flex-col px-5 py-8">
         <header class="flex items-center justify-between">
           <span class="text-lg font-extrabold tracking-tight text-highlighted">omni</span>
@@ -198,7 +195,7 @@ onMounted(() => {
           <div class="w-full" :class="direction > 0 ? 'onb-in-next' : 'onb-in-prev'" :key="step">
             <!-- 0 -->
             <section v-if="step === 0" key="0" class="w-full space-y-6 text-center">
-              <h1 class="onb-title text-5xl font-extrabold tracking-tight sm:text-7xl">Bienvenue dans omni</h1>
+              <h1 class="text-4xl font-bold tracking-tight text-highlighted sm:text-5xl">Bienvenue dans omni</h1>
               <p class="mx-auto max-w-xl text-lg text-toned">
                 Les ressources de tes jeux, prêtes pour Garry’s Mod et pour Blender. Modèles, textures, sons : tout se lit sur ton PC, rien n’est envoyé nulle part.
               </p>
@@ -208,16 +205,10 @@ onMounted(() => {
             <!-- 1 -->
             <section v-else-if="step === 1" key="1" class="w-full space-y-6">
               <div class="space-y-2">
-                <h2 class="text-3xl font-bold tracking-tight text-highlighted">Ce qu’omni fait pour toi</h2>
-                <p class="text-toned">Quatre ateliers, dans le même outil.</p>
+                <h2 class="text-3xl font-bold tracking-tight text-highlighted">Ce que fait omni</h2>
               </div>
               <div class="grid gap-3 sm:grid-cols-2">
-                <div
-                  v-for="(f, i) in FEATURES"
-                  :key="f.title"
-                  class="onb-card rounded-xl border border-default bg-elevated/60 p-4 backdrop-blur"
-                  :style="{ animationDelay: `${i * 90}ms` }"
-                >
+                <div v-for="f in FEATURES" :key="f.title" class="rounded-xl border border-default bg-elevated/60 p-4">
                   <UIcon :name="f.icon" class="size-7 text-primary" />
                   <h3 class="mt-3 font-semibold text-highlighted">{{ f.title }}</h3>
                   <p class="mt-1 text-sm text-muted">{{ f.text }}</p>
@@ -295,8 +286,7 @@ onMounted(() => {
 
             <!-- 4 -->
             <section v-else key="4" class="w-full space-y-6 text-center">
-              <UIcon name="i-ri-rocket-2-line" class="onb-float mx-auto size-14 text-primary" />
-              <h2 class="text-4xl font-extrabold tracking-tight text-highlighted">C’est prêt</h2>
+              <h2 class="text-3xl font-bold tracking-tight text-highlighted">C’est prêt</h2>
               <p class="mx-auto max-w-lg text-toned">
                 {{ readyGame ? `${readyGame.title} est prêt : ouvre les modèles, les textures ou les sons.` : 'Tu pourras ajouter ou préparer un jeu à tout moment depuis la page Jeux.' }}
                 La présentation se revoit depuis Réglages.
@@ -331,43 +321,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.onb-title {
-  background: linear-gradient(120deg, var(--ui-text-highlighted), var(--ui-primary) 55%, var(--ui-text-highlighted));
-  background-size: 200% auto;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: onb-shine 6s linear infinite;
-}
-.onb-blob {
-  position: fixed;
-  border-radius: 9999px;
-  filter: blur(90px);
-  opacity: 0.28;
-  pointer-events: none;
-  background: var(--ui-primary);
-}
-.onb-blob-a {
-  width: 34rem;
-  height: 34rem;
-  left: -10rem;
-  top: -8rem;
-  animation: onb-drift 18s ease-in-out infinite alternate;
-}
-.onb-blob-b {
-  width: 28rem;
-  height: 28rem;
-  right: -8rem;
-  bottom: -6rem;
-  opacity: 0.18;
-  animation: onb-drift 22s ease-in-out infinite alternate-reverse;
-}
-.onb-card {
-  animation: onb-rise 0.5s both cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.onb-float {
-  animation: onb-bob 3.2s ease-in-out infinite;
-}
 .onb-in-next {
   animation: onb-slide-next 0.35s both ease;
 }
@@ -386,34 +339,9 @@ onMounted(() => {
     transform: translateX(-28px);
   }
 }
-@keyframes onb-shine {
-  to {
-    background-position: 200% center;
-  }
-}
-@keyframes onb-drift {
-  to {
-    transform: translate(6rem, 4rem) scale(1.15);
-  }
-}
-@keyframes onb-rise {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-}
-@keyframes onb-bob {
-  50% {
-    transform: translateY(-8px);
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  .onb-title,
-  .onb-blob,
-  .onb-card,
   .onb-in-next,
-  .onb-in-prev,
-  .onb-float {
+  .onb-in-prev {
     animation: none;
   }
 }

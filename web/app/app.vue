@@ -92,7 +92,7 @@ const items = computed(() => {
         <UEmpty
           icon="i-ri-plug-line"
           title="API omni injoignable"
-          :description="`${apiDown} — relance omni.`"
+          :description="apiDown"
           :actions="[{ label: 'Réessayer', icon: 'i-ri-refresh-line', onClick: () => reloadNuxtApp() }]"
         />
       </div>

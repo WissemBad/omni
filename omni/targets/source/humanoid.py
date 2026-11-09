@@ -9,7 +9,6 @@ humanoid role, else its own name (kept unique). Side comes from the name, role f
 """
 from __future__ import annotations
 
-import os
 import re
 
 # role keyword patterns, tried in order on the side-stripped, lower-case name
@@ -38,7 +37,9 @@ def _common_prefix(names: list[str]) -> str:
     """Prefix shared by the bone names ("Dwarf_", "Base-Human", "mixamorig:", "Bip01 "), stripped before matching."""
     if len(names) < 3:
         return ""
-    return os.path.commonprefix(names)
+    first, last = min(names), max(names)
+    end = next((i for i, (a, b) in enumerate(zip(first, last, strict=False)) if a != b), len(first))
+    return first[:end]
 
 
 def _side(raw: str) -> tuple[str, str]:
@@ -127,9 +128,8 @@ def canonical_names(names: list[str], parents: list[int], positions=None) -> lis
             give(i, f"{side}_{simple[role]}")
         elif role == "toe" and side and not under(i, "toe"):
             give(i, f"{side}_ball")
-        elif role == "finger" and side and under(i, "foot"):
-            if not under(i, "finger"):
-                give(i, f"{side}_ball")              # CAT toes are "digits" under the foot
+        elif role == "finger" and side and under(i, "foot") and not under(i, "finger"):
+            give(i, f"{side}_ball")                  # CAT toes are "digits" under the foot
     # fingers: name keyword, or CAT/Biped digit numbers (Digit<finger><segment>), else order under the hand
     for i in range(n):
         side, core, role = info[i]

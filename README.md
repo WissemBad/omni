@@ -15,6 +15,25 @@ Supported: *007 First Light* and *HITMAN World of Assassination* (Glacier engine
 
 The parsers, texture codecs, audio converters, glTF writer and bulk readers are a Rust core; Python orchestrates the jobs and serves the interface (Nuxt 4, Nuxt UI 4 and [Wissem UI](https://github.com/Wissem-Industries/ui)) in the system's WebView2 window.
 
+![The viewer: a converted prop as Garry's Mod will load it, with its checks and statistics](docs/screenshots/viewer.webp)
+
+## What it does
+
+- **Props and player models**: each model becomes a complete Source model (`.mdl` with materials, collision and levels of detail), written into one addon linked to Garry's Mod. Characters become player models, their variations becoming bodygroups and skins.
+- **Viewer**: shows a converted model the way Garry's Mod loads it, with skeleton, hitboxes, collision and animations, and checks that its files are complete.
+- **Textures**: every texture of the game with its role and format, previewed per channel, exported to PNG or converted to VTF.
+- **Sounds**: the game's audio exported into a named folder tree (voices by language and conversation, effects by event), without duplicates, with tags and an index.
+- **Selection**: a separate addon holding only the models listed in a text file.
+- **glTF and Blender**: one `.glb` per model, and `.blend` files when Blender is installed.
+
+Long jobs wait in a queue and run one at a time; a whole-game export can be cancelled and resumes where it stopped.
+
+| Models | Textures |
+| --- | --- |
+| ![The models page: the props catalogue, a preview and the inspector](docs/screenshots/models.webp) | ![The textures page: a texture, its format and the materials that use it](docs/screenshots/textures.webp) |
+
+The interface is in French.
+
 ## Install
 
 Download `Omni-Setup-<version>.exe` (installer) or `Omni-<version>-windows.zip` (portable) from the [releases](https://github.com/WissemBad/omni/releases), start Omni, then add a game on the **Jeux** page. `SHA256SUMS.txt` lists the checksums of both files. A short guide in French is in [docs/mode-emploi.md](docs/mode-emploi.md).
@@ -43,22 +62,20 @@ cd web; bun install; bun run build; cd ..
 .\Omni.cmd                               # or: uv run --no-sync python -m omni app
 ```
 
-Checks:
+Checks, the same as CI:
 
 ```powershell
-uv run ruff check
-uv run pytest
-cargo test --manifest-path native/Cargo.toml --no-default-features
-cd web; bun run check
+.\scripts\check.ps1          # ruff, import contracts, pyright (ratchet), versions, pytest + coverage, cargo fmt/clippy/test/deny, web
+.\scripts\check.ps1 -Fast    # without the web build and the Rust tests
 ```
 
-Tests that need game data skip themselves. Point `OMNI_HOME` at a throwaway folder when a command writes exports.
+The tests run in a throwaway Omni folder on a synthetic game (`tests/synthetic.py`), so no game file is needed. Point `OMNI_HOME` at a throwaway folder when you run a command that writes exports.
 
 Package locally with `uv run --no-sync pyinstaller packaging/omni.spec --noconfirm`, then compile `packaging/omni.iss` with Inno Setup.
 
 ## Release
 
-Versions follow Semantic Versioning and changes are listed in [CHANGELOG.md](CHANGELOG.md). CI (Woodpecker, Linux) runs the checks; the Windows installer is built on a Windows machine with [scripts/build_release.ps1](scripts/build_release.ps1).
+Versions follow Semantic Versioning and changes are listed in [CHANGELOG.md](CHANGELOG.md). CI (Woodpecker, Linux) runs the checks on every pull request; the Windows installer is built on a Windows machine with [scripts/build_release.ps1](scripts/build_release.ps1).
 
 ```powershell
 uv run --no-sync python scripts/release.py <x.y.z>      # version bump, in a chore(release) pull request
