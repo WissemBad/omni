@@ -1,7 +1,9 @@
-# Linux checks of every push and pull request. The Windows-only part (package, installer, native Windows code) is
+# Linux checks of every pull request and of main. The Windows-only part (package, installer, native Windows code) is
 # .woodpecker/windows.yml. Everything here is also run locally by scripts/check.ps1.
 when:
-  - event: [push, pull_request]
+  - event: pull_request
+  - event: push
+    branch: main
 
 steps:
   - name: web-install
@@ -21,6 +23,7 @@ steps:
       - cd web
       - bun run lint
       - bun run typecheck
+      - bun run test
       - bun run build
     depends_on:
       - web-install

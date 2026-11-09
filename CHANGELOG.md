@@ -26,6 +26,11 @@ All notable changes to this project are documented here. The format follows [Kee
 - The tests no longer depend on the machine they run on: a throwaway Omni folder, a synthetic HITMAN 3 game for the API
   and the sources, golden outputs for the VTF, SMD and glTF writers, and the Rust core required.
 - `omni selfcheck` imports every source and the Rust core (used to test a package).
+- The welcome screen is plainer: no animated title, blurred shapes or floating icon.
+- Error messages from the interface are always in French: the server's own sentence when it sends one, otherwise one
+  per status, and the fields at fault for invalid values. The web helpers have unit tests (Vitest).
+- Dependencies updated (FastAPI, NumPy, httpx2, py7zr, Brotli, setuptools, OpenTelemetry), which closes the open
+  advisories. Dependabot opens grouped pull requests once a month, security fixes apart.
 
 ### Fixed
 
