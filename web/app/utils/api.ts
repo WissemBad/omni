@@ -11,7 +11,7 @@ const BY_STATUS: Record<number, string> = {
   413: 'Fichier trop volumineux.',
   415: 'Format non pris en charge.',
   422: 'Valeurs invalides.',
-  500: 'Erreur interne d’omni. Le détail est dans le journal (Réglages › Diagnostic).',
+  500: 'Erreur interne d’omni. Le détail est dans son journal (workspace\\logs).',
   501: 'Fonction indisponible sur cet ordinateur.',
   502: 'omni ne répond pas.',
   503: 'omni ne répond pas.',

@@ -454,6 +454,7 @@ const DONE = [
               <UBadge v-if="active.skinned" label="statue" color="neutral" variant="outline" size="sm" />
               <UBadge v-if="active.converted" label="converti" color="success" variant="subtle" size="sm" icon="i-ri-check-line" />
             </div>
+            <UButton v-if="active.converted" label="Ouvrir dans la visionneuse" icon="i-ri-eye-line" size="xs" color="success" variant="soft" class="mt-2" :to="{ path: `/${sid}/viewer`, query: { m: gmodPath } }" />
           </WGlassCard>
         </template>
         <template #overlay-end>
@@ -461,9 +462,6 @@ const DONE = [
           <WGlassCard v-if="active" :halo="false" body-class="flex flex-col gap-0.5 p-1 sm:p-1">
             <UTooltip text="Convertir celui-ci" :content="{ side: 'left' }">
               <UButton icon="i-ri-hammer-line" size="sm" color="primary" variant="soft" aria-label="Convertir" @click="convert([active.key])" />
-            </UTooltip>
-            <UTooltip v-if="active.converted" text="Voir dans la visionneuse" :content="{ side: 'left' }">
-              <UButton icon="i-ri-eye-line" size="sm" color="success" variant="ghost" aria-label="Visionneuse" :to="{ path: `/${sid}/viewer`, query: { m: gmodPath } }" />
             </UTooltip>
             <UTooltip text="Détails" :content="{ side: 'left' }">
               <UButton class="xl:hidden" icon="i-ri-layout-right-line" size="sm" color="neutral" variant="ghost" aria-label="Ouvrir l’inspecteur" @click="inspectorOpen = true" />

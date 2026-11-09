@@ -269,7 +269,7 @@ onMounted(() => {
                 <div>
                   <p class="font-semibold text-highlighted">{{ gmod?.installed ? 'Garry’s Mod est installé' : 'Garry’s Mod est introuvable' }}</p>
                   <p class="mt-1 text-sm text-muted">
-                    {{ gmod?.installed ? 'Les addons générés peuvent être liés au jeu d’un clic (le bouton en forme de lien, en haut).' : 'Tu peux tout explorer et exporter sans lui. Indique son dossier dans Réglages pour lier les addons.' }}
+                    {{ gmod?.installed ? 'Les addons générés se lient au jeu d’un clic, depuis la page Exports.' : 'Tu peux tout explorer et exporter sans lui. Indique son dossier dans les Réglages (menu ⚙) pour lier les addons.' }}
                   </p>
                 </div>
               </div>
@@ -278,7 +278,7 @@ onMounted(() => {
                 <div class="min-w-0 flex-1">
                   <p class="font-semibold text-highlighted">Tout tient dans un seul dossier</p>
                   <p class="mt-1 break-all font-mono text-xs text-muted">{{ home?.home }}</p>
-                  <p class="mt-1 text-sm text-muted">Tes exports d’un côté, ce que l’application gère de l’autre. Tu peux le déplacer plus tard dans Réglages, par exemple vers un disque plus grand : les exports de jeux se comptent en dizaines de Go.</p>
+                  <p class="mt-1 text-sm text-muted">Tes exports d’un côté, ce que l’application gère de l’autre. Tu peux le déplacer plus tard dans les Réglages (menu ⚙), par exemple vers un disque plus grand : les exports de jeux se comptent en dizaines de Go.</p>
                 </div>
                 <UButton icon="i-ri-folder-open-line" color="neutral" variant="soft" size="sm" aria-label="Ouvrir le dossier" @click="openHome" />
               </div>
@@ -288,8 +288,8 @@ onMounted(() => {
             <section v-else key="4" class="w-full space-y-6 text-center">
               <h2 class="text-3xl font-bold tracking-tight text-highlighted">C’est prêt</h2>
               <p class="mx-auto max-w-lg text-toned">
-                {{ readyGame ? `${readyGame.title} est prêt : ouvre les modèles, les textures ou les sons.` : 'Tu pourras ajouter ou préparer un jeu à tout moment depuis la page Jeux.' }}
-                La présentation se revoit depuis Réglages.
+                {{ readyGame ? `${readyGame.title} est prêt : ouvre les modèles, les textures ou les sons.` : 'Tu pourras ajouter ou préparer un jeu à tout moment depuis le menu du jeu, en haut à gauche.' }}
+                La présentation se revoit depuis le menu ⚙.
               </p>
               <UButton label="Ouvrir omni" trailing-icon="i-ri-arrow-right-line" size="xl" @click="finish()" />
             </section>

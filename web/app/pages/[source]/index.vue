@@ -1,17 +1,16 @@
 <script setup lang="ts">
-import type { Job, Overview } from '~/utils/types'
+import type { Overview } from '~/utils/types'
 
 definePageMeta({ key: (r) => `${r.params.source}/home` })
 
 /**
- * Home: what the source offers and where things stand (catalogs, converted models, exported sounds, the GMod
- * addon), the global exports with their progress, and the health of the tools (Rust core, StudioMDL, GMod).
+ * Overview of a game: what it offers and where things stand (catalogs, converted models, exported sounds), the
+ * recent jobs, and the data omni keeps for it (storage, catalogs, previews). Exports live on their own page.
  */
 const sid = useSourceId()
 const jobs = useJobs()
-const { info: system, load: loadSystem } = useSystem()
-const { toggleDeploy } = useSourceDetails()
-const { values: settingsValues, load: loadSettings } = useSettings()
+const confirm = useConfirm()
+const toast = useToast()
 
 const ov = ref<Overview | null>(null)
 const failed = ref('')
@@ -25,7 +24,7 @@ async function load() {
 }
 let timer: ReturnType<typeof setInterval> | undefined
 onMounted(async () => {
-  await Promise.all([load(), loadSystem(), loadSettings().catch(() => null)])
+  await Promise.all([load(), loadStorage()])
   timer = setInterval(() => {
     if (!document.hidden) load() // a minimised window does not need fresh figures
   }, 6000)
@@ -99,125 +98,70 @@ const benches = computed<Bench[]>(() => {
   return out
 })
 
-// ---- global exports
-const forceSounds = ref(false)
-const starting = ref('')
-const confirm = useConfirm()
-const toast = useToast()
-async function run(key: string, path: string, body?: unknown, confirmText?: string) {
+const deployed = computed(() => ov.value?.addon.deployed)
+
+// ---- storage & maintenance of this game
+const storage = ref<{
+  addon: number
+  previews: number
+  audio: number
+  cache: number
+  path: string
+  exports: string
+} | null>(null)
+const loadStorage = async () =>
+  (storage.value = await api<typeof storage.value>(`/${sid.value}/storage`).catch(() => null))
+const sizes = computed(() =>
+  storage.value
+    ? [
+        {
+          label: 'Addon converti',
+          value: fmtBytes(storage.value.addon),
+          icon: 'i-ri-archive-line',
+        },
+        { label: 'Sons exportés', value: fmtBytes(storage.value.audio), icon: 'i-ri-music-2-line' },
+        { label: 'Aperçus 3D', value: fmtBytes(storage.value.previews), icon: 'i-ri-eye-line' },
+        { label: 'Caches', value: fmtBytes(storage.value.cache), icon: 'i-ri-database-2-line' },
+      ]
+    : [],
+)
+async function clearPreviews() {
   if (
-    confirmText &&
     !(await confirm({
-      title: 'Lancer ce travail ?',
-      description: confirmText,
-      confirmLabel: 'Lancer',
+      title: 'Supprimer les aperçus ?',
+      description: 'Les aperçus 3D et les miniatures en cache seront recréés à la demande.',
+      confirmLabel: 'Supprimer',
+      destructive: true,
     }))
   )
     return
-  starting.value = key
   try {
-    await startJob(path, { body, open: true })
-  } finally {
-    starting.value = ''
-  }
-}
-async function exportProps() {
-  // the server resolves the filter: nothing to download (and nothing to lose when the download fails)
-  let total = 0
-  try {
-    total = (await api<{ total: number }>(`/${sid.value}/props?named=1&limit=1`)).total
+    await api(`/${sid.value}/previews/clear`, { method: 'POST' })
+    toast.add({ title: 'Aperçus supprimés', icon: 'i-ri-delete-bin-line' })
+    loadStorage()
   } catch (e) {
-    toast.add({ title: 'Catalogue indisponible', description: apiError(e), color: 'error' })
-    return
+    toast.add({ title: 'Suppression impossible', description: apiError(e), color: 'error' })
   }
-  if (!total) {
-    toast.add({
-      title: 'Aucun prop à convertir',
-      description: 'Le catalogue est vide ou en cours de construction.',
-      color: 'warning',
-    })
-    return
-  }
-  await run(
-    'props',
-    `/${sid.value}/props/convert`,
-    { filter: { named_only: true } },
-    `Convertir ${total.toLocaleString('fr-FR')} props ? Les déjà convertis sont refaits avec les réglages actuels ; cela peut durer plusieurs heures.`,
-  )
 }
-const live = (kind: Job['kind']) => jobs.live(sid.value, kind)
-
-interface ExportCard {
-  key: string
-  kind: Job['kind']
-  icon: string
-  title: string
-  text: string
-  label: string
-  action: () => void
-}
-const exports = computed<ExportCard[]>(() => {
+const MAINTENANCE = computed(() => {
   const caps = ov.value?.capabilities ?? []
-  const out: ExportCard[] = []
-  const q = settingsValues.value?.textures.quality ?? 'max'
-  if (caps.includes('props')) {
-    out.push({
-      key: 'props',
-      kind: 'props',
+  return [
+    caps.includes('props') && {
+      label: 'Réindexer les props',
       icon: 'i-ri-box-3-line',
-      title: 'Tous les props',
-      text: `Le catalogue nommé, qualité « ${q} », collision du jeu.`,
-      label: 'Convertir tout',
-      action: exportProps,
-    })
-  }
-  if (caps.includes('characters')) {
-    out.push({
-      key: 'characters',
-      kind: 'character',
-      icon: 'i-ri-user-3-line',
-      title: 'Tous les playermodels',
-      text:
-        sid.value === '007fl'
-          ? 'Chaque famille de tenues devient un playermodel (variations en bodygroups et skins). Ceux déjà créés sont sautés.'
-          : 'Chaque personnage devient un playermodel sur le squelette de GMod. Ceux déjà créés sont sautés.',
-      label: 'Créer tout',
-      action: () =>
-        run(
-          'characters',
-          `/${sid.value}/characters/build-all`,
-          { skip_built: true },
-          'Créer tous les playermodels restants ? Compte une à deux minutes par personnage.',
-        ),
-    })
-  }
-  if (caps.includes('sounds')) {
-    out.push({
-      key: 'sounds',
-      kind: 'sounds',
+      run: () => startJob(`/${sid.value}/catalog/rebuild`, { open: true }),
+    },
+    caps.includes('textures') && {
+      label: 'Réindexer les textures',
+      icon: 'i-ri-image-2-line',
+      run: () => startJob(`/${sid.value}/textures/rebuild`, { open: true }),
+    },
+    caps.includes('sounds') && {
+      label: 'Relister les sons',
       icon: 'i-ri-music-2-line',
-      title: 'Tous les sons',
-      text:
-        sid.value === '007fl' || sid.value === 'hitman3'
-          ? 'Conversion par le cœur Rust, sans doublons, avec les noms des événements, de la musique et des dialogues.'
-          : 'Conversion par le cœur Rust (Bink Audio, Ogg…), sans doublons, rangés comme dans le jeu.',
-      label: 'Exporter',
-      action: () =>
-        run('sounds', `/${sid.value}/sounds/export`, {
-          force: forceSounds.value,
-          clean: forceSounds.value,
-        }),
-    })
-  }
-  return out
-})
-
-const deployed = computed(() => ov.value?.addon.deployed)
-const rust = computed(() => system.value?.rust)
-const rustLabel = computed(() => {
-  const r = rust.value
-  if (!r) return '…'
-  return r.native ? `natif ${r.native_version}` : 'absent'
+      run: () => startJob(`/${sid.value}/sounds/relist`, { open: true }),
+    },
+  ].filter(Boolean) as { label: string; icon: string; run: () => void }[]
 })
 </script>
 
@@ -237,7 +181,7 @@ const rustLabel = computed(() => {
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <UBadge :label="deployed ? 'Addon lié à GMod' : 'Addon non lié'" :color="deployed ? 'success' : 'neutral'" variant="subtle" :icon="deployed ? 'i-ri-link' : 'i-ri-link-unlink'" />
-          <UBadge :label="`Rust : ${rustLabel}`" :color="rust?.native ? 'primary' : 'warning'" variant="subtle" icon="i-ri-cpu-line" />
+          <UButton label="Exports" icon="i-ri-download-2-line" size="sm" color="primary" variant="soft" :to="`/${sid}/exports`" />
         </div>
       </UCard>
 
@@ -265,91 +209,16 @@ const rustLabel = computed(() => {
       </div>
 
       <div class="grid gap-3 lg:grid-cols-3">
-        <!-- global exports -->
-        <UCard class="lg:col-span-2" :ui="{ body: 'space-y-3 p-4 sm:p-4' }">
+        <!-- storage & maintenance -->
+        <UCard class="lg:col-span-2" :ui="{ body: 'space-y-4 p-4 sm:p-4' }">
           <template #header>
-            <div class="flex items-center justify-between gap-2">
-              <div>
-                <h2 class="text-base font-semibold text-highlighted">Exports globaux</h2>
-                <p class="text-sm text-muted">Tout le jeu d’un coup, avec les réglages de la page Réglages. Annulable, reprend là où il s’est arrêté.</p>
-              </div>
-              <UButton icon="i-ri-settings-3-line" label="Réglages" size="sm" color="neutral" variant="ghost" :to="`/${sid}/settings`" />
-            </div>
+            <h2 class="text-base font-semibold text-highlighted">Stockage et maintenance</h2>
+            <p v-if="storage" class="truncate text-sm text-muted" :title="storage.path">Ce qu’omni garde pour ce jeu. Exports : {{ storage.exports }}</p>
           </template>
-          <div class="grid gap-3 md:grid-cols-3">
-            <UCard v-for="e in exports" :key="e.key" :ui="{ body: 'flex h-full flex-col gap-3 p-3 sm:p-3' }">
-              <div class="flex items-start gap-2.5">
-                <UIcon :name="e.icon" class="mt-0.5 size-5 shrink-0 text-muted" />
-                <div class="min-w-0">
-                  <p class="font-medium text-highlighted">{{ e.title }}</p>
-                  <p class="text-xs text-muted">{{ e.text }}</p>
-                </div>
-              </div>
-              <div class="mt-auto space-y-2">
-                <template v-if="live(e.kind)">
-                  <OJobProgress :job="live(e.kind)!" />
-                  <p v-if="!live(e.kind)!.stage" class="truncate text-xs text-muted">{{ live(e.kind)!.last }}</p>
-                  <UButton label="Annuler" icon="i-ri-stop-circle-line" size="xs" color="neutral" variant="outline" block @click="jobs.cancel(live(e.kind)!.id)" />
-                </template>
-                <template v-else>
-                  <USwitch v-if="e.key === 'sounds' && ov?.sounds?.exported" v-model="forceSounds" size="sm" label="Tout réécrire" description="Nouveaux noms et tags ; les anciens fichiers sont retirés." />
-                  <UButton :label="e.label" icon="i-ri-download-2-line" color="primary" variant="soft" block :loading="starting === e.key" @click="e.action()" />
-                </template>
-              </div>
-            </UCard>
-          </div>
-        </UCard>
-
-        <!-- addon -->
-        <UCard :ui="{ body: 'space-y-3 p-4 sm:p-4' }">
-          <template #header>
-            <h2 class="text-base font-semibold text-highlighted">Addon Garry’s Mod</h2>
-            <p class="text-sm text-muted">Le dossier que GMod charge, lié par une jonction.</p>
-          </template>
-          <dl v-if="ov" class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-            <dt class="text-muted">Modèles</dt>
-            <dd class="text-right tabular-nums text-toned">{{ n(ov.addon.models) }}</dd>
-            <dt class="text-muted">Taille</dt>
-            <dd class="text-right tabular-nums text-toned">{{ ov.addon.addon === null ? 'calcul…' : fmtBytes(ov.addon.addon) }}</dd>
-            <dt class="text-muted">Paquet .gma</dt>
-            <dd class="text-right tabular-nums text-toned">{{ ov.addon.gma ? fmtBytes(ov.addon.gma_bytes) : 'aucun' }}</dd>
-          </dl>
-          <p v-if="ov" class="truncate font-mono text-xs text-muted" :title="ov.addon.path">{{ ov.addon.path }}</p>
+          <OStatGrid v-if="sizes.length" :stats="sizes" :cols="4" />
           <div class="flex flex-wrap gap-2">
-            <UButton :label="deployed ? 'Délier de GMod' : 'Lier à GMod'" :icon="deployed ? 'i-ri-link-unlink' : 'i-ri-link'" size="sm" :color="deployed ? 'neutral' : 'primary'" :variant="deployed ? 'outline' : 'soft'" @click="async () => { await toggleDeploy(); load() }" />
-            <UButton label="Créer le .gma" icon="i-ri-archive-2-line" size="sm" color="neutral" variant="outline" @click="run('gma', `/${sid}/gma`)" />
-          </div>
-        </UCard>
-      </div>
-
-      <div class="grid gap-3 lg:grid-cols-3">
-        <!-- system -->
-        <UCard class="lg:col-span-2" :ui="{ body: 'grid gap-4 p-4 sm:p-4 md:grid-cols-2' }">
-          <template #header>
-            <h2 class="text-base font-semibold text-highlighted">Système</h2>
-            <p class="text-sm text-muted">Le cœur Rust fait le travail lourd (textures, sons, collisions) ; les outils externes servent à compiler et empaqueter.</p>
-          </template>
-          <div class="space-y-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-muted">Outils</h3>
-            <ul class="space-y-1.5">
-              <li v-for="t in system?.tools ?? []" :key="t.key" class="flex items-center gap-2 text-sm">
-                <UIcon :name="t.ok ? 'i-ri-checkbox-circle-fill' : 'i-ri-close-circle-fill'" class="size-4 shrink-0" :class="t.ok ? 'text-success' : 'text-error'" />
-                <span class="min-w-0 flex-1 truncate text-toned" :title="t.path">{{ t.label }}</span>
-              </li>
-            </ul>
-            <p v-if="system" class="truncate text-xs text-muted" :title="system.home">Dossier Omni : {{ system.home }} · {{ system.cpus }} cœurs</p>
-          </div>
-          <div class="space-y-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-muted">Cœur Rust</h3>
-            <p class="text-sm text-toned">omni_native {{ rust?.native_version || '—' }} : textures, sons, collisions, géométrie, paquets du jeu.</p>
-            <UAlert
-              v-if="rust && !rust.native"
-              color="warning"
-              variant="subtle"
-              icon="i-ri-shield-line"
-              title="Module natif indisponible"
-              :description="rust.native_error || 'Reconstruis-le : python -m omni native --build'"
-            />
+            <UButton v-for="m in MAINTENANCE" :key="m.label" :label="m.label" :icon="m.icon" size="sm" color="neutral" variant="outline" @click="m.run()" />
+            <UButton label="Vider les aperçus" icon="i-ri-delete-bin-line" size="sm" color="neutral" variant="outline" @click="clearPreviews" />
           </div>
         </UCard>
 
@@ -371,8 +240,6 @@ const rustLabel = computed(() => {
           </ul>
         </UCard>
       </div>
-
-      <OSystemMonitor />
     </div>
   </div>
 </template>
