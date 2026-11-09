@@ -1,7 +1,7 @@
 <script setup lang="ts">
 const { sources, load } = useSources()
 const sid = useSourceId()
-const { details, refresh, toggleDeploy } = useSourceDetails()
+const { refresh } = useSourceDetails()
 const { running, open, refresh: refreshJobs } = useJobs()
 const update = useUpdate()
 const tour = useState('tour', () => false)
@@ -26,50 +26,43 @@ await boot()
 
 watch(sid, refresh, { immediate: true })
 
-const current = computed(() => sources.value.find((s) => s.id === sid.value))
+// Pages outside a game (settings, library) keep the tabs of the last game opened.
+const lastSid = useState('last-source', () => '')
+watch(sid, (v) => v && (lastSid.value = v), { immediate: true })
+const current = computed(() => sources.value.find((s) => s.id === (sid.value || lastSid.value)))
 
-// Accueil · Modèles · Textures · Visionneuse · Sélection · Sons · Réglages (only what the source offers)
+// What the current game offers: browse it (models, textures, sounds), look at what omni made of it, take it away.
 const route = useRoute()
 const items = computed(() => {
   const c = current.value
-  if (route.path === '/games') return [{ label: 'Jeux', icon: 'i-ri-gamepad-line', to: '/games' }]
   if (route.path === '/setup')
     return [{ label: 'Installation', icon: 'i-ri-install-line', to: '/setup' }]
   if (!c) return []
   const caps = c.capabilities
-  const rows = [{ label: 'Accueil', icon: 'i-ri-home-5-line', to: `/${c.id}` }]
-  if (caps.includes('props') || caps.includes('characters'))
-    rows.push({ label: 'Modèles', icon: 'i-ri-box-3-line', to: `/${c.id}/models` })
+  const models = caps.includes('props') || caps.includes('characters')
+  const rows = []
+  if (models) rows.push({ label: 'Modèles', icon: 'i-ri-box-3-line', to: `/${c.id}/models` })
   if (caps.includes('textures'))
     rows.push({ label: 'Textures', icon: 'i-ri-image-2-line', to: `/${c.id}/textures` })
-  if (caps.includes('props') || caps.includes('characters'))
-    rows.push({ label: 'Visionneuse', icon: 'i-ri-eye-line', to: `/${c.id}/viewer` })
-  if (caps.includes('props') || caps.includes('characters'))
-    rows.push({ label: 'Sélection', icon: 'i-ri-scissors-cut-line', to: `/${c.id}/subset` })
   if (caps.includes('sounds'))
     rows.push({ label: 'Sons', icon: 'i-ri-music-2-line', to: `/${c.id}/sounds` })
-  rows.push({ label: 'Réglages', icon: 'i-ri-settings-3-line', to: `/${c.id}/settings` })
-  rows.push({ label: 'Jeux', icon: 'i-ri-gamepad-line', to: '/games' })
+  if (models) rows.push({ label: 'Visionneuse', icon: 'i-ri-eye-line', to: `/${c.id}/viewer` })
+  rows.push({ label: 'Exports', icon: 'i-ri-download-2-line', to: `/${c.id}/exports` })
   return rows
 })
+const showGames = computed(() => sources.value.length > 0 && route.path !== '/setup')
 </script>
 
 <template>
   <UApp>
+    <div v-if="showGames" class="pointer-events-none fixed left-4 top-4 z-50 max-xl:hidden">
+      <div class="wi-glass wi-glass--pill pointer-events-auto p-1">
+        <OSourceMenu />
+      </div>
+    </div>
     <WNavbar :items="items" label="Navigation principale">
       <template #trailing>
-        <OSourceMenu v-if="sources.length && route.path !== '/setup'" />
-        <UTooltip :text="details?.deployed ? 'Addon lié à GMod : cliquer pour délier' : 'Lier l’addon à GMod'">
-          <UButton
-            :icon="details?.deployed ? 'i-ri-link' : 'i-ri-link-unlink'"
-            :color="details?.deployed ? 'success' : 'neutral'"
-            variant="ghost"
-            class="size-11 justify-center rounded-full sm:size-9"
-            aria-label="Lier l’addon à GMod"
-            :disabled="!current"
-            @click="toggleDeploy"
-          />
-        </UTooltip>
+        <OSourceMenu v-if="showGames" class="xl:hidden" />
         <UTooltip v-if="update.info.value?.available" :text="`omni ${update.info.value.latest} est disponible`">
           <UButton label="Mise à jour" icon="i-ri-download-cloud-2-line" size="sm" color="primary" variant="soft" @click="update.install()" />
         </UTooltip>
@@ -84,6 +77,7 @@ const items = computed(() => {
           />
         </UChip>
         <WColorModeButton />
+        <OAppMenu />
       </template>
     </WNavbar>
 

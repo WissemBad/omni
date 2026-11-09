@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- The navigation is reorganised. The game is chosen from a menu on the left, which also opens its overview and the
+  library. The tabs are Modèles, Textures, Sons, Visionneuse and Exports. Settings, updates and the welcome tour are
+  in a ⚙ menu on the right.
+- A new Exports page gathers what omni produces from a game: the Garry's Mod addon (link, `.gma`, partial addon) and
+  the whole-game exports. The game overview keeps the figures, the recent jobs and the game's own storage and
+  maintenance.
+- The settings are one page shared by every game, with the system checks (tools, Rust core, monitor) that used to sit
+  on the game's home page. The former addresses (`/<game>/settings`) lead there.
+- Models: a converted prop opens in the viewer from a labelled button in its card.
+
 ## [1.0.6] - 2026-11-09
 
 ### Security
