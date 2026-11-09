@@ -4,6 +4,8 @@ Every route lives under ``/api/<source id>/output/...`` and reads a *root* folde
 (``<exports>/<source>/garrysmod-addon``, with the conversion features: origin, comparison, reconversion), or any folder the
 user adds (a decompiled addon...), which is only read. What the viewer shows is rebuilt from the compiled files, not
 from the game's data, so it is what GMod will load.
+
+``/api/view/output/...`` is the viewer without a game: only the folders, models and ``.gma`` archives the user opens.
 """
 from __future__ import annotations
 
@@ -22,7 +24,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, Response
 
 from ..core.config import CONFIG
-from ..core.windows import pick_folder, reveal
+from ..core.windows import pick_file, pick_folder, reveal
 from . import studio
 
 TEXTURE_PARAMS = ("$basetexture", "$basetexture2", "$bumpmap", "$bumpmap2", "$normalmap", "$envmapmask", "$detail",
@@ -44,6 +46,7 @@ class Root:
     external: bool
 
 
+VIEW = "view"
 ROOTS_FILE = CONFIG.config_dir / "viewer_roots.json"
 VTX_EXTS = (".dx90.vtx", ".dx80.vtx", ".sw.vtx")
 
@@ -515,14 +518,82 @@ def _pick_folder() -> str:
     return pick_folder("Choisir un dossier de modèles (addon décompilé…)")
 
 
+def _open_target(path: Path) -> tuple[Path, str, str]:
+    """What the viewer opens for ``path``: ``(root folder, model to select, label)``. A ``.mdl`` opens the addon it
+    belongs to (the folder above its ``models/``), a ``.gma`` is unpacked once into the workspace cache."""
+    if path.is_dir():
+        return path.resolve(), "", path.resolve().name
+    suffix = path.suffix.lower()
+    if suffix == ".mdl":
+        parts = [p.lower() for p in path.parts]
+        if "models" in parts[:-1]:
+            i = len(parts) - 2 - parts[-2::-1].index("models")
+            root = Path(*path.parts[:i])
+            return root.resolve(), Path(*path.parts[i:]).as_posix(), root.name
+        return path.parent.resolve(), path.name, path.parent.name
+    if suffix in (".gma", ".bin"):
+        from ..targets.source import gma
+        st = path.stat()
+        key = hashlib.sha1(f"{path.resolve()}|{st.st_size}|{int(st.st_mtime)}".lower().encode()).hexdigest()[:12]
+        dest = CONFIG.cache / "gma" / key
+        archive = path
+        if gma.is_legacy(path):                       # an old Workshop item: the .gma compressed with LZMA
+            archive = CONFIG.cache / "gma" / f"{key}.gma"
+            if not archive.is_file():
+                archive.parent.mkdir(parents=True, exist_ok=True)
+                gma.unpack_legacy(path, archive)
+        index = gma.read_index(archive)
+        if not dest.is_dir():
+            gma.extract(archive, dest)
+        name = path.parent.name if path.suffix.lower() == ".bin" else path.stem
+        return dest, "", f"{gma.title(index, name)} (.gma)"
+    raise ValueError("Ouvre un dossier, un fichier .mdl ou une archive .gma")
+
+
+def _gma_title(path: Path, fallback: str) -> str:
+    """The title stored in a .gma (legacy compressed items keep ``fallback``: they would need unpacking)."""
+    from ..targets.source import gma
+    if path.suffix.lower() != ".gma":
+        return fallback
+    try:
+        return gma.title(gma.read_index(path), fallback)
+    except (OSError, ValueError):
+        return fallback
+
+
+def _installed_addons() -> list[dict]:
+    """The addons Garry's Mod loads: the folders and ``.gma`` of ``garrysmod/addons``, and the Workshop downloads."""
+    out: list[dict] = []
+    addons = CONFIG.gmod / "garrysmod" / "addons"
+    try:
+        for e in sorted(addons.iterdir(), key=lambda p: p.name.lower()) if addons.is_dir() else []:
+            if e.is_dir() and (e / "models").is_dir():
+                out.append({"label": e.name, "path": str(e), "kind": "folder"})
+            elif e.suffix.lower() == ".gma":
+                out.append({"label": _gma_title(e, e.stem), "path": str(e), "kind": "gma"})
+    except OSError:
+        pass
+    workshop = CONFIG.gmod.parent.parent / "workshop" / "content" / "4000"
+    try:
+        for d in workshop.iterdir() if workshop.is_dir() else []:
+            for f in list(d.glob("*.gma"))[:1] + list(d.glob("*.bin"))[:1]:
+                out.append({"label": _gma_title(f, f"Workshop {d.name}"), "path": str(f), "kind": "workshop"})
+                break
+    except OSError:
+        pass
+    return out
+
+
 def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: None) -> None:
     """``resolve_source(sid)`` returns the source (404 when unknown); ``catalog_of(sid)`` its prop catalog;
     ``texcat_of(sid)`` its texture catalog (links a converted material back to the game's one)."""
     indexes: dict[tuple[str, str], OutputIndex] = {}
 
     def roots_of(sid: str) -> list[Root]:
-        src = resolve_source(sid)
-        out = [Root("", CONFIG.addon_dir(sid), f"Sortie omni · {getattr(src, 'title', sid)}", False)]
+        out: list[Root] = []
+        if sid != VIEW:
+            src = resolve_source(sid)
+            out.append(Root("", CONFIG.addon_dir(sid), f"Sortie omni · {getattr(src, 'title', sid)}", False))
         out += [Root(r["id"], Path(r["path"]), r.get("label") or Path(r["path"]).name, True) for r in _stored_roots()]
         return out
 
@@ -558,33 +629,69 @@ def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: 
                          "exists": r.path.is_dir(), "models": len(idx.rows) if idx and idx.scanned else None})
         return rows
 
-    @app.post("/api/{sid}/output/roots")
-    def roots_add(sid: str, path: str):
-        resolve_source(sid)
-        p = Path(path.strip().strip('"')).expanduser()
-        if not p.is_dir():
-            raise HTTPException(400, f"Ce dossier n’existe pas : {p}")
+    def known(sid: str) -> None:
+        if sid != VIEW:
+            resolve_source(sid)
+
+    def add_root(p: Path, label: str) -> str:
         rid = _root_id(p)
         rows = _stored_roots()
         if all(r["id"] != rid for r in rows):
-            rows.append({"id": rid, "path": str(p.resolve()), "label": p.resolve().name})
+            rows.append({"id": rid, "path": str(p.resolve()), "label": label})
             _store_roots(rows)
-        return {"id": rid}
+        return rid
+
+    @app.post("/api/{sid}/output/roots")
+    def roots_add(sid: str, path: str):
+        known(sid)
+        p = Path(path.strip().strip('"')).expanduser()
+        if not p.is_dir():
+            raise HTTPException(400, f"Ce dossier n’existe pas : {p}")
+        return {"id": add_root(p, p.resolve().name)}
+
+    @app.post("/api/{sid}/output/open")
+    def roots_open(sid: str, path: str):
+        """Open a folder, a ``.mdl`` (its addon, with that model selected) or a ``.gma`` archive."""
+        known(sid)
+        p = Path(path.strip().strip('"')).expanduser()
+        if not p.exists():
+            raise HTTPException(404, f"Introuvable : {p}")
+        try:
+            root, model, label = _open_target(p)
+        except (ValueError, OSError) as e:
+            raise HTTPException(400, str(e)) from e
+        rid = add_root(root, label)
+        indexes.pop((sid, rid), None)
+        return {"root": rid, "model": model, "label": label}
+
+    @app.get("/api/{sid}/output/installed")
+    def roots_installed(sid: str):
+        """The addons installed in Garry's Mod, to open one in a click."""
+        known(sid)
+        return _installed_addons()
 
     @app.delete("/api/{sid}/output/roots/{rid}")
     def roots_remove(sid: str, rid: str):
-        resolve_source(sid)
+        known(sid)
         _store_roots([r for r in _stored_roots() if r["id"] != rid])
         indexes.pop((sid, rid), None)
         return {"ok": True}
 
     @app.post("/api/{sid}/output/pick")
     def roots_pick(sid: str):
-        resolve_source(sid)
+        known(sid)
         try:
             return {"path": _pick_folder()}
         except Exception as e:
             raise HTTPException(501, f"Sélecteur de dossier indisponible : {e}") from e
+
+    @app.post("/api/{sid}/output/pick-file")
+    def roots_pick_file(sid: str):
+        known(sid)
+        try:
+            return {"path": pick_file("Ouvrir un modèle ou un addon", "Modèles et addons Garry’s Mod", "*.mdl;*.gma")}
+        except Exception as e:
+            raise HTTPException(501, f"Sélecteur de fichier indisponible : {e}") from e
 
     # ---- models
     @app.get("/api/{sid}/output")

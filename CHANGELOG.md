@@ -16,6 +16,16 @@ All notable changes to this project are documented here. The format follows [Kee
   on the game's home page. The former addresses (`/<game>/settings`) lead there.
 - Models: a converted prop opens in the viewer from a labelled button in its card.
 
+### Added
+
+- The viewer works without any game. "Ouvrir des modèles" (first screen, game menu, or the viewer itself) opens a
+  `.mdl` (its addon, with that model selected), a Workshop `.gma` (old `_legacy.bin` items included), an addon folder,
+  or one of the addons installed in Garry's Mod. A `.gma` is unpacked once into the workspace cache, and only its
+  models and materials; every path and size in it is checked first.
+- `Omni.exe view <file or folder>` opens the viewer on it, and so does a `.mdl` or `.gma` dropped on `Omni.exe`. When
+  omni is already open, its window shows the file.
+- The first screen without a game offers the two ways to use omni: convert a game, or only open Garry's Mod models.
+
 ## [1.0.6] - 2026-11-09
 
 ### Security

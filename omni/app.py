@@ -129,12 +129,14 @@ def _run_file() -> Path:
     return CONFIG.state_dir / "run.json"
 
 
-def _focus_running() -> bool:
-    """Ask the omni that owns the mutex to show its window (it may still be starting: wait a little)."""
+def _focus_running(path: str = "") -> bool:
+    """Ask the omni that owns the mutex to show its window, on ``path`` when given (it may still be starting: wait a
+    little)."""
+    query = f"?path={urllib.parse.quote(path)}" if path != "/" else ""
     for _ in range(40):
         try:
             info = json.loads(_run_file().read_text(encoding="utf-8"))
-            url = f"http://127.0.0.1:{info['port']}/api/focus"
+            url = f"http://127.0.0.1:{info['port']}/api/focus{query}"
             req = urllib.request.Request(url, data=b"", method="POST", headers=_session(url))
             with urllib.request.urlopen(req, timeout=2):
                 return True
@@ -260,7 +262,7 @@ def run(port: int = PORT, browser: bool = False, path: str = "/") -> int:
     from .core.config import CONFIG
     settings.apply()
     if not browser and not _first_instance():
-        _focus_running()
+        _focus_running(path)
         return 0
 
     url = running_url(port)
@@ -286,8 +288,9 @@ def run(port: int = PORT, browser: bool = False, path: str = "/") -> int:
                                    min_size=(1000, 640), background_color="#0b0b10", text_select=True)
     box: dict = {"url": url, "server": None, "quitting": False, "hwnd": 0}
 
-    def pick(title: str) -> str:
-        res = window.create_file_dialog(webview.FileDialog.FOLDER, allow_multiple=False)
+    def pick(title: str, file_types: tuple[str, ...] = ()) -> str:
+        kind = webview.FileDialog.OPEN if file_types else webview.FileDialog.FOLDER
+        res = window.create_file_dialog(kind, allow_multiple=False, file_types=file_types)
         return res[0] if res else ""
     windows.set_picker(pick)
 
@@ -355,6 +358,11 @@ def run(port: int = PORT, browser: bool = False, path: str = "/") -> int:
 
     window.events.closing += closing
 
+    def navigate(page: str) -> None:
+        """A second launch with a file: show it in this window."""
+        if window is not None and box["url"]:
+            window.load_url(box["url"] + page)
+
     def boot() -> None:
         """Behind the splash: start the server, then load the interface."""
         try:
@@ -362,6 +370,7 @@ def run(port: int = PORT, browser: bool = False, path: str = "/") -> int:
                 srv = Server(free_port(port)).start()
                 box["server"], box["url"] = srv, srv.url
                 srv.app.state.shell.focus = show
+                srv.app.state.shell.navigate = navigate
                 srv.app.state.shell.job_finished = job_finished
             window.load_url(box["url"] + path)
             box["hwnd"] = _hwnd_of_this_process()

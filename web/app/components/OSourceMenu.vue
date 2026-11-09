@@ -8,7 +8,7 @@ const sid = useSourceId()
 const lastSid = useState('last-source', () => '')
 const route = useRoute()
 
-const id = computed(() => sid.value || lastSid.value)
+const id = computed(() => (sid.value && sid.value !== VIEW_ID ? sid.value : lastSid.value))
 const current = computed(() => sources.value.find((s) => s.id === id.value))
 const section = computed(() => String(route.path.split('/')[2] ?? ''))
 const NEEDS: Record<string, string[]> = {
@@ -25,7 +25,10 @@ function go(target: string) {
   if (!s) return
   const need = NEEDS[section.value]
   const keep =
-    sid.value && need && (!need.length || need.some((c) => s.capabilities.includes(c as never)))
+    sid.value &&
+    sid.value !== VIEW_ID &&
+    need &&
+    (!need.length || need.some((c) => s.capabilities.includes(c as never)))
   navigateTo(keep ? `/${target}/${section.value}` : `/${target}`)
 }
 
@@ -44,7 +47,10 @@ const menu = computed(() => [
       onSelect: (e: Event) => e.preventDefault(),
     })),
   ],
-  [{ label: 'Gérer les jeux…', icon: 'i-ri-folder-add-line', to: '/games' }],
+  [
+    { label: 'Gérer les jeux…', icon: 'i-ri-folder-add-line', to: '/games' },
+    { label: 'Ouvrir des modèles…', icon: 'i-ri-box-3-line', to: '/view' },
+  ],
 ])
 </script>
 

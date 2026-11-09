@@ -573,9 +573,9 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
             raise HTTPException(404, str(e)) from e
 
     @app.post("/api/focus")
-    def focus():
-        """A second launch asks the running window to come to the front."""
-        return {"ok": app.state.shell.request_focus()}
+    def focus(path: str = ""):
+        """A second launch asks the running window to come to the front, on the viewer when it opens a file."""
+        return {"ok": app.state.shell.request_focus(path if path.startswith("/view") else "")}
 
     @app.post("/api/shutdown")
     def shutdown(force: bool = False):

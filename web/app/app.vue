@@ -7,6 +7,8 @@ const update = useUpdate()
 const tour = useState('tour', () => false)
 onMounted(async () => {
   update.check()
+  // opened on a file (`omni view <path>`): the viewer first, the tour can wait for the next launch
+  if (isViewPath(route.path)) return
   tour.value = await api<{ needed: boolean }>('/onboarding')
     .then((r) => r.needed)
     .catch(() => false)
@@ -24,12 +26,16 @@ async function boot() {
 }
 await boot()
 
-watch(sid, refresh, { immediate: true })
+watch(sid, (v) => v !== VIEW_ID && refresh(), { immediate: true })
 
 // Pages outside a game (settings, library) keep the tabs of the last game opened.
 const lastSid = useState('last-source', () => '')
-watch(sid, (v) => v && (lastSid.value = v), { immediate: true })
-const current = computed(() => sources.value.find((s) => s.id === (sid.value || lastSid.value)))
+watch(sid, (v) => v && v !== VIEW_ID && (lastSid.value = v), { immediate: true })
+const current = computed(() =>
+  sources.value.find(
+    (s) => s.id === (sid.value === VIEW_ID ? lastSid.value : sid.value || lastSid.value),
+  ),
+)
 
 // What the current game offers: browse it (models, textures, sounds), look at what omni made of it, take it away.
 const route = useRoute()
