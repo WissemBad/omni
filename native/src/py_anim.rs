@@ -52,9 +52,15 @@ fn mdl_info<'py>(py: Python<'py>, mdl: &[u8]) -> PyResult<Bound<'py, PyDict>> {
 /// mdl_sample(mdl, ani, anim) -> (fps, flags, float32 array (frames, bones, 7): position then quaternion x y z w)
 #[pyfunction]
 #[pyo3(signature = (mdl, ani=None, anim=0))]
-fn mdl_sample<'py>(py: Python<'py>, mdl: &[u8], ani: Option<&[u8]>, anim: usize) -> PyResult<(f32, i32, Bound<'py, PyArray3<f32>>)> {
+fn mdl_sample<'py>(
+    py: Python<'py>,
+    mdl: &[u8],
+    ani: Option<&[u8]>,
+    anim: usize,
+) -> PyResult<(f32, i32, Bound<'py, PyArray3<f32>>)> {
     let s = py.detach(|| sa::sample(mdl, ani, anim)).map_err(err)?;
-    let arr = numpy::ndarray::Array3::from_shape_vec((s.frames, s.bones, 7), s.data).map_err(err)?;
+    let arr =
+        numpy::ndarray::Array3::from_shape_vec((s.frames, s.bones, 7), s.data).map_err(err)?;
     Ok((s.fps, s.flags, arr.into_pyarray(py)))
 }
 

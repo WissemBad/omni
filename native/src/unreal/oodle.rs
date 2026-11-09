@@ -39,7 +39,10 @@ mod sys {
     #[link(name = "kernel32")]
     extern "system" {
         pub fn LoadLibraryW(name: *const u16) -> *mut core::ffi::c_void;
-        pub fn GetProcAddress(module: *mut core::ffi::c_void, name: *const u8) -> *mut core::ffi::c_void;
+        pub fn GetProcAddress(
+            module: *mut core::ffi::c_void,
+            name: *const u8,
+        ) -> *mut core::ffi::c_void;
     }
 }
 
@@ -55,7 +58,9 @@ fn load(path: &str) -> std::result::Result<Lib, String> {
         if f.is_null() {
             return Err(format!("{path} has no OodleLZ_Decompress"));
         }
-        Ok(Lib { decompress: std::mem::transmute::<*mut core::ffi::c_void, Decompress>(f) })
+        Ok(Lib {
+            decompress: std::mem::transmute::<*mut core::ffi::c_void, Decompress>(f),
+        })
     }
 }
 
@@ -80,7 +85,9 @@ pub fn decompress(src: &[u8], dst: &mut [u8]) -> Result<()> {
     let lib = match LIB.get() {
         Some(Ok(l)) => l,
         Some(Err(e)) => return err(e.clone()),
-        None => return err("Oodle is needed for this game and was not loaded (oo2core_9_win64.dll)"),
+        None => {
+            return err("Oodle is needed for this game and was not loaded (oo2core_9_win64.dll)")
+        }
     };
     let n = unsafe {
         (lib.decompress)(
@@ -101,7 +108,10 @@ pub fn decompress(src: &[u8], dst: &mut [u8]) -> Result<()> {
         )
     };
     if n != dst.len() as isize {
-        return err(format!("Oodle decompression failed ({n} of {} bytes)", dst.len()));
+        return err(format!(
+            "Oodle decompression failed ({n} of {} bytes)",
+            dst.len()
+        ));
     }
     Ok(())
 }

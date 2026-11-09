@@ -126,9 +126,7 @@ def _fresh(path: Path, alpha: bool = False, size: int = 0) -> bool:
         return False                       # written before the anisotropic flag: rewrite it
     if alpha and int.from_bytes(head[52:56], "little", signed=True) == vtf.DXT1:
         return False
-    if size and max(int.from_bytes(head[16:18], "little"), int.from_bytes(head[18:20], "little")) != size:
-        return False
-    return True
+    return not (size and max(int.from_bytes(head[16:18], "little"), int.from_bytes(head[18:20], "little")) != size)
 
 
 def _top(tex, max_size: int) -> int:
@@ -159,9 +157,9 @@ def convert_material(mat: Material, cache: TextureCache, mat_root: Path, cd: str
         coverage = alpha_test and base_tex.fmt not in ("BC1", "BC3")   # re-encoded anyway: fix the alpha mips
         bname = f"b_{base_ref.key[-8:].lower()}{lk.key}{'_c' if coverage else ''}"
         bpath = out_dir / "tex" / f"{bname}.vtf"
-        if not _fresh(bpath, uses_alpha, _top(base_tex, opts.max_size)):
-            if lk.key or coverage or not tx.passthrough(base_tex, bpath, opts.max_size, alpha=uses_alpha):
-                tx.encode([lk.albedo(cache, opts.max_size)], bpath, alpha=uses_alpha, coverage=0.5 if coverage else 0.0)
+        if not _fresh(bpath, uses_alpha, _top(base_tex, opts.max_size)) and (
+                lk.key or coverage or not tx.passthrough(base_tex, bpath, opts.max_size, alpha=uses_alpha)):
+            tx.encode([lk.albedo(cache, opts.max_size)], bpath, alpha=uses_alpha, coverage=0.5 if coverage else 0.0)
         vmt["$basetexture"] = f"{cd}/tex/{bname}"
     else:
         vmt["$basetexture"] = "models/debug/debugwhite"
@@ -213,7 +211,7 @@ def convert_material(mat: Material, cache: TextureCache, mat_root: Path, cd: str
 
     if want_phong and float(mask.max()) > 0.02:
         if flat_surface:
-            vmt["$phongexponent"] = str(int(round(float(roughness_to_exponent(np.float32(rough_mean))))))
+            vmt["$phongexponent"] = str(round(float(roughness_to_exponent(np.float32(rough_mean)))))
         else:
             xname = f"x_{surf.ref.key[-8:].lower()}_{surf.ref.channels.strip('_').lower() or '3'}"
             xpath = out_dir / "tex" / f"{xname}.vtf"

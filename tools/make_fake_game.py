@@ -7,10 +7,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from rpkg_builder import Res, build  # noqa: E402
+from rpkg_builder import Res, build
 
-from omni.core.config import CONFIG  # noqa: E402
-from omni.sources.glacier.meta import parse_meta  # noqa: E402
+from omni.core.config import CONFIG
+from omni.sources.glacier.meta import parse_meta
 
 
 def main():

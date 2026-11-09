@@ -2,6 +2,9 @@
 name = "omni_native"
 version = "1.0.5"
 edition = "2021"
+rust-version = "1.88"
+license = "MIT"
+publish = false
 description = "Native core of omni: textures (decode, mips, DXT, VTF, PNG), audio (Wwise -> Ogg/FLAC/WAV), game collision, skinning"
 
 [lib]
@@ -32,3 +35,21 @@ ed25519-dalek = { version = "2", default-features = false, features = ["std", "z
 opt-level = 3
 lto = "thin"
 codegen-units = 4
+
+[lints.rust]
+unused = "warn"
+
+# CI runs clippy with -D warnings. The lints below are style suggestions (as_chunks, is_multiple_of, ...) or
+# deliberate choices (`!(w > x)` treats NaN as "not greater"): correctness lints are not on this list.
+[lints.clippy]
+chunks_exact_to_as_chunks = "allow"
+manual_is_multiple_of = "allow"
+needless_range_loop = "allow"
+neg_cmp_op_on_partial_ord = "allow"
+type_complexity = "allow"
+too_many_arguments = "allow"
+items_after_test_module = "allow"
+collapsible_if = "allow"
+map_entry = "allow"
+manual_c_str_literals = "allow"
+unnecessary_sort_by = "allow"

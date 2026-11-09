@@ -28,7 +28,7 @@ class _MemStatus(ctypes.Structure):
 def _times() -> tuple[int, int, int]:
     idle, kernel, user = (wintypes.FILETIME() for _ in range(3))
     ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle), ctypes.byref(kernel), ctypes.byref(user))
-    f = lambda t: (t.dwHighDateTime << 32) | t.dwLowDateTime  # noqa: E731
+    f = lambda t: (t.dwHighDateTime << 32) | t.dwLowDateTime
     return f(idle), f(kernel), f(user)
 
 
@@ -65,7 +65,7 @@ def gpu() -> dict | None:
             r = subprocess.run([exe, "--query-gpu=name,utilization.gpu,temperature.gpu,memory.used,memory.total,power.draw",
                                 "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=5, creationflags=NOWINDOW)
             name, load, temp, used, total, power = [x.strip() for x in r.stdout.splitlines()[0].split(",")]
-            num = lambda x: float(x) if x.replace(".", "", 1).isdigit() else None  # noqa: E731
+            num = lambda x: float(x) if x.replace(".", "", 1).isdigit() else None
             value = {"name": name, "load": num(load), "temp": num(temp), "mem_used": num(used), "mem_total": num(total), "power": num(power)}
         except (OSError, subprocess.SubprocessError, IndexError, ValueError):
             value = None

@@ -109,7 +109,7 @@ def test_end_to_end_crane():
 
 
 def test_sound_naming():
-    from omni.sources.glacier.audio import _game_path, _speaker, _conversation
+    from omni.sources.glacier.audio import _conversation, _game_path, _speaker
     assert _game_path("[assembly:/_knt/sound/originals/voices/english(us)/ai_dialog/a/b_001.wav].wes") == \
         "voices/english(us)/ai_dialog/a/b_001"
     assert _speaker("vox_cc_light_elbowdown_lh_civukf08_civukf08_003") == "civukf08"

@@ -98,7 +98,7 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         try:
             return registry.get_source(sid)
         except KeyError:
-            raise HTTPException(404, f"Source inconnue : {sid}")
+            raise HTTPException(404, f"Source inconnue : {sid}") from None
 
     def need(sid: str, capability: str):
         src = source_of(sid)
@@ -197,7 +197,7 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         for sid in all_ids():
             try:
                 d = registry.describe(sid)
-            except Exception:  # noqa: BLE001 - one broken library entry must not hide the others
+            except Exception:
                 logging.getLogger("omni.api").exception("source %s cannot be described", sid)
                 continue
             from .. import games as library
@@ -224,8 +224,8 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         src = source_of(sid)
         try:
             return {"message": deploy.undeploy(sid) if remove else deploy.deploy(sid, src.title)}
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(400, str(e))
+        except Exception as e:
+            raise HTTPException(400, str(e)) from e
 
     @app.post("/api/{sid}/gma")
     def gma(sid: str):
@@ -364,7 +364,7 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
                 sj = (base / f / "summary.json") if f else (base / "summary.json")
                 if sj.exists():
                     try:
-                        sets[f or "auto"] = json.loads(sj.read_text())
+                        sets[f or "auto"] = json.loads(sj.read_text(encoding="utf-8"))
                     except (OSError, ValueError):
                         pass
             first = next(iter(sets.values()), None)
@@ -454,8 +454,8 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
     def home_pick():
         try:
             return {"path": pick_folder("Dossier Omni")}
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(501, f"Sélecteur de dossier indisponible : {e}")
+        except Exception as e:
+            raise HTTPException(501, f"Sélecteur de dossier indisponible : {e}") from e
 
     @app.post("/api/home/move")
     def home_move(body: dict):
@@ -570,7 +570,7 @@ def create_app(sources: list[str] | None = None, jobs_db: Path | str | None = "a
         try:
             return gmod.launch(sid, str(req.get("model", "")), str(req.get("kind", "prop")))
         except (FileNotFoundError, ValueError) as e:
-            raise HTTPException(404, str(e))
+            raise HTTPException(404, str(e)) from e
 
     @app.post("/api/focus")
     def focus():

@@ -12,12 +12,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ...core.ir import SoundRef
-
 from .meta import Meta
 
 
 class _Stat:
-    __slots__ = ("st_size", "st_mtime_ns", "st_mtime")
+    __slots__ = ("st_mtime", "st_mtime_ns", "st_size")
 
     def __init__(self, size: int, mtime_ns: int):
         self.st_size = size
@@ -27,7 +26,7 @@ class _Stat:
 
 class ResPath:
     """A resource of the packages, used where an extracted file path was."""
-    __slots__ = ("store", "hash", "type", "_size", "_mtime")
+    __slots__ = ("_mtime", "_size", "hash", "store", "type")
 
     def __init__(self, store: "StoreArchive", h: int, ty: str, size: int, mtime_ns: int = 0):
         self.store, self.hash, self.type, self._size, self._mtime = store, h, ty, size, mtime_ns

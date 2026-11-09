@@ -26,16 +26,14 @@ More detail in [docs/architecture.md](docs/architecture.md).
 
 ## Checks
 
-Woodpecker runs the same checks on every pull request (see `.woodpecker/check.yml`); all of them must pass before it is merged:
+Woodpecker runs the same checks on every pull request (`.woodpecker/check.yml` on Linux, `.woodpecker/windows.yml` for the package on Windows); all of them must pass before it is merged. One command runs them locally:
 
 ```powershell
-uv run ruff check
-uv run pytest
-cargo test --manifest-path native/Cargo.toml --no-default-features
-cd web; bun run check
+.\scripts\check.ps1          # ruff, import contracts, pyright (ratchet), versions, pytest + coverage, cargo fmt/clippy/test, web
+.\scripts\check.ps1 -Fast    # without the web build and the Rust tests
 ```
 
-Tests that need game data skip themselves when the game is not installed.
+The tests run in a throwaway Omni folder, on a synthetic game written by `tests/synthetic.py`: no game file is needed. Only the few tests that look for a real game skip themselves (set `OMNI_TEST_REAL_HOME=1` to run them against your own Omni folder). A format change that alters the bytes of a writer fails `tests/test_golden.py`: check the diff, then `pytest --update-golden`.
 
 ## Pull requests
 

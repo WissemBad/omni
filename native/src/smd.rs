@@ -26,8 +26,16 @@ fn vertex_line(m: &Mesh, i: usize) -> String {
     let _ = write!(
         o,
         "{} {:.5} {:.5} {:.5} {:.5} {:.5} {:.5} {:.5} {:.5} {}",
-        links[0].0, m.pos[i * 3], m.pos[i * 3 + 1], m.pos[i * 3 + 2], m.nrm[i * 3], m.nrm[i * 3 + 1], m.nrm[i * 3 + 2],
-        m.uv[i * 2], m.uv[i * 2 + 1], links.len()
+        links[0].0,
+        m.pos[i * 3],
+        m.pos[i * 3 + 1],
+        m.pos[i * 3 + 2],
+        m.nrm[i * 3],
+        m.nrm[i * 3 + 1],
+        m.nrm[i * 3 + 2],
+        m.uv[i * 2],
+        m.uv[i * 2 + 1],
+        links.len()
     );
     for (b, w) in &links {
         let _ = write!(o, " {} {:.5}", b, w / s);
@@ -38,7 +46,12 @@ fn vertex_line(m: &Mesh, i: usize) -> String {
 /// "<material>\n<3 vertex lines>\n" for every triangle; returns (text, triangle count).
 pub fn triangles(material: &str, m: &Mesh) -> Result<(String, usize), String> {
     let n = m.pos.len() / 3;
-    if m.links == 0 || m.nrm.len() != n * 3 || m.uv.len() != n * 2 || m.bones.len() != n * m.links || m.weights.len() != n * m.links {
+    if m.links == 0
+        || m.nrm.len() != n * 3
+        || m.uv.len() != n * 2
+        || m.bones.len() != n * m.links
+        || m.weights.len() != n * m.links
+    {
         return Err("inconsistent mesh arrays".into());
     }
     if m.indices.iter().any(|&i| i as usize >= n) || m.indices.len() % 3 != 0 {
@@ -62,7 +75,13 @@ pub fn triangles(material: &str, m: &Mesh) -> Result<(String, usize), String> {
 
 /// Static (single bone, no weights) triangles of a prop: `"<material>\n<3 vertex lines>\n"` per triangle. Positions are
 /// already scaled and the V coordinate already flipped. Built in parallel chunks (a prop can have millions of rows).
-pub fn static_triangles(material: &str, pos: &[f64], nrm: &[f64], uv: &[f64], indices: &[i64]) -> Result<(String, usize), String> {
+pub fn static_triangles(
+    material: &str,
+    pos: &[f64],
+    nrm: &[f64],
+    uv: &[f64],
+    indices: &[i64],
+) -> Result<(String, usize), String> {
     let n = pos.len() / 3;
     if nrm.len() != n * 3 || uv.len() != n * 2 {
         return Err("inconsistent mesh arrays".into());
@@ -83,7 +102,14 @@ pub fn static_triangles(material: &str, pos: &[f64], nrm: &[f64], uv: &[f64], in
                     let _ = writeln!(
                         s,
                         "0 {:.5} {:.5} {:.5} {:.5} {:.5} {:.5} {:.5} {:.5}",
-                        pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2], nrm[i * 3], nrm[i * 3 + 1], nrm[i * 3 + 2], uv[i * 2], uv[i * 2 + 1]
+                        pos[i * 3],
+                        pos[i * 3 + 1],
+                        pos[i * 3 + 2],
+                        nrm[i * 3],
+                        nrm[i * 3 + 1],
+                        nrm[i * 3 + 2],
+                        uv[i * 2],
+                        uv[i * 2 + 1]
                     );
                 }
             }
@@ -99,8 +125,14 @@ mod tests {
 
     #[test]
     fn static_rows_match_the_skinned_writer_without_links() {
-        let (s, c) = static_triangles("m", &[1.0, 2.0, -0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0], &[0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0],
-                                      &[0.0, 1.0, 0.5, 0.5, 1.0, 0.0], &[0, 1, 2]).unwrap();
+        let (s, c) = static_triangles(
+            "m",
+            &[1.0, 2.0, -0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0],
+            &[0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0],
+            &[0.0, 1.0, 0.5, 0.5, 1.0, 0.0],
+            &[0, 1, 2],
+        )
+        .unwrap();
         assert_eq!(c, 1);
         assert_eq!(s, "m\n0 1.00000 2.00000 -0.00000 0.00000 0.00000 1.00000 0.00000 1.00000\n0 0.00000 0.00000 0.00000 0.00000 0.00000 1.00000 0.50000 0.50000\n0 1.00000 1.00000 1.00000 0.00000 0.00000 1.00000 1.00000 0.00000\n");
         assert!(static_triangles("m", &[0.0; 3], &[0.0; 3], &[0.0; 2], &[0, 0, 1]).is_err());

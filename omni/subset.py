@@ -41,10 +41,8 @@ def _character_names(src) -> dict[str, dict]:
     """``slug`` of the model file name -> character, the way the playermodel builders name their files."""
     out = {}
     for c in src.characters():
-        if hasattr(src, "build_character"):
-            name = c["variants"][0]["name"] if c.get("variants") else c["id"]
-        else:
-            name = c["id"].replace("outfit_", "")
+        built = c["variants"][0]["name"] if c.get("variants") else c["id"]
+        name = built if hasattr(src, "build_character") else c["id"].replace("outfit_", "")
         out.setdefault(slug(name, 40), c)
     return out
 

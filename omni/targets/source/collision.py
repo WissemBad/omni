@@ -49,7 +49,7 @@ def convex_hull(points: np.ndarray):
         pts = np.array([[x, y, z] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])])
     try:
         h = ConvexHull(pts)
-    except Exception:
+    except Exception:  # noqa: BLE001 - degenerate point sets: no hull
         return None
     verts = pts[h.vertices]
     remap = np.zeros(len(pts), np.int64)
@@ -258,7 +258,7 @@ def build_collision(subs, method: str = "parts"):
         parts = []
         try:
             parts = split_parts(verts, tris) if method == "parts" else decompose(verts, tris)
-        except Exception:
+        except Exception:  # noqa: BLE001 - CoACD failure: keep the single hull
             parts = []
         # only worth it if the pieces really hug the shape better than the single hull
         if len(parts) > 1 and sum(p[2] for p in parts) < 0.8 * hull_vol:

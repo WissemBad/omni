@@ -43,11 +43,11 @@ def test_missing_release_message(monkeypatch):
 
 
 # ------------------------------------------------------------------------------------------- signed download
-import hashlib  # noqa: E402
+import hashlib
 
-import pytest  # noqa: E402
+import pytest
 
-from omni.native import AVAILABLE, N  # noqa: E402
+from omni.native import AVAILABLE, N
 
 SEED = bytes(range(32))
 

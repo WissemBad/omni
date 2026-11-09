@@ -49,7 +49,11 @@ fn to_lin_table() -> &'static [f32; 256] {
         let mut t = [0f32; 256];
         for (i, e) in t.iter_mut().enumerate() {
             let c = i as f32 / 255.0;
-            *e = if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) };
+            *e = if c <= 0.04045 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            };
         }
         t
     })
@@ -57,7 +61,11 @@ fn to_lin_table() -> &'static [f32; 256] {
 
 fn to_srgb8(l: f32) -> u8 {
     let l = l.clamp(0.0, 1.0);
-    let c = if l <= 0.003_130_8 { l * 12.92 } else { 1.055 * l.powf(1.0 / 2.4) - 0.055 };
+    let c = if l <= 0.003_130_8 {
+        l * 12.92
+    } else {
+        1.055 * l.powf(1.0 / 2.4) - 0.055
+    };
     (c * 255.0 + 0.5) as u8
 }
 
@@ -77,15 +85,23 @@ pub fn rgba_len(w: usize, h: usize, have: usize) -> Result<usize, String> {
 /// Next mip level (each output pixel = the 1, 2 or 4 source pixels it covers).
 pub fn half(src: &[u8], w: usize, h: usize, kind: Kind) -> (Vec<u8>, usize, usize) {
     if rgba_len(w, h, src.len()).is_err() {
-        return (vec![0, 0, 0, 255], 1, 1);                 // callers validate; this only keeps a bad one from panicking
+        return (vec![0, 0, 0, 255], 1, 1); // callers validate; this only keeps a bad one from panicking
     }
     let (nw, nh) = ((w / 2).max(1), (h / 2).max(1));
     let lin = to_lin_table();
     let mut out = vec![0u8; nw * nh * 4];
     out.par_chunks_mut(nw * 4).enumerate().for_each(|(y, row)| {
-        let ys = if h > 1 { [2 * y, (2 * y + 1).min(h - 1)] } else { [0, 0] };
+        let ys = if h > 1 {
+            [2 * y, (2 * y + 1).min(h - 1)]
+        } else {
+            [0, 0]
+        };
         for x in 0..nw {
-            let xs = if w > 1 { [2 * x, (2 * x + 1).min(w - 1)] } else { [0, 0] };
+            let xs = if w > 1 {
+                [2 * x, (2 * x + 1).min(w - 1)]
+            } else {
+                [0, 0]
+            };
             let mut acc = [0f32; 4];
             for &sy in &ys {
                 for &sx in &xs {
@@ -123,7 +139,9 @@ pub fn half(src: &[u8], w: usize, h: usize, kind: Kind) -> (Vec<u8>, usize, usiz
                     }
                 }
                 Kind::Normal => {
-                    let n = (acc[0] * acc[0] + acc[1] * acc[1] + acc[2] * acc[2]).sqrt().max(1e-6);
+                    let n = (acc[0] * acc[0] + acc[1] * acc[1] + acc[2] * acc[2])
+                        .sqrt()
+                        .max(1e-6);
                     for c in 0..3 {
                         o[c] = ((acc[c] / n * 0.5 + 0.5) * 255.0 + 0.5).clamp(0.0, 255.0) as u8;
                     }
@@ -136,7 +154,14 @@ pub fn half(src: &[u8], w: usize, h: usize, kind: Kind) -> (Vec<u8>, usize, usiz
 }
 
 /// Full chain, largest first; the top is halved until it fits `max_size` (0 = no limit).
-pub fn mip_chain(rgba: &[u8], w: usize, h: usize, kind: Kind, max_size: usize, coverage: f32) -> Vec<(usize, usize, Vec<u8>)> {
+pub fn mip_chain(
+    rgba: &[u8],
+    w: usize,
+    h: usize,
+    kind: Kind,
+    max_size: usize,
+    coverage: f32,
+) -> Vec<(usize, usize, Vec<u8>)> {
     let mut cur = (rgba.to_vec(), w, h);
     while max_size > 0 && cur.1.max(cur.2) > max_size {
         cur = half(&cur.0, cur.1, cur.2, kind);
@@ -161,7 +186,10 @@ pub fn mip_chain(rgba: &[u8], w: usize, h: usize, kind: Kind, max_size: usize, c
 
 fn keep_coverage(mips: &mut [(usize, usize, Vec<u8>)], reference: f32) {
     let cut = reference * 255.0;
-    let share = |a: &[u8]| a.chunks_exact(4).filter(|p| p[3] as f32 >= cut).count() as f32 / (a.len() / 4).max(1) as f32;
+    let share = |a: &[u8]| {
+        a.chunks_exact(4).filter(|p| p[3] as f32 >= cut).count() as f32
+            / (a.len() / 4).max(1) as f32
+    };
     let target = share(&mips[0].2);
     if target <= 0.0 || target >= 1.0 {
         return;
@@ -196,9 +224,18 @@ pub fn reflectivity(rgba: &[u8], kind: Kind) -> [f32; 3] {
 }
 
 /// VTF 7.2 file bytes: 80-byte header, no low-res thumbnail, mips smallest first.
-pub fn vtf_bytes(fmt: u32, mips: &[(usize, usize, Vec<u8>)], flags: u32, refl: [f32; 3]) -> Vec<u8> {
+pub fn vtf_bytes(
+    fmt: u32,
+    mips: &[(usize, usize, Vec<u8>)],
+    flags: u32,
+    refl: [f32; 3],
+) -> Vec<u8> {
     let (w, h) = (mips[0].0 as u16, mips[0].1 as u16);
-    let flags = if mips.len() > 1 && flags & FLAG_NOMIP == 0 { flags | FLAG_ANISOTROPIC } else { flags };
+    let flags = if mips.len() > 1 && flags & FLAG_NOMIP == 0 {
+        flags | FLAG_ANISOTROPIC
+    } else {
+        flags
+    };
     let mut hdr = Vec::with_capacity(80);
     hdr.extend(b"VTF\0");
     hdr.extend(7u32.to_le_bytes());
@@ -231,7 +268,13 @@ pub fn vtf_bytes(fmt: u32, mips: &[(usize, usize, Vec<u8>)], flags: u32, refl: [
     data
 }
 
-pub fn write_vtf(path: &Path, fmt: u32, mips: &[(usize, usize, Vec<u8>)], flags: u32, refl: [f32; 3]) -> Result<(), String> {
+pub fn write_vtf(
+    path: &Path,
+    fmt: u32,
+    mips: &[(usize, usize, Vec<u8>)],
+    flags: u32,
+    refl: [f32; 3],
+) -> Result<(), String> {
     let data = vtf_bytes(fmt, mips, flags, refl);
     write_atomic(path, &data)
 }
@@ -284,7 +327,8 @@ pub fn encode_vtf(
     quality: u8,
     coverage: f32,
 ) -> Result<(usize, usize), String> {
-    let (data, tw, th) = encode_vtf_bytes(rgba, w, h, format, kind, max_size, flags, quality, coverage)?;
+    let (data, tw, th) =
+        encode_vtf_bytes(rgba, w, h, format, kind, max_size, flags, quality, coverage)?;
     write_atomic(path, &data)?;
     Ok((tw, th))
 }
@@ -304,7 +348,10 @@ pub fn encode_vtf_bytes(
 ) -> Result<(Vec<u8>, usize, usize), String> {
     let n = rgba_len(w, h, rgba.len())?;
     let chain = mip_chain(&rgba[..n], w, h, kind, max_size, coverage);
-    let refl = reflectivity(&chain[chain.len().saturating_sub(4).min(chain.len() - 1)].2, kind);
+    let refl = reflectivity(
+        &chain[chain.len().saturating_sub(4).min(chain.len() - 1)].2,
+        kind,
+    );
     let (fmt, mut flags) = match format {
         "dxt1" => (DXT1, flags),
         "dxt5" => (DXT5, flags | FLAG_EIGHTBITALPHA),
@@ -318,13 +365,27 @@ pub fn encode_vtf_bytes(
         .par_iter()
         .map(|(mw, mh, px)| {
             let data = match fmt {
-                BGRA8888 => px.chunks_exact(4).flat_map(|p| [p[2], p[1], p[0], p[3]]).collect(),
-                _ => crate::texture::encode_dxt(px, *mw, *mh, fmt == DXT5, quality, kind == Kind::Normal),
+                BGRA8888 => px
+                    .chunks_exact(4)
+                    .flat_map(|p| [p[2], p[1], p[0], p[3]])
+                    .collect(),
+                _ => crate::texture::encode_dxt(
+                    px,
+                    *mw,
+                    *mh,
+                    fmt == DXT5,
+                    quality,
+                    kind == Kind::Normal,
+                ),
             };
             (*mw, *mh, data)
         })
         .collect();
-    Ok((vtf_bytes(fmt, &encoded, flags, refl), chain[0].0, chain[0].1))
+    Ok((
+        vtf_bytes(fmt, &encoded, flags, refl),
+        chain[0].0,
+        chain[0].1,
+    ))
 }
 
 // ------------------------------------------------------------------------------------------------ reading
@@ -365,7 +426,12 @@ pub fn decode_vtf(b: &[u8], max_dim: usize) -> Result<(usize, usize, Vec<u8>), S
     let lowfmt = rd32(57);
     let (lw, lh) = (b[61] as usize, b[62] as usize);
     let faces = if flags & 0x4000 != 0 { 6 } else { 1 };
-    let mut off = hdr + if lowfmt != 0xFFFF_FFFF && lw > 0 && lh > 0 { mip_bytes(lowfmt, lw, lh).unwrap_or(0) } else { 0 };
+    let mut off = hdr
+        + if lowfmt != 0xFFFF_FFFF && lw > 0 && lh > 0 {
+            mip_bytes(lowfmt, lw, lh).unwrap_or(0)
+        } else {
+            0
+        };
     // 7.3+: the resource directory gives the high-res data offset
     if minor >= 3 && b.len() >= 80 {
         let nres = rd32(68) as usize;
@@ -379,17 +445,25 @@ pub fn decode_vtf(b: &[u8], max_dim: usize) -> Result<(usize, usize, Vec<u8>), S
             }
         }
     }
-    let fmt_size = |w, h| mip_bytes(fmt, w, h).ok_or_else(|| format!("unsupported VTF format {fmt}"));
-    let sizes: Vec<(usize, usize)> = (0..nmips.clamp(1, 32)).map(|i| (shr(w, i).max(1), shr(h, i).max(1))).collect();
+    let fmt_size =
+        |w, h| mip_bytes(fmt, w, h).ok_or_else(|| format!("unsupported VTF format {fmt}"));
+    let sizes: Vec<(usize, usize)> = (0..nmips.clamp(1, 32))
+        .map(|i| (shr(w, i).max(1), shr(h, i).max(1)))
+        .collect();
     let mut start = vec![0usize; sizes.len()];
     for i in (0..sizes.len()).rev() {
         start[i] = off;
         off += fmt_size(sizes[i].0, sizes[i].1)? * frames * faces;
     }
-    let level = sizes.iter().position(|s| s.0.max(s.1) <= max_dim).unwrap_or(sizes.len() - 1);
+    let level = sizes
+        .iter()
+        .position(|s| s.0.max(s.1) <= max_dim)
+        .unwrap_or(sizes.len() - 1);
     let (mw, mh) = sizes[level];
     let n = fmt_size(mw, mh)?;
-    let d = b.get(start[level]..start[level] + n).ok_or("truncated VTF")?;
+    let d = b
+        .get(start[level]..start[level] + n)
+        .ok_or("truncated VTF")?;
     let px = match fmt {
         13 | 20 => crate::texture::to_rgba("BC1", mw as u32, mh as u32, d)?,
         14 => crate::texture::to_rgba("BC2", mw as u32, mh as u32, d)?,
@@ -422,7 +496,13 @@ pub fn decode_vtf(b: &[u8], max_dim: usize) -> Result<(usize, usize, Vec<u8>), S
 // ------------------------------------------------------------------------------------------------ PNG
 
 /// RGBA8 -> PNG. `channel`: rgb (opaque), rgba, or one of r g b a shown as grey. `max_dim` downsizes (box).
-pub fn png(rgba: &[u8], w: usize, h: usize, channel: &str, max_dim: usize) -> Result<Vec<u8>, String> {
+pub fn png(
+    rgba: &[u8],
+    w: usize,
+    h: usize,
+    channel: &str,
+    max_dim: usize,
+) -> Result<Vec<u8>, String> {
     let n = rgba_len(w, h, rgba.len())?;
     let mut cur = (rgba[..n].to_vec(), w, h);
     while max_dim > 0 && cur.1.max(cur.2) > max_dim {
@@ -451,7 +531,11 @@ fn crc32(d: &[u8]) -> u32 {
         for (i, e) in t.iter_mut().enumerate() {
             let mut c = i as u32;
             for _ in 0..8 {
-                c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+                c = if c & 1 != 0 {
+                    0xEDB8_8320 ^ (c >> 1)
+                } else {
+                    c >> 1
+                };
             }
             *e = c;
         }
@@ -528,7 +612,11 @@ mod tests {
     fn normal_mips_stay_unit() {
         let mut img = vec![0u8; 4 * 4 * 4];
         for (i, p) in img.chunks_exact_mut(4).enumerate() {
-            p.copy_from_slice(&if i % 2 == 0 { [200, 128, 200, 255] } else { [56, 128, 200, 255] });
+            p.copy_from_slice(&if i % 2 == 0 {
+                [200, 128, 200, 255]
+            } else {
+                [56, 128, 200, 255]
+            });
         }
         let c = mip_chain(&img, 4, 4, Kind::Normal, 0, 0.0);
         let p = &c[1].2[..4];

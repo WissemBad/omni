@@ -38,8 +38,18 @@ pub fn bulk_header(pkg: &Package, r: &mut Reader) -> Result<Bulk> {
     if !pkg.bulk.is_empty() {
         // 5.2+: index into the package's bulk data map
         let i = r.i32()?;
-        let e = pkg.bulk.get(i as usize).ok_or_else(|| Error(format!("bulk data index {i} out of range")))?;
-        return Ok(Bulk { flags: e.flags, count: e.size, size: e.size, offset: e.offset, inline_at: None }).map(|mut b| {
+        let e = pkg
+            .bulk
+            .get(i as usize)
+            .ok_or_else(|| Error(format!("bulk data index {i} out of range")))?;
+        return Ok(Bulk {
+            flags: e.flags,
+            count: e.size,
+            size: e.size,
+            offset: e.offset,
+            inline_at: None,
+        })
+        .map(|mut b| {
             if b.flags & flags::FORCE_INLINE != 0 {
                 b.inline_at = Some(pkg.exports_end + e.offset as usize);
             }
@@ -47,7 +57,11 @@ pub fn bulk_header(pkg: &Package, r: &mut Reader) -> Result<Bulk> {
         });
     }
     let f = r.u32()?;
-    let (count, size) = if f & flags::SIZE64 != 0 { (r.i64()?, r.i64()?) } else { (r.i32()? as i64, r.u32()? as i64) };
+    let (count, size) = if f & flags::SIZE64 != 0 {
+        (r.i64()?, r.i64()?)
+    } else {
+        (r.i32()? as i64, r.u32()? as i64)
+    };
     let offset = r.i64()?;
     if f & flags::BAD_DATA_VERSION != 0 {
         r.skip(2)?;
@@ -55,7 +69,13 @@ pub fn bulk_header(pkg: &Package, r: &mut Reader) -> Result<Bulk> {
     if f & flags::DUPLICATE_NON_OPTIONAL != 0 {
         r.skip(4 + if f & flags::SIZE64 != 0 { 8 } else { 4 } + 8)?;
     }
-    let mut b = Bulk { flags: f, count, size, offset, inline_at: None };
+    let mut b = Bulk {
+        flags: f,
+        count,
+        size,
+        offset,
+        inline_at: None,
+    };
     if f & flags::FORCE_INLINE != 0 && f & flags::SEPARATE_FILE == 0 {
         b.inline_at = Some(r.pos);
         r.skip(size.max(0) as usize)?;
@@ -71,7 +91,11 @@ impl Game {
         }
         let size = b.size as usize;
         if let Some(at) = b.inline_at {
-            return pkg.data.get(at..at + size).map(|s| Some(s.to_vec())).ok_or_else(|| Error("inline bulk data outside the package".into()));
+            return pkg
+                .data
+                .get(at..at + size)
+                .map(|s| Some(s.to_vec()))
+                .ok_or_else(|| Error("inline bulk data outside the package".into()));
         }
         if b.flags & flags::SEPARATE_FILE != 0 {
             let kind = if b.flags & flags::OPTIONAL != 0 {
@@ -89,7 +113,9 @@ impl Game {
         }
         // payload at the end of the package data
         let start = if b.flags & flags::NO_OFFSET_FIXUP != 0 {
-            (b.offset as usize).checked_sub(pkg.cooked_header_size).map(|x| x + pkg.header_size)
+            (b.offset as usize)
+                .checked_sub(pkg.cooked_header_size)
+                .map(|x| x + pkg.header_size)
         } else {
             Some(pkg.exports_end + b.offset as usize)
         };
@@ -136,7 +162,9 @@ fn half(h: u16) -> f32 {
     let e = ((h >> 10) & 0x1F) as u32;
     let m = (h & 0x3FF) as u32;
     let bits = if e == 0 {
-        if m == 0 { s << 31 } else {
+        if m == 0 {
+            s << 31
+        } else {
             let mut e2 = 127 - 15 + 1;
             let mut m2 = m;
             while m2 & 0x400 == 0 {
@@ -163,32 +191,74 @@ fn to8(x: f32) -> u8 {
 pub fn convert_mip(pf: &str, w: u32, h: u32, data: &[u8]) -> Result<Vec<u8>> {
     let n = (w as usize) * (h as usize);
     let need = |bpp: usize| -> Result<&[u8]> {
-        checked_len(n, bpp, data.len()).map(|len| &data[..len]).map_err(|e| Error(format!("{pf} mip truncated: {e}")))
+        checked_len(n, bpp, data.len())
+            .map(|len| &data[..len])
+            .map_err(|e| Error(format!("{pf} mip truncated: {e}")))
     };
     Ok(match pf {
-        "PF_DXT1" | "PF_DXT3" | "PF_DXT5" | "PF_BC4" | "PF_BC5" | "PF_BC7" | "PF_R8G8B8A8" => data.to_vec(),
-        "PF_B8G8R8A8" => need(4)?.as_chunks::<4>().0.iter().flat_map(|p| [p[2], p[1], p[0], p[3]]).collect(),
-        "PF_G8" | "PF_L8" | "PF_A8" | "PF_R8" => need(1)?.iter().flat_map(|&g| [g, g, g, 255]).collect(),
-        "PF_R8G8" | "PF_V8U8" => need(2)?.as_chunks::<2>().0.iter().flat_map(|p| [p[0], p[1], 0, 255]).collect(),
-        "PF_G16" | "PF_R16_UINT" => need(2)?.as_chunks::<2>().0.iter().flat_map(|p| { let g = p[1]; [g, g, g, 255] }).collect(),
-        "PF_FloatRGBA" => need(8)?
-            .as_chunks::<8>().0.iter()
+        "PF_DXT1" | "PF_DXT3" | "PF_DXT5" | "PF_BC4" | "PF_BC5" | "PF_BC7" | "PF_R8G8B8A8" => {
+            data.to_vec()
+        }
+        "PF_B8G8R8A8" => need(4)?
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .flat_map(|p| [p[2], p[1], p[0], p[3]])
+            .collect(),
+        "PF_G8" | "PF_L8" | "PF_A8" | "PF_R8" => {
+            need(1)?.iter().flat_map(|&g| [g, g, g, 255]).collect()
+        }
+        "PF_R8G8" | "PF_V8U8" => need(2)?
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .flat_map(|p| [p[0], p[1], 0, 255])
+            .collect(),
+        "PF_G16" | "PF_R16_UINT" => need(2)?
+            .as_chunks::<2>()
+            .0
+            .iter()
             .flat_map(|p| {
-                let c = |i: usize| half(u16::from_le_bytes([p[i], p[i + 1]]));
-                [to8(c(0)), to8(c(2)), to8(c(4)), (c(6).clamp(0.0, 1.0) * 255.0) as u8]
+                let g = p[1];
+                [g, g, g, 255]
             })
             .collect(),
-        "PF_R16F" => need(2)?.as_chunks::<2>().0.iter().flat_map(|p| { let g = to8(half(u16::from_le_bytes([p[0], p[1]]))); [g, g, g, 255] }).collect(),
+        "PF_FloatRGBA" => need(8)?
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .flat_map(|p| {
+                let c = |i: usize| half(u16::from_le_bytes([p[i], p[i + 1]]));
+                [
+                    to8(c(0)),
+                    to8(c(2)),
+                    to8(c(4)),
+                    (c(6).clamp(0.0, 1.0) * 255.0) as u8,
+                ]
+            })
+            .collect(),
+        "PF_R16F" => need(2)?
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .flat_map(|p| {
+                let g = to8(half(u16::from_le_bytes([p[0], p[1]])));
+                [g, g, g, 255]
+            })
+            .collect(),
         "PF_BC6H" => {
             let bw = (w as usize).div_ceil(4);
             let bh = (h as usize).div_ceil(4);
             // 16 bytes per 4x4 block: the decoded buffer is only as large as the blocks present
-            checked_len(bw * bh, 16, data.len()).map_err(|e| Error(format!("BC6H mip truncated: {e}")))?;
+            checked_len(bw * bh, 16, data.len())
+                .map_err(|e| Error(format!("BC6H mip truncated: {e}")))?;
             let mut px = vec![0u32; bw * 4 * bh * 4];
             // the third-party decoder can overflow on corrupt blocks (a panic with overflow checks): an error instead
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| texture2ddecoder::decode_bc6(data, bw * 4, bh * 4, &mut px, false)))
-                .map_err(|_| Error("BC6H: corrupt blocks".into()))?
-                .map_err(|e| Error(format!("BC6H: {e}")))?;
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                texture2ddecoder::decode_bc6(data, bw * 4, bh * 4, &mut px, false)
+            }))
+            .map_err(|_| Error("BC6H: corrupt blocks".into()))?
+            .map_err(|e| Error(format!("BC6H: {e}")))?;
             let mut out = Vec::with_capacity(n * 4);
             for y in 0..h as usize {
                 for x in 0..w as usize {
@@ -202,7 +272,14 @@ pub fn convert_mip(pf: &str, w: u32, h: u32, data: &[u8]) -> Result<Vec<u8>> {
     })
 }
 
-fn platform_data(game: &Game, pkg: &Package, pid: u64, r: &mut Reader, with_data: bool, fetch: bool) -> Result<(String, u32, u32, u32, Vec<Mip>)> {
+fn platform_data(
+    game: &Game,
+    pkg: &Package,
+    pid: u64,
+    r: &mut Reader,
+    with_data: bool,
+    fetch: bool,
+) -> Result<(String, u32, u32, u32, Vec<Mip>)> {
     if game.ue5_version >= 1009 {
         let using_derived = r.u8()?;
         if using_derived != 0 {
@@ -229,7 +306,11 @@ fn platform_data(game: &Game, pkg: &Package, pid: u64, r: &mut Reader, with_data
     let nmips = r.count(16)?;
     let mut mips = Vec::with_capacity(nmips);
     for _ in 0..nmips {
-        let b = if with_data { Some(bulk_header(pkg, r)?) } else { None };
+        let b = if with_data {
+            Some(bulk_header(pkg, r)?)
+        } else {
+            None
+        };
         let w = r.i32()?.max(1) as u32;
         let h = r.i32()?.max(1) as u32;
         let d = r.i32()?.max(1) as u32;
@@ -237,19 +318,37 @@ fn platform_data(game: &Game, pkg: &Package, pid: u64, r: &mut Reader, with_data
             Some(b) if fetch => game.bulk_bytes(pkg, pid, b).ok().flatten(),
             _ => None,
         };
-        mips.push(Mip { width: w, height: h, depth: d, data });
+        mips.push(Mip {
+            width: w,
+            height: h,
+            depth: d,
+            data,
+        });
     }
     let slices = (packed & ((1 << 30) - 1)).max(1);
     Ok((pf, sx.max(0) as u32, sy.max(0) as u32, slices, mips))
 }
 
 /// Texture2D (and the other texture classes sharing its layout) at export `index`.
-pub fn read_texture(game: &Game, ctx: &Ctx, pkg: &Package, index: usize, class: &str) -> Result<Texture> {
+pub fn read_texture(
+    game: &Game,
+    ctx: &Ctx,
+    pkg: &Package,
+    index: usize,
+    class: &str,
+) -> Result<Texture> {
     read_texture_opt(game, ctx, pkg, index, class, true)
 }
 
 /// `want_data` false: header and mip sizes only (no payload read).
-pub fn read_texture_opt(game: &Game, ctx: &Ctx, pkg: &Package, index: usize, class: &str, want_data: bool) -> Result<Texture> {
+pub fn read_texture_opt(
+    game: &Game,
+    ctx: &Ctx,
+    pkg: &Package,
+    index: usize,
+    class: &str,
+    want_data: bool,
+) -> Result<Texture> {
     let pid = game.package_id_of(&pkg.name).unwrap_or(0);
     let e = &pkg.exports[index];
     let data = pkg.export_data(index);
@@ -276,7 +375,14 @@ pub fn read_texture_opt(game: &Game, ctx: &Ctx, pkg: &Package, index: usize, cla
         let end = at as i64 + skip;
         match platform_data(game, pkg, pid, &mut r, with_data, fetch) {
             Ok((pf, w, h, slices, mips)) if !mips.is_empty() => {
-                return Ok(Texture { format: pf, width: w, height: h, slices, mips, props });
+                return Ok(Texture {
+                    format: pf,
+                    width: w,
+                    height: h,
+                    slices,
+                    mips,
+                    props,
+                });
             }
             Ok(_) => {}
             Err(e) => return Err(e),
@@ -296,7 +402,13 @@ pub struct Sound {
     pub props: Props,
 }
 
-fn sound_inline(game: &Game, ctx: &Ctx, pkg: &Package, pid: u64, r: &mut Reader) -> Result<Option<(String, Vec<u8>)>> {
+fn sound_inline(
+    game: &Game,
+    ctx: &Ctx,
+    pkg: &Package,
+    pid: u64,
+    r: &mut Reader,
+) -> Result<Option<(String, Vec<u8>)>> {
     let n = r.count(4)?;
     let mut best = None;
     for _ in 0..n {
@@ -312,7 +424,13 @@ fn sound_inline(game: &Game, ctx: &Ctx, pkg: &Package, pid: u64, r: &mut Reader)
     Ok(best)
 }
 
-fn sound_streamed(game: &Game, ctx: &Ctx, pkg: &Package, pid: u64, r: &mut Reader) -> Result<Option<(String, Vec<u8>)>> {
+fn sound_streamed(
+    game: &Game,
+    ctx: &Ctx,
+    pkg: &Package,
+    pid: u64,
+    r: &mut Reader,
+) -> Result<Option<(String, Vec<u8>)>> {
     r.skip(16)?; // CompressedDataGuid
     let n = r.i32()?;
     let n = r.check_count(n as i64, 4)?;
@@ -333,10 +451,20 @@ fn sound_streamed(game: &Game, ctx: &Ctx, pkg: &Package, pid: u64, r: &mut Reade
             out.extend_from_slice(&d);
         }
     }
-    Ok(if out.is_empty() { None } else { Some((fmt, out)) })
+    Ok(if out.is_empty() {
+        None
+    } else {
+        Some((fmt, out))
+    })
 }
 
-pub fn read_sound(game: &Game, ctx: &Ctx, pkg: &Package, index: usize, class: &str) -> Result<Sound> {
+pub fn read_sound(
+    game: &Game,
+    ctx: &Ctx,
+    pkg: &Package,
+    index: usize,
+    class: &str,
+) -> Result<Sound> {
     let pid = game.package_id_of(&pkg.name).unwrap_or(0);
     let e = &pkg.exports[index];
     let data = pkg.export_data(index);
@@ -363,16 +491,32 @@ pub fn read_sound(game: &Game, ctx: &Ctx, pkg: &Package, index: usize, class: &s
     }
     let streaming_hint = match props::get(&props, "bStreaming") {
         Some(v) => v.as_i64() == Some(1),
-        None => props::get(&props, "LoadingBehavior").and_then(|v| v.as_str()).is_none_or(|s| !s.ends_with("ForceInline")),
+        None => props::get(&props, "LoadingBehavior")
+            .and_then(|v| v.as_str())
+            .is_none_or(|s| !s.ends_with("ForceInline")),
     };
     let body = r.pos;
-    let order: [bool; 2] = if streaming_hint { [true, false] } else { [false, true] };
+    let order: [bool; 2] = if streaming_hint {
+        [true, false]
+    } else {
+        [false, true]
+    };
     let mut last = Error("sound has no audio data".into());
     for streamed in order {
         let mut rr = Reader::at(&pkg.data, body);
-        let got = if streamed { sound_streamed(game, ctx, pkg, pid, &mut rr) } else { sound_inline(game, ctx, pkg, pid, &mut rr) };
+        let got = if streamed {
+            sound_streamed(game, ctx, pkg, pid, &mut rr)
+        } else {
+            sound_inline(game, ctx, pkg, pid, &mut rr)
+        };
         match got {
-            Ok(Some((format, data))) => return Ok(Sound { format, data, props }),
+            Ok(Some((format, data))) => {
+                return Ok(Sound {
+                    format,
+                    data,
+                    props,
+                })
+            }
             Ok(None) => {}
             Err(e) => last = e,
         }

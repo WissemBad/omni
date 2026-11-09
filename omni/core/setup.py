@@ -231,6 +231,7 @@ def extract_assets(game: Path, say=print, count=None, cancel=None, workers: int 
     """Extract the needed resources of the game's packages into ``Assets/Sorted`` (resumable)."""
     import threading
     import time
+
     from ..native import N
     found = game_packages(game)
     if not found:

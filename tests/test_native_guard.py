@@ -23,7 +23,7 @@ def test_panics_become_native_error(monkeypatch):
         _Guarded(Raw).boom()
     try:
         _Guarded(Raw).boom()
-    except Exception as e:                                       # must be catchable by ordinary handlers
+    except Exception as e:  # noqa: BLE001 - must be catchable by ordinary handlers
         assert isinstance(e, NativeError)
 
 
@@ -47,5 +47,5 @@ def test_truncated_wem_does_not_panic():
     try:
         N.wem_info(riff)
         N.convert_wem(riff, "auto", [])
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass                                                      # an error is fine; a panic or an abort is not

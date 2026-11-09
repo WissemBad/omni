@@ -127,7 +127,7 @@ def parse_bank(d: bytes):
     """WBNK -> [(media id, offset, size)] of the media embedded in the bank (DIDX + DATA)."""
     o = d.find(b"BKHD")
     didx, data = [], -1
-    while 0 <= o and o + 8 <= len(d):
+    while o >= 0 and o + 8 <= len(d):
         cid, sz = d[o:o + 4], struct.unpack_from("<I", d, o + 4)[0]
         if cid == b"DIDX":
             didx = [struct.unpack_from("<III", d, o + 8 + 12 * k) for k in range(sz // 12)]

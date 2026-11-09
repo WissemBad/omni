@@ -45,7 +45,10 @@ impl<I: Iterator> IntoParIter for I {}
 
 #[cfg(not(feature = "parallel"))]
 pub trait FlatMapIter: Iterator + Sized {
-    fn flat_map_iter<U: IntoIterator, F: FnMut(Self::Item) -> U>(self, f: F) -> std::iter::FlatMap<Self, U, F> {
+    fn flat_map_iter<U: IntoIterator, F: FnMut(Self::Item) -> U>(
+        self,
+        f: F,
+    ) -> std::iter::FlatMap<Self, U, F> {
         self.flat_map(f)
     }
 }

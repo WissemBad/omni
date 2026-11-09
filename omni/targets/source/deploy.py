@@ -16,7 +16,7 @@ def link_path(cfg: Config, source_id: str) -> Path:
 def write_addon_json(addon: Path, source_id: str, title: str) -> None:
     (addon / "addon.json").write_text(json.dumps({
         "title": f"omni - {title}", "type": "model", "tags": ["fun", "roleplay"], "ignore": ["*.psd", "*.vcproj", "*.svn*"],
-    }, indent=2))
+    }, indent=2), encoding="utf-8")
 
 
 def deploy(source_id: str, title: str, cfg: Config = CONFIG) -> str:

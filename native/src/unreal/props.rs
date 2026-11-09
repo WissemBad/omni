@@ -85,7 +85,10 @@ impl Depth {
     fn enter() -> Result<Depth> {
         let d = DEPTH.with(|c| c.get());
         if d >= crate::limits::MAX_DEPTH {
-            return err(format!("properties nested deeper than {}", crate::limits::MAX_DEPTH));
+            return err(format!(
+                "properties nested deeper than {}",
+                crate::limits::MAX_DEPTH
+            ));
         }
         DEPTH.with(|c| c.set(d + 1));
         Ok(Depth)
@@ -116,7 +119,11 @@ impl<'s> Ctx<'s> {
     }
 
     fn real(&self, r: &mut Reader) -> Result<f64> {
-        if self.lwc() { r.f64() } else { Ok(r.f32()? as f64) }
+        if self.lwc() {
+            r.f64()
+        } else {
+            Ok(r.f32()? as f64)
+        }
     }
 
     fn reals(&self, r: &mut Reader, n: usize) -> Result<Value> {
@@ -139,7 +146,11 @@ impl<'s> Ctx<'s> {
         let path = if self.ue5 >= 1007 {
             let pkg = self.fname(r)?;
             let asset = self.fname(r)?;
-            if asset == "None" { pkg } else { format!("{pkg}.{asset}") }
+            if asset == "None" {
+                pkg
+            } else {
+                format!("{pkg}.{asset}")
+            }
         } else {
             self.fname(r)?
         };
@@ -175,7 +186,8 @@ impl<'s> Ctx<'s> {
         let v = match name {
             "Vector" | "Rotator" | "Vector3d" | "Rotator3d" => self.reals(r, 3),
             "Vector2D" | "Vector2d" | "DeprecateSlateVector2D" => self.reals(r, 2),
-            "Vector4" | "Quat" | "Plane" | "Sphere" | "Vector4d" | "Quat4d" | "Plane4d" | "Sphere3d" => self.reals(r, 4),
+            "Vector4" | "Quat" | "Plane" | "Sphere" | "Vector4d" | "Quat4d" | "Plane4d"
+            | "Sphere3d" => self.reals(r, 4),
             "Vector3f" | "Rotator3f" => self.f32s(r, 3),
             "Vector2f" => self.f32s(r, 2),
             "Vector4f" | "Quat4f" | "Plane4f" | "Sphere3f" => self.f32s(r, 4),
@@ -209,24 +221,48 @@ impl<'s> Ctx<'s> {
                 Ok(v)
             })(),
             "TwoVectors" => self.reals(r, 6),
-            "Color" => r.bytes(4).map(|b| Value::Floats(vec![b[2] as f64, b[1] as f64, b[0] as f64, b[3] as f64])),
-            "Guid" => r.bytes(16).map(|b| Value::Str(b.iter().map(|x| format!("{x:02x}")).collect())),
+            "Color" => r
+                .bytes(4)
+                .map(|b| Value::Floats(vec![b[2] as f64, b[1] as f64, b[0] as f64, b[3] as f64])),
+            "Guid" => r
+                .bytes(16)
+                .map(|b| Value::Str(b.iter().map(|x| format!("{x:02x}")).collect())),
             "DateTime" | "Timespan" => r.i64().map(Value::Int),
             "FrameNumber" | "NavAgentSelector" => r.i32().map(|x| Value::Int(x as i64)),
-            "IntPoint" | "Int32Point" | "IntVector2" | "Int32Vector2" | "UintVector2" | "Uint32Point" => {
-                (|| Ok(Value::Floats(vec![r.i32()? as f64, r.i32()? as f64])))()
+            "IntPoint" | "Int32Point" | "IntVector2" | "Int32Vector2" | "UintVector2"
+            | "Uint32Point" => (|| Ok(Value::Floats(vec![r.i32()? as f64, r.i32()? as f64])))(),
+            "IntVector" | "UintVector" => (|| {
+                Ok(Value::Floats(vec![
+                    r.i32()? as f64,
+                    r.i32()? as f64,
+                    r.i32()? as f64,
+                ]))
+            })(),
+            "IntVector4" | "UintVector4" | "Uint32Vector4" => (|| {
+                Ok(Value::Floats(
+                    (0..4)
+                        .map(|_| r.i32().map(|x| x as f64))
+                        .collect::<Result<Vec<_>>>()?,
+                ))
+            })(),
+            "Int64Point" | "Int64Vector2" | "UInt64Point" | "UInt64Vector2" => {
+                r.skip(16).map(|_| Value::Unknown)
             }
-            "IntVector" | "UintVector" => (|| Ok(Value::Floats(vec![r.i32()? as f64, r.i32()? as f64, r.i32()? as f64])))(),
-            "IntVector4" | "UintVector4" | "Uint32Vector4" => (|| Ok(Value::Floats((0..4).map(|_| r.i32().map(|x| x as f64)).collect::<Result<Vec<_>>>()?)))(),
-            "Int64Point" | "Int64Vector2" | "UInt64Point" | "UInt64Vector2" => r.skip(16).map(|_| Value::Unknown),
             "Int64Vector" | "UInt64Vector" => r.skip(24).map(|_| Value::Unknown),
-            "SoftObjectPath" | "SoftClassPath" | "StringAssetReference" | "StringClassReference" => self.soft_path(r),
+            "SoftObjectPath"
+            | "SoftClassPath"
+            | "StringAssetReference"
+            | "StringClassReference" => self.soft_path(r),
             "PerPlatformFloat" => self.per_platform(r, |r| r.f32().map(|x| Value::Float(x as f64))),
             "PerPlatformInt" => self.per_platform(r, |r| r.i32().map(|x| Value::Int(x as i64))),
             "PerPlatformBool" => self.per_platform(r, |r| r.bool32().map(Value::Bool)),
-            "PerPlatformFrameRate" => self.per_platform(r, |r| Ok(Value::Floats(vec![r.i32()? as f64, r.i32()? as f64]))),
+            "PerPlatformFrameRate" => self.per_platform(r, |r| {
+                Ok(Value::Floats(vec![r.i32()? as f64, r.i32()? as f64]))
+            }),
             "PerQualityLevelInt" => self.per_quality(r, |r| r.i32().map(|x| Value::Int(x as i64))),
-            "PerQualityLevelFloat" => self.per_quality(r, |r| r.f32().map(|x| Value::Float(x as f64))),
+            "PerQualityLevelFloat" => {
+                self.per_quality(r, |r| r.f32().map(|x| Value::Float(x as f64)))
+            }
             "GameplayTagContainer" => (|| {
                 let n = r.count(8)?;
                 let mut v = Vec::with_capacity(n);
@@ -266,7 +302,9 @@ impl<'s> Ctx<'s> {
                 Ok(Value::Unknown)
             })(),
             "MovieSceneFrameRange" => r.skip(2 * (1 + 4)).map(|_| Value::Unknown),
-            "MovieSceneSequenceID" | "MovieSceneTrackIdentifier" | "MovieSceneSegmentIdentifier" => r.skip(4).map(|_| Value::Unknown),
+            "MovieSceneSequenceID"
+            | "MovieSceneTrackIdentifier"
+            | "MovieSceneSegmentIdentifier" => r.skip(4).map(|_| Value::Unknown),
             "MovieSceneEvaluationKey" => r.skip(12).map(|_| Value::Unknown),
             "UniqueNetIdRepl" => (|| {
                 let size = r.i32()?;
@@ -281,7 +319,11 @@ impl<'s> Ctx<'s> {
         Some(v)
     }
 
-    fn per_platform(&self, r: &mut Reader, f: impl Fn(&mut Reader) -> Result<Value>) -> Result<Value> {
+    fn per_platform(
+        &self,
+        r: &mut Reader,
+        f: impl Fn(&mut Reader) -> Result<Value>,
+    ) -> Result<Value> {
         let cooked = r.bool32()?;
         let v = f(r)?;
         if !cooked {
@@ -294,7 +336,11 @@ impl<'s> Ctx<'s> {
         Ok(v)
     }
 
-    fn per_quality(&self, r: &mut Reader, f: impl Fn(&mut Reader) -> Result<Value>) -> Result<Value> {
+    fn per_quality(
+        &self,
+        r: &mut Reader,
+        f: impl Fn(&mut Reader) -> Result<Value>,
+    ) -> Result<Value> {
         let _cooked = r.bool32()?;
         let v = f(r)?;
         let n = r.count(8)?;
@@ -310,7 +356,9 @@ impl<'s> Ctx<'s> {
             return v;
         }
         if !self.schema.has(name) {
-            return err(format!("struct '{name}' has no layout (not in the game's reflection data)"));
+            return err(format!(
+                "struct '{name}' has no layout (not in the game's reflection data)"
+            ));
         }
         Ok(Value::Struct(name.to_string(), self.properties(name, r)?))
     }
@@ -418,7 +466,11 @@ impl<'s> Ctx<'s> {
                 Value::Map(v)
             }
             Ty::Optional(inner) => {
-                if r.bool32()? { self.value(inner, r)? } else { Value::Unknown }
+                if r.bool32()? {
+                    self.value(inner, r)?
+                } else {
+                    Value::Unknown
+                }
             }
             Ty::Unknown(x) => return err(format!("property type {x:#x} not supported")),
         })
@@ -434,11 +486,25 @@ impl<'s> Ctx<'s> {
                 break;
             }
         }
-        let zero_bits: usize = frags.iter().filter(|f| *f & 0x80 != 0).map(|f| (*f >> 9) as usize).sum();
-        let unmasked: usize = frags.iter().filter(|f| *f & 0x80 == 0).map(|f| (*f >> 9) as usize).sum();
+        let zero_bits: usize = frags
+            .iter()
+            .filter(|f| *f & 0x80 != 0)
+            .map(|f| (*f >> 9) as usize)
+            .sum();
+        let unmasked: usize = frags
+            .iter()
+            .filter(|f| *f & 0x80 == 0)
+            .map(|f| (*f >> 9) as usize)
+            .sum();
         let mut mask = Vec::new();
         if zero_bits > 0 {
-            let bytes = if zero_bits <= 8 { 1 } else if zero_bits <= 16 { 2 } else { zero_bits.div_ceil(32) * 4 };
+            let bytes = if zero_bits <= 8 {
+                1
+            } else if zero_bits <= 16 {
+                2
+            } else {
+                zero_bits.div_ceil(32) * 4
+            };
             mask = r.bytes(bytes)?.to_vec();
         }
         let mut out = Vec::new();
@@ -452,7 +518,8 @@ impl<'s> Ctx<'s> {
             let n = (f >> 9) as usize;
             let has_zero = f & 0x80 != 0;
             for _ in 0..n {
-                let zero = has_zero && (mask.get(zi / 8).copied().unwrap_or(0) >> (zi % 8)) & 1 != 0;
+                let zero =
+                    has_zero && (mask.get(zi / 8).copied().unwrap_or(0) >> (zi % 8)) & 1 != 0;
                 if has_zero {
                     zi += 1;
                 }
@@ -461,7 +528,9 @@ impl<'s> Ctx<'s> {
                     .prop_at(struct_name, idx)
                     .ok_or_else(|| Error(format!("{struct_name}: no property at index {idx}")))?;
                 if !zero {
-                    let v = self.value(&prop.ty, r).map_err(|e| Error(format!("{struct_name}.{}: {e}", prop.name)))?;
+                    let v = self
+                        .value(&prop.ty, r)
+                        .map_err(|e| Error(format!("{struct_name}.{}: {e}", prop.name)))?;
                     out.push((prop.name.clone(), v));
                 } else if matches!(prop.ty, Ty::Bool) {
                     out.push((prop.name.clone(), Value::Bool(false)));

@@ -157,8 +157,8 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
             from ..preview.glb import export_glb
             try:
                 model, mats = src.load_model(int(key, 16))
-            except Exception as e:  # noqa: BLE001
-                raise HTTPException(404, str(e))
+            except Exception as e:
+                raise HTTPException(404, str(e)) from e
             export_glb(src, model, mats, out, tex_size=settings.get("viewer", "texture_size"))
         return FileResponse(out, media_type="model/gltf-binary")
 
@@ -169,8 +169,8 @@ def register(app: FastAPI, *, jobs, need, catalog_of, texcat_of, converted, conv
         key = key.upper()
         try:
             model, mats = src.load_model(int(key, 16))
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(404, str(e))
+        except Exception as e:
+            raise HTTPException(404, str(e)) from e
         tc = texcat_of(sid)
         row = next(iter(catalog_of(sid)._query("SELECT * FROM assets WHERE key = ?", (key,))), None)
         tris = sum(len(sm.indices) // 3 for sm in model.submeshes)

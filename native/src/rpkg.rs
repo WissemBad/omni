@@ -56,7 +56,11 @@ impl Entry {
         String::from_utf8_lossy(&t).into_owned()
     }
     pub fn stored_size(&self) -> u64 {
-        if self.compressed != 0 { self.compressed as u64 } else { self.data_size as u64 }
+        if self.compressed != 0 {
+            self.compressed as u64
+        } else {
+            self.data_size as u64
+        }
     }
 }
 
@@ -77,7 +81,10 @@ struct Cur<'a> {
 
 impl<'a> Cur<'a> {
     fn take(&mut self, n: usize) -> Result<&'a [u8], String> {
-        let s = self.d.get(self.o..self.o.checked_add(n).ok_or("overflow")?).ok_or("truncated package header")?;
+        let s = self
+            .d
+            .get(self.o..self.o.checked_add(n).ok_or("overflow")?)
+            .ok_or("truncated package header")?;
         self.o += n;
         Ok(s)
     }
@@ -90,7 +97,9 @@ impl<'a> Cur<'a> {
     }
     fn u64(&mut self) -> Result<u64, String> {
         let b = self.take(8)?;
-        Ok(u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]))
+        Ok(u64::from_le_bytes([
+            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+        ]))
     }
 }
 
@@ -106,7 +115,13 @@ pub fn name_ids(path: &Path) -> Option<(u32, u32)> {
     Some((c.parse().ok()?, p.parse().ok()?))
 }
 
-fn parse_headers(d: &[u8], file_count: usize, table: usize, is_patch: bool, start: usize) -> Result<(Vec<Entry>, Vec<u64>), String> {
+fn parse_headers(
+    d: &[u8],
+    file_count: usize,
+    table: usize,
+    is_patch: bool,
+    start: usize,
+) -> Result<(Vec<Entry>, Vec<u64>), String> {
     let mut c = Cur { d, o: start };
     let mut unneeded = Vec::new();
     if is_patch {
@@ -123,8 +138,17 @@ fn parse_headers(d: &[u8], file_count: usize, table: usize, is_patch: bool, star
         let hash = c.u64()?;
         let offset = c.u64()?;
         let flags = c.u32()?;
-        entries.push(Entry { hash, offset, compressed: flags & 0x7FFF_FFFF, scrambled: flags & 0x8000_0000 != 0,
-            ty: [0; 4], data_size: 0, sys_mem: 0, vid_mem: 0, refs: Vec::new() });
+        entries.push(Entry {
+            hash,
+            offset,
+            compressed: flags & 0x7FFF_FFFF,
+            scrambled: flags & 0x8000_0000 != 0,
+            ty: [0; 4],
+            data_size: 0,
+            sys_mem: 0,
+            vid_mem: 0,
+            refs: Vec::new(),
+        });
     }
     let meta_start = c.o;
     // the resource headers exist with or without a "states size" field: the right layout ends exactly at the end
@@ -217,7 +241,13 @@ pub fn open(path: &Path) -> Result<Package, String> {
     let mut buf = vec![0u8; 1 << 20];
     // the unneeded list of a patch precedes the tables and is not counted in their sizes: read in chunks until parsed
     let want = |r: &Vec<u8>| -> Option<usize> {
-        let extra = if is_patch && r.len() >= 4 { 4 + 8 * u32::from_le_bytes([r[0], r[1], r[2], r[3]]) as usize } else if is_patch { return None } else { 0 };
+        let extra = if is_patch && r.len() >= 4 {
+            4 + 8 * u32::from_le_bytes([r[0], r[1], r[2], r[3]]) as usize
+        } else if is_patch {
+            return None;
+        } else {
+            0
+        };
         Some(extra + offset_table + meta_table)
     };
     loop {
@@ -237,7 +267,14 @@ pub fn open(path: &Path) -> Result<Package, String> {
     }
     let table = meta_table;
     let (entries, unneeded) = parse_headers(&rest, file_count, table, is_patch, 0)?;
-    Ok(Package { path: path.to_path_buf(), version, chunk_id, patch_id, entries, unneeded })
+    Ok(Package {
+        path: path.to_path_buf(),
+        version,
+        chunk_id,
+        patch_id,
+        entries,
+        unneeded,
+    })
 }
 
 #[cfg(windows)]
@@ -269,7 +306,8 @@ pub fn read_resource(f: &File, e: &Entry) -> Result<Vec<u8>, String> {
     }
     // LZ4 cannot expand more than 255 times; anything beyond is a corrupt header, not data worth allocating for
     if e.compressed != 0 {
-        crate::limits::checked_len(e.data_size as usize, 1, stored as usize * 255 + 64).map_err(|why| bad(&format!("implausible size: {why}")))?;
+        crate::limits::checked_len(e.data_size as usize, 1, stored as usize * 255 + 64)
+            .map_err(|why| bad(&format!("implausible size: {why}")))?;
     }
     if stored > (64 << 20) {
         let len = f.metadata().map_err(|err| bad(&err.to_string()))?.len();
@@ -285,7 +323,8 @@ pub fn read_resource(f: &File, e: &Entry) -> Result<Vec<u8>, String> {
         }
     }
     if e.compressed != 0 {
-        let out = lz4_flex::block::decompress(&buf, e.data_size as usize).map_err(|err| format!("resource {:016X}: LZ4 {err}", e.hash))?;
+        let out = lz4_flex::block::decompress(&buf, e.data_size as usize)
+            .map_err(|err| format!("resource {:016X}: LZ4 {err}", e.hash))?;
         return Ok(out);
     }
     Ok(buf)
@@ -293,7 +332,11 @@ pub fn read_resource(f: &File, e: &Entry) -> Result<Vec<u8>, String> {
 
 /// The `.meta` file RPKG tools write next to a resource (layout read by `sources/glacier/meta.py`).
 pub fn meta_bytes(e: &Entry) -> Vec<u8> {
-    let refs_size = if e.refs.is_empty() { 0 } else { 4 + e.refs.len() * 9 };
+    let refs_size = if e.refs.is_empty() {
+        0
+    } else {
+        4 + e.refs.len() * 9
+    };
     let mut m = Vec::with_capacity(44 + refs_size);
     m.extend(e.hash.to_le_bytes());
     m.extend((e.offset as u32).to_le_bytes());
@@ -351,7 +394,12 @@ pub fn extract(paths: &[PathBuf], root: &Path, types: &HashSet<String>) -> Resul
     }
     pkgs.sort_by_key(|p| name_ids(&p.path).unwrap_or((p.chunk_id as u32, p.patch_id as u32)));
     let wanted = |e: &Entry| types.is_empty() || types.contains(&e.type_name());
-    TOTAL.store(pkgs.iter().map(|p| p.entries.iter().filter(|e| wanted(e)).count() as u64).sum(), Ordering::SeqCst);
+    TOTAL.store(
+        pkgs.iter()
+            .map(|p| p.entries.iter().filter(|e| wanted(e)).count() as u64)
+            .sum(),
+        Ordering::SeqCst,
+    );
     let mut st = Stats::default();
     for pkg in &pkgs {
         let (chunk, _) = name_ids(&pkg.path).unwrap_or((pkg.chunk_id as u32, 0));
@@ -364,7 +412,9 @@ pub fn extract(paths: &[PathBuf], root: &Path, types: &HashSet<String>) -> Resul
                     if let Ok(files) = fs::read_dir(t.path()) {
                         for f in files.flatten() {
                             let n = f.file_name().to_string_lossy().into_owned();
-                            if let Some(h) = n.get(..16).and_then(|h| u64::from_str_radix(h, 16).ok()) {
+                            if let Some(h) =
+                                n.get(..16).and_then(|h| u64::from_str_radix(h, 16).ok())
+                            {
                                 if gone.contains(&h) {
                                     let _ = fs::remove_file(f.path());
                                     st.removed += 1;
@@ -388,14 +438,19 @@ pub fn extract(paths: &[PathBuf], root: &Path, types: &HashSet<String>) -> Resul
                 let ty = e.type_name();
                 let target = dir.join(&ty).join(format!("{:016X}.{ty}", e.hash));
                 // a base resource of the right size is already there (resume); a patch always rewrites
-                let size_ok = fs::metadata(&target).map(|m| m.len() == e.data_size as u64).unwrap_or(false);
+                let size_ok = fs::metadata(&target)
+                    .map(|m| m.len() == e.data_size as u64)
+                    .unwrap_or(false);
                 let meta_ok = fs::metadata(format!("{}.meta", target.display())).is_ok();
                 let r = if size_ok && meta_ok && !is_patch {
                     Ok((ty, 0, true))
                 } else {
                     read_resource(&file, e).and_then(|data| {
                         write_atomic(&target, &data)?;
-                        write_atomic(Path::new(&format!("{}.meta", target.display())), &meta_bytes(e))?;
+                        write_atomic(
+                            Path::new(&format!("{}.meta", target.display())),
+                            &meta_bytes(e),
+                        )?;
                         Ok((ty, data.len() as u64, false))
                     })
                 };
@@ -444,7 +499,11 @@ mod tests {
     fn build(res: &[Res], patch_unneeded: &[u64], states: bool) -> Vec<u8> {
         let mut blobs: Vec<Vec<u8>> = Vec::new();
         for r in res {
-            let mut b = if r.compress { lz4_flex::block::compress(&r.data) } else { r.data.clone() };
+            let mut b = if r.compress {
+                lz4_flex::block::compress(&r.data)
+            } else {
+                r.data.clone()
+            };
             if r.scramble {
                 for (i, x) in b.iter_mut().enumerate() {
                     *x ^= XOR[i % 8];
@@ -457,7 +516,11 @@ mod tests {
             let mut t = r.ty.as_bytes().to_vec();
             t.reverse();
             meta.extend(&t);
-            let refs_size = if r.refs.is_empty() { 0 } else { 4 + r.refs.len() * 9 };
+            let refs_size = if r.refs.is_empty() {
+                0
+            } else {
+                4 + r.refs.len() * 9
+            };
             meta.extend((refs_size as u32).to_le_bytes());
             if states {
                 meta.extend(0u32.to_le_bytes());
@@ -473,12 +536,26 @@ mod tests {
                 }
             }
         }
-        let unneeded_len = if patch_unneeded.is_empty() { 0 } else { 4 + 8 * patch_unneeded.len() };
+        let unneeded_len = if patch_unneeded.is_empty() {
+            0
+        } else {
+            4 + 8 * patch_unneeded.len()
+        };
         let table = res.len() * 20;
         let header = 4 + 9 + 12;
         let data_start = header + unneeded_len + table + meta.len();
         let mut out = b"2KPR".to_vec();
-        out.extend([0, 0, 0, 0, 0, 0, if patch_unneeded.is_empty() { 0 } else { 1 }, b'x', b'x']);
+        out.extend([
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            if patch_unneeded.is_empty() { 0 } else { 1 },
+            b'x',
+            b'x',
+        ]);
         out.extend((res.len() as u32).to_le_bytes());
         out.extend((table as u32).to_le_bytes());
         out.extend((meta.len() as u32).to_le_bytes());
@@ -492,7 +569,8 @@ mod tests {
         for (r, b) in res.iter().zip(&blobs) {
             out.extend(r.hash.to_le_bytes());
             out.extend(off.to_le_bytes());
-            let flags = if r.compress { b.len() as u32 } else { 0 } | if r.scramble { 0x8000_0000 } else { 0 };
+            let flags = if r.compress { b.len() as u32 } else { 0 }
+                | if r.scramble { 0x8000_0000 } else { 0 };
             out.extend(flags.to_le_bytes());
             off += b.len() as u64;
         }
@@ -505,9 +583,30 @@ mod tests {
 
     fn sample() -> Vec<Res> {
         vec![
-            Res { hash: 0x0100_0000_0000_0001, ty: "PRIM", data: (0..5000u32).flat_map(|i| (i % 251).to_le_bytes()).collect(), refs: vec![(0x0100_0000_0000_00AA, 0x5F), (0x0100_0000_0000_00BB, 0x1F)], scramble: true, compress: true },
-            Res { hash: 0x0100_0000_0000_0002, ty: "TEXT", data: b"plain data, neither packed nor scrambled".to_vec(), refs: vec![], scramble: false, compress: false },
-            Res { hash: 0x0100_0000_0000_0003, ty: "GFXV", data: vec![7; 100], refs: vec![], scramble: true, compress: false },
+            Res {
+                hash: 0x0100_0000_0000_0001,
+                ty: "PRIM",
+                data: (0..5000u32).flat_map(|i| (i % 251).to_le_bytes()).collect(),
+                refs: vec![(0x0100_0000_0000_00AA, 0x5F), (0x0100_0000_0000_00BB, 0x1F)],
+                scramble: true,
+                compress: true,
+            },
+            Res {
+                hash: 0x0100_0000_0000_0002,
+                ty: "TEXT",
+                data: b"plain data, neither packed nor scrambled".to_vec(),
+                refs: vec![],
+                scramble: false,
+                compress: false,
+            },
+            Res {
+                hash: 0x0100_0000_0000_0003,
+                ty: "GFXV",
+                data: vec![7; 100],
+                refs: vec![],
+                scramble: true,
+                compress: false,
+            },
         ]
     }
 
@@ -536,14 +635,23 @@ mod tests {
             assert!(st.errors.is_empty());
             let prim = fs::read(out.join("chunk0/PRIM/0100000000000001.PRIM")).unwrap();
             assert_eq!(prim, res[0].data);
-            assert_eq!(fs::read(out.join("chunk0/TEXT/0100000000000002.TEXT")).unwrap(), res[1].data);
+            assert_eq!(
+                fs::read(out.join("chunk0/TEXT/0100000000000002.TEXT")).unwrap(),
+                res[1].data
+            );
             assert!(!out.join("chunk0/GFXV").exists());
             let meta = fs::read(out.join("chunk0/PRIM/0100000000000001.PRIM.meta")).unwrap();
             assert_eq!(&meta[20..24], b"PRIM");
             assert_eq!(u32::from_le_bytes(meta[24..28].try_into().unwrap()), 22);
-            assert_eq!(u32::from_le_bytes(meta[40..44].try_into().unwrap()) & 0x3FFF_FFFF, 2);
+            assert_eq!(
+                u32::from_le_bytes(meta[40..44].try_into().unwrap()) & 0x3FFF_FFFF,
+                2
+            );
             assert_eq!(meta[44], 0x5F);
-            assert_eq!(u64::from_le_bytes(meta[46..54].try_into().unwrap()), 0x0100_0000_0000_00AA);
+            assert_eq!(
+                u64::from_le_bytes(meta[46..54].try_into().unwrap()),
+                0x0100_0000_0000_00AA
+            );
             // a second run keeps everything
             let again = extract(&[pkg], &out, &types).unwrap();
             assert_eq!((again.written, again.skipped), (0, 2));
@@ -555,13 +663,23 @@ mod tests {
         let dir = tmp("p");
         let base = dir.join("chunk0.rpkg");
         fs::write(&base, build(&sample(), &[], true)).unwrap();
-        let newer = vec![Res { hash: 0x0100_0000_0000_0002, ty: "TEXT", data: b"patched".to_vec(), refs: vec![], scramble: false, compress: false }];
+        let newer = vec![Res {
+            hash: 0x0100_0000_0000_0002,
+            ty: "TEXT",
+            data: b"patched".to_vec(),
+            refs: vec![],
+            scramble: false,
+            compress: false,
+        }];
         let patch = dir.join("chunk0patch1.rpkg");
         fs::write(&patch, build(&newer, &[0x0100_0000_0000_0001], true)).unwrap();
         let out = dir.join("Sorted");
         let st = extract(&[patch, base], &out, &HashSet::new()).unwrap();
         assert!(st.errors.is_empty(), "{:?}", st.errors);
-        assert_eq!(fs::read(out.join("chunk0/TEXT/0100000000000002.TEXT")).unwrap(), b"patched");
+        assert_eq!(
+            fs::read(out.join("chunk0/TEXT/0100000000000002.TEXT")).unwrap(),
+            b"patched"
+        );
         assert!(!out.join("chunk0/PRIM/0100000000000001.PRIM").exists());
         assert!(out.join("chunk0/GFXV/0100000000000003.GFXV").exists());
     }
@@ -591,9 +709,14 @@ mod tests {
             h.extend(vec![0u8; 256]);
             h
         };
-        for (i, (fc, ot, mt)) in [(u32::MAX, u32::MAX, 0), (1 << 20, 100, 100), (10, 200, u32::MAX), (5, 100, 1 << 30)]
-            .into_iter()
-            .enumerate()
+        for (i, (fc, ot, mt)) in [
+            (u32::MAX, u32::MAX, 0),
+            (1 << 20, 100, 100),
+            (10, 200, u32::MAX),
+            (5, 100, 1 << 30),
+        ]
+        .into_iter()
+        .enumerate()
         {
             let f = dir.join(format!("chunk{i}.rpkg"));
             fs::write(&f, header(fc, ot, mt)).unwrap();
@@ -607,9 +730,18 @@ mod tests {
         let f = dir.join("data.bin");
         fs::write(&f, vec![0u8; 64]).unwrap();
         let file = File::open(&f).unwrap();
-        let mut e = Entry { hash: 1, offset: 0, compressed: 16, scrambled: false, ty: *b"MIRP", data_size: u32::MAX,
-            sys_mem: 0, vid_mem: 0, refs: Vec::new() };
-        assert!(read_resource(&file, &e).is_err());      // 16 bytes cannot hold 4 GB of LZ4 output
+        let mut e = Entry {
+            hash: 1,
+            offset: 0,
+            compressed: 16,
+            scrambled: false,
+            ty: *b"MIRP",
+            data_size: u32::MAX,
+            sys_mem: 0,
+            vid_mem: 0,
+            refs: Vec::new(),
+        };
+        assert!(read_resource(&file, &e).is_err()); // 16 bytes cannot hold 4 GB of LZ4 output
         e.compressed = 0;
         e.data_size = 1 << 31;
         e.offset = 1 << 40;

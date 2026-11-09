@@ -109,6 +109,7 @@ class GlacierSource(Source):
             except (OSError, ValueError):
                 pass
             from collections import defaultdict
+
             from .outfit import OutfitResolver, body_type
             fam = defaultdict(list)
             for f, v, h, n in OutfitResolver(self).outfits():
@@ -150,6 +151,7 @@ class GlacierSource(Source):
         """Every sound (SoundRef) with a readable path, see sources/glacier/audio.py. The list (a minute to build:
         every media header is read) is cached on disk until the audio resources change."""
         import pickle
+
         from .audio import iter_sounds
         sig = [len(self.archive.index(k)) for k in ("WWES", "WWEM", "WWEV", "WBNK", "DLGE", "WSGB", "WSWB")] + [self._names_sig()]
         cache = self.config.cache / f"sounds_{self.id}.pkl"
@@ -312,7 +314,7 @@ class GlacierSource(Source):
                 try:
                     from .texture import parse_text_header
                     fmt = parse_text_header(tp.read_bytes()[:0x98]).name
-                except Exception:
+                except Exception:  # noqa: BLE001 - the format is a nicety
                     pass
             role = roles.resolve(t.name, fam, tname, fmt, slots.get(t.name.lower(), ""))
             if role in ("emissive", "translucency", "mask", "spec") and "/constants/" in tname:
@@ -398,6 +400,7 @@ class GlacierSource(Source):
         those materials. Names: the hash list when it has the texture (with its usage hint ``(ascolormap)``),
         else the first material using it and the slot."""
         import struct
+
         from ...native import N
         from .store import ResPath
         from .texture import FORMATS

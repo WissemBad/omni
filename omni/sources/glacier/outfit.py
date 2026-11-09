@@ -24,7 +24,7 @@ import zlib
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from .entity import EntityReader, Prop, parse_bin1, _array, _zstring
+from .entity import EntityReader, Prop, _array, _zstring, parse_bin1
 from .schema import SchemaBook
 
 log = logging.getLogger("omni.outfit")

@@ -4,11 +4,11 @@ from __future__ import annotations
 import pytest
 
 pytest.importorskip("httpx2")
-from fastapi import FastAPI  # noqa: E402
-from fastapi.responses import HTMLResponse  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+from fastapi.testclient import TestClient
 
-from omni.ui import security  # noqa: E402
+from omni.ui import security
 
 
 def make_app() -> FastAPI:
@@ -116,7 +116,7 @@ def test_executable_paths_are_checked(tmp_path):
     from omni.ui.routes_setup import clean_paths
     exe = tmp_path / "ffmpeg.exe"
     exe.write_bytes(b"MZ")
-    (tmp_path / "evil.bat").write_text("calc")
+    (tmp_path / "evil.bat").write_text("calc", encoding="utf-8")
     assert clean_paths({"ffmpeg": f'"{exe}"', "blender": "", "gmod": None}) == {"ffmpeg": str(exe), "blender": ""}
     for bad in (str(tmp_path / "evil.bat"), str(tmp_path / "missing.exe"), "ffmpeg.exe", r"\\server\share\x.exe"):
         with pytest.raises(HTTPException):

@@ -97,7 +97,7 @@ def launch(source_id: str, model: str, kind: str = "prop", cfg: Config = CONFIG)
     (data / "omni_spawn.txt").write_text(f"{kind}\t{model}", encoding="utf-8")
     already = running()
     if not already:
-        os.startfile(f"steam://run/{STEAM_APP}//+map%20{MAP}")           # noqa: S606 - the Steam protocol handler
+        os.startfile(f"steam://run/{STEAM_APP}//+map%20{MAP}")
     return {"running": already, "map": MAP,
             "hint": ("GMod est déjà ouvert : change de map puis tape « omni_spawn » dans la console." if already
                      else "GMod démarre sur gm_construct : le modèle apparaît devant toi.")}

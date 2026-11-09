@@ -163,7 +163,7 @@ def build_playermodel(source, part_specs: list[str], opts: PMOptions, cfg: Confi
         qc += pm.ik_qc(tpl)
         qc += [f'$includemodel "{Path(tpl.anim_include).name}"']
         qc += pm.collision_qc(tpl, volumes)
-        (work / "model.qc").write_text("\n".join(qc) + "\n")
+        (work / "model.qc").write_text("\n".join(qc) + "\n", encoding="utf-8")
 
         cr = compile_qc(work / "model.qc", cfg.sandbox, cfg.studiomdl, timeout=180)
         if not cr.ok:
@@ -225,6 +225,7 @@ def export_character_preview(source, part_specs: list[str], opts: PMOptions, cfg
     """GLB of the posed character (materials converted into ``cfg``'s scratch addon) and the metadata the
     character page shows (one base body, no bodygroups, one skin)."""
     import re as _re
+
     from ...preview.glb import export_scene
     from .vtfread import read_vtf
     res = PMResult(name=opts.name)
@@ -237,7 +238,7 @@ def export_character_preview(source, part_specs: list[str], opts: PMOptions, cfg
         vmt_name = prep["names"].get(pp.material_key, "")
         if vmt_name not in index:
             vmt = mroot / prep["cd"] / f"{vmt_name}.vmt"
-            text = vmt.read_text() if vmt.exists() else ""
+            text = vmt.read_text(encoding="utf-8", errors="replace") if vmt.exists() else ""
             entry = {"name": vmt_name, "base": None, "normal": None,
                      "alpha": "MASK" if "$alphatest" in text else ("BLEND" if "$translucent" in text else "OPAQUE")}
             for key, slot in (("$basetexture", "base"), ("$bumpmap", "normal")):

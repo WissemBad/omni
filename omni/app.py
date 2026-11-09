@@ -302,7 +302,7 @@ def run(port: int = PORT, browser: bool = False, path: str = "/") -> int:
                 box["hwnd"] = hwnd
                 ctypes.windll.user32.ShowWindow(hwnd, 9)              # SW_RESTORE
                 ctypes.windll.user32.SetForegroundWindow(hwnd)
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.debug("focus failed", exc_info=True)
 
     def quit_all() -> None:
@@ -350,7 +350,7 @@ def run(port: int = PORT, browser: bool = False, path: str = "/") -> int:
                 state.update({k: old[k] for k in ("x", "y", "width", "height") if k in old})
             _state_file().parent.mkdir(parents=True, exist_ok=True)
             _state_file().write_text(json.dumps(state), encoding="utf-8")
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.debug("could not save the window state", exc_info=True)
 
     window.events.closing += closing
@@ -367,7 +367,7 @@ def run(port: int = PORT, browser: bool = False, path: str = "/") -> int:
             box["hwnd"] = _hwnd_of_this_process()
             if geo["maximized"]:
                 window.maximize()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.exception("startup failed")
             window.load_html(FAILED.format(why=str(e).replace("<", "&lt;"), log=logs.log_dir() / "omni.log"))
 
@@ -375,7 +375,7 @@ def run(port: int = PORT, browser: bool = False, path: str = "/") -> int:
     storage.mkdir(parents=True, exist_ok=True)
     try:
         webview.start(boot, private_mode=False, storage_path=str(storage), icon=icon_path())
-    except Exception as e:  # noqa: BLE001 - no WebView2 runtime: the browser still works
+    except Exception as e:
         windows.set_picker(None)                 # the dialog it registered belongs to a window that never opened
         log.error("fenêtre intégrée impossible: %s", e, exc_info=True)
         _message(WEBVIEW_HELP)

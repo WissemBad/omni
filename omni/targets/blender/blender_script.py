@@ -68,7 +68,8 @@ def build_material(name, spec):
 
 
 def main():
-    jobs = json.load(open(sys.argv[sys.argv.index("--") + 1], encoding="utf-8"))
+    with open(sys.argv[sys.argv.index("--") + 1], encoding="utf-8") as f:
+        jobs = json.load(f)
     for job in jobs:
         bpy.ops.wm.read_factory_settings(use_empty=True)
         bpy.ops.import_scene.gltf(filepath=job["glb"])

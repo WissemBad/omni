@@ -100,9 +100,8 @@ def parse_prim(data: bytes) -> PrimData:
         uv = (uv_raw.astype(np.float32) / 32767.0) * uv_scale + uv_bias
         q += nv * stride
         colors = None
-        if sub_type == 2 or not (sub_props & 0x20):
-            if q + nv * 4 <= len(data):
-                colors = np.frombuffer(mv, np.uint8, nv * 4, q).reshape(nv, 4).copy()
+        if (sub_type == 2 or not (sub_props & 0x20)) and q + nv * 4 <= len(data):
+            colors = np.frombuffer(mv, np.uint8, nv * 4, q).reshape(nv, 4).copy()
         nn = np.linalg.norm(n, axis=1, keepdims=True)
         nn[nn < 1e-8] = 1.0
         prim.meshes.append(PrimMeshData(
@@ -146,7 +145,7 @@ def parse_mati(data: bytes) -> Mati:
             node = {"tag": tag}
             if typ == 0:
                 node["floats"] = [struct.unpack_from("<f", data, pos + 4)[0]] if cnt == 1 else \
-                    list(struct.unpack_from("<%df" % min(cnt, 64), data, val)) if 0 < cnt and val + 4 * min(cnt, 64) <= len(data) else []
+                    list(struct.unpack_from("<%df" % min(cnt, 64), data, val)) if cnt > 0 and val + 4 * min(cnt, 64) <= len(data) else []
             elif typ == 1:
                 node["str"] = _cstr(data, val)
             elif typ == 2:

@@ -27,7 +27,13 @@ impl Store {
             .filter_map(|p| rpkg::name_ids(p).map(|(c, pa)| (c, pa, p.clone())))
             .collect();
         ordered.sort();
-        let mut store = Store { packages: Vec::new(), files: Vec::new(), entries: Vec::new(), chunk_of: Vec::new(), index: HashMap::new() };
+        let mut store = Store {
+            packages: Vec::new(),
+            files: Vec::new(),
+            entries: Vec::new(),
+            chunk_of: Vec::new(),
+            index: HashMap::new(),
+        };
         for (chunk, _patch, path) in ordered {
             let pkg = rpkg::open(&path)?;
             let file = File::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -80,14 +86,21 @@ impl Store {
     pub fn types(&self) -> HashMap<String, usize> {
         let mut out: HashMap<String, usize> = HashMap::new();
         for &(p, e) in self.index.values() {
-            *out.entry(self.entries[p as usize][e as usize].type_name()).or_default() += 1;
+            *out.entry(self.entries[p as usize][e as usize].type_name())
+                .or_default() += 1;
         }
         out
     }
 
     pub fn read(&self, hash: u64) -> Result<Vec<u8>, String> {
-        let &(p, e) = self.index.get(&hash).ok_or_else(|| format!("resource {hash:016X} is not in the packages"))?;
-        rpkg::read_resource(&self.files[p as usize], &self.entries[p as usize][e as usize])
+        let &(p, e) = self
+            .index
+            .get(&hash)
+            .ok_or_else(|| format!("resource {hash:016X} is not in the packages"))?;
+        rpkg::read_resource(
+            &self.files[p as usize],
+            &self.entries[p as usize][e as usize],
+        )
     }
 
     pub fn package_of(&self, hash: u64) -> Option<&Path> {

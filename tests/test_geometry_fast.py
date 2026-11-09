@@ -60,7 +60,7 @@ def test_rust_smd_writer_is_byte_identical(tmp_path):
     names = {"a": "mat_a", "b": "mat_b"}
     n = smd.write_reference(tmp_path / "ref.smd", subs, names, 39.37)
     assert n == 730
-    assert (tmp_path / "ref.smd").read_text() == reference_write(subs, names, 39.37)
+    assert (tmp_path / "ref.smd").read_text(encoding="utf-8") == reference_write(subs, names, 39.37)
 
 
 def clone(subs):

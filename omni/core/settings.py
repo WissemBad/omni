@@ -85,9 +85,8 @@ def _merge(base: dict, over: dict) -> dict:
             elif isinstance(d, int):
                 if isinstance(v, (int, float)) and not isinstance(v, bool):
                     out[section][k] = int(v)
-            elif isinstance(d, str):
-                if isinstance(v, str):
-                    out[section][k] = v
+            elif isinstance(d, str) and isinstance(v, str):
+                out[section][k] = v
     return out
 
 

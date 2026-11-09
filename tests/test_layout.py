@@ -87,17 +87,17 @@ def test_legacy_layout_moves_into_the_new_one(tmp_path):
     rep = migrate.apply(old, home, cfg=cfg)
     assert not rep.errors and not rep.skipped
     ws, ex = home / "workspace", home / "exports" / "007fl"
-    assert (ws / "config" / "settings.json").read_text() == "{}" and (ws / "state" / "jobs.sqlite").exists()
-    assert (ws / "games" / "007fl" / "catalog.sqlite").read_text() == "cat"
-    assert (ws / "games" / "007fl" / "textures.sqlite").read_text() == "tex"
+    assert (ws / "config" / "settings.json").read_text(encoding="utf-8") == "{}" and (ws / "state" / "jobs.sqlite").exists()
+    assert (ws / "games" / "007fl" / "catalog.sqlite").read_text(encoding="utf-8") == "cat"
+    assert (ws / "games" / "007fl" / "textures.sqlite").read_text(encoding="utf-8") == "tex"
     assert (ws / "cache" / "memo.sqlite").exists() and (ws / "names" / "names.sqlite").exists()
-    assert (ws / "tools" / "studiomdl-ce" / "cestudiomdl.exe").read_text() == "exe"      # not overwritten by the old copy
-    assert (ex / "garrysmod-addon" / "models" / "a.mdl").read_text() == "mdl"
+    assert (ws / "tools" / "studiomdl-ce" / "cestudiomdl.exe").read_text(encoding="utf-8") == "exe"      # not overwritten by the old copy
+    assert (ex / "garrysmod-addon" / "models" / "a.mdl").read_text(encoding="utf-8") == "mdl"
     assert (ex / "sounds" / "ogg" / "index.csv").exists() and (ex / "gltf" / "a.glb").exists()
     assert (ex / "textures" / "t.png").exists() and (ex / "omni_007fl.gma").exists() and (ex / "blend" / "a.blend").exists()
     assert (old / "tools" / "VTFEdit" / "vtfedit.exe").exists() and not (home / "workspace" / "tools" / "VTFEdit").exists()   # not omni's
     assert not (old / "workspace" / "addons").exists() and not (old / "workspace" / "audio" / "007fl").exists()
-    assert json.loads((ws / "state" / "migrated.json").read_text())["from"] == str(old)
+    assert json.loads((ws / "state" / "migrated.json").read_text(encoding="utf-8"))["from"] == str(old)
 
 
 def test_migration_never_overwrites_and_can_be_repeated(tmp_path):
@@ -109,7 +109,7 @@ def test_migration_never_overwrites_and_can_be_repeated(tmp_path):
     cfg.gmod = tmp_path / "gmod"
     rep = migrate.apply(old, home, cfg=cfg)
     assert [m.src.name for m in rep.skipped] == ["settings.json"]
-    assert json.loads((home / "workspace" / "config" / "settings.json").read_text()) == {"keep": True}
+    assert json.loads((home / "workspace" / "config" / "settings.json").read_text(encoding="utf-8")) == {"keep": True}
     assert (old / "workspace" / "settings.json").exists()                  # left where it was
     again = migrate.apply(old, home, cfg=cfg)
     assert [m.src.name for m in again.skipped] == ["settings.json"] and not again.errors

@@ -137,7 +137,7 @@ class Names:
         db.execute("DROP TABLE IF EXISTS names")
         db.execute("CREATE TABLE names(h INTEGER PRIMARY KEY, t TEXT, n TEXT)")
         batch = []
-        with open(self.hash_list, "r", encoding="utf-8", errors="replace") as f:
+        with open(self.hash_list, encoding="utf-8", errors="replace") as f:
             for line in f:
                 if len(line) < 20 or line[0] == "#":
                     continue

@@ -14,12 +14,18 @@ pub const MAX_DEPTH: usize = 64;
 /// Byte length of `count` elements of `elem_size` bytes, refused when it overflows, exceeds `available` (the bytes
 /// that must hold them, or the most the input can produce) or exceeds `MAX_ALLOC`.
 pub fn checked_len(count: usize, elem_size: usize, available: usize) -> Result<usize, String> {
-    let n = count.checked_mul(elem_size).ok_or_else(|| format!("size overflow: {count} x {elem_size} bytes"))?;
+    let n = count
+        .checked_mul(elem_size)
+        .ok_or_else(|| format!("size overflow: {count} x {elem_size} bytes"))?;
     if n > available {
-        return Err(format!("{count} x {elem_size} bytes larger than the {available} bytes available"));
+        return Err(format!(
+            "{count} x {elem_size} bytes larger than the {available} bytes available"
+        ));
     }
     if n > MAX_ALLOC {
-        return Err(format!("{n} bytes is more than one buffer may take ({MAX_ALLOC})"));
+        return Err(format!(
+            "{n} bytes is more than one buffer may take ({MAX_ALLOC})"
+        ));
     }
     Ok(n)
 }
@@ -37,13 +43,25 @@ mod capped {
 
     unsafe impl GlobalAlloc for Capped {
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-            if layout.size() > CAP { std::ptr::null_mut() } else { System.alloc(layout) }
+            if layout.size() > CAP {
+                std::ptr::null_mut()
+            } else {
+                System.alloc(layout)
+            }
         }
         unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-            if layout.size() > CAP { std::ptr::null_mut() } else { System.alloc_zeroed(layout) }
+            if layout.size() > CAP {
+                std::ptr::null_mut()
+            } else {
+                System.alloc_zeroed(layout)
+            }
         }
         unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-            if new_size > CAP { std::ptr::null_mut() } else { System.realloc(ptr, layout, new_size) }
+            if new_size > CAP {
+                std::ptr::null_mut()
+            } else {
+                System.realloc(ptr, layout, new_size)
+            }
         }
         unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
             System.dealloc(ptr, layout)

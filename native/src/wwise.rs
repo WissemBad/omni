@@ -16,12 +16,17 @@ pub struct Bank {
 }
 
 fn u32le(d: &[u8], o: usize) -> Option<u32> {
-    d.get(o..o + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    d.get(o..o + 4)
+        .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
 }
 
 pub fn parse_bank(d: &[u8]) -> Option<Bank> {
     let mut o = d.windows(4).position(|w| w == b"BKHD")?;
-    let mut bank = Bank { bank_id: 0, objects: Vec::new(), media: Vec::new() };
+    let mut bank = Bank {
+        bank_id: 0,
+        objects: Vec::new(),
+        media: Vec::new(),
+    };
     while o + 8 <= d.len() {
         let id = &d[o..o + 4];
         let sz = u32le(d, o + 4)? as usize;
@@ -71,7 +76,11 @@ pub fn link(banks: &[Bank], known: &HashSet<u32>) -> Links {
             }
         }
     }
-    let playable: HashSet<u32> = objs.iter().filter(|(_, (t, _))| PLAYABLE.contains(t)).map(|(k, _)| *k).collect();
+    let playable: HashSet<u32> = objs
+        .iter()
+        .filter(|(_, (t, _))| PLAYABLE.contains(t))
+        .map(|(k, _)| *k)
+        .collect();
 
     // children of containers, and the switch/state value that selects each child
     let mut children: HashMap<u32, Vec<(u32, Vec<u32>)>> = HashMap::new();
@@ -83,7 +92,10 @@ pub fn link(banks: &[Bank], known: &HashSet<u32>) -> Links {
         let mut off = 4;
         while off + 8 <= b.len() {
             let n = u32le(b, off).unwrap() as usize;
-            if (1..=4000).contains(&n) && off + 4 + 4 * n <= b.len() && best.map(|(_, bn)| n > bn).unwrap_or(true) {
+            if (1..=4000).contains(&n)
+                && off + 4 + 4 * n <= b.len()
+                && best.map(|(_, bn)| n > bn).unwrap_or(true)
+            {
                 if (0..n).all(|k| {
                     let x = u32le(b, off + 4 + 4 * k).unwrap();
                     x != id && playable.contains(&x)
@@ -153,8 +165,12 @@ pub fn link(banks: &[Bank], known: &HashSet<u32>) -> Links {
         events += 1;
         let n = b[4] as usize;
         for k in 0..n {
-            let Some(aid) = u32le(b, 5 + 4 * k) else { break };
-            let Some(&(at, ab)) = objs.get(&aid) else { continue };
+            let Some(aid) = u32le(b, 5 + 4 * k) else {
+                break;
+            };
+            let Some(&(at, ab)) = objs.get(&aid) else {
+                continue;
+            };
             // only Play / PlayAndContinue actions say what an event plays (Stop, Seek, SetState... target the same nodes)
             let atype = u16::from_le_bytes([*ab.get(4).unwrap_or(&0), *ab.get(5).unwrap_or(&0)]);
             if at != 3 || !matches!(atype & 0xFF00, 0x0400 | 0x0500) {
@@ -170,7 +186,11 @@ pub fn link(banks: &[Bank], known: &HashSet<u32>) -> Links {
             walk(*eid, *node, keys.clone(), &children, &sources, &mut media);
         }
     }
-    Links { media, sourced, events }
+    Links {
+        media,
+        sourced,
+        events,
+    }
 }
 
 fn walk(
@@ -213,14 +233,30 @@ fn walk(
 /// 12-byte nodes `key u32, (audio node id u32 | first child u16 + child count u16), weight u16, probability u16`,
 /// node 0 being the root. Each leaf comes with the known switch/state values of the keys on its path (key 0 is
 /// the "any" branch). The tree is located by trying every offset and keeping the first fully consistent one.
-fn decision_tree(b: &[u8], _own: u32, start: usize, playable: &HashSet<u32>, known: &HashSet<u32>, out: &mut Vec<(u32, Vec<u32>)>) {
+fn decision_tree(
+    b: &[u8],
+    _own: u32,
+    start: usize,
+    playable: &HashSet<u32>,
+    known: &HashSet<u32>,
+    out: &mut Vec<(u32, Vec<u32>)>,
+) {
     let mut best: Option<Vec<(u32, Vec<u32>)>> = None;
     let mut o = start.max(4);
     while o + 5 + 12 <= b.len() {
         let tsize = u32le(b, o).unwrap() as usize;
-        if tsize >= 12 && tsize % 12 == 0 && tsize <= b.len() && o + 5 + tsize <= b.len() && b[o + 4] <= 1 {
+        if tsize >= 12
+            && tsize % 12 == 0
+            && tsize <= b.len()
+            && o + 5 + tsize <= b.len()
+            && b[o + 4] <= 1
+        {
             if let Some(leaves) = tree_leaves(&b[o + 5..o + 5 + tsize], playable, known) {
-                if best.as_ref().map(|x| leaves.len() > x.len()).unwrap_or(true) {
+                if best
+                    .as_ref()
+                    .map(|x| leaves.len() > x.len())
+                    .unwrap_or(true)
+                {
                     best = Some(leaves);
                 }
             }
@@ -239,7 +275,11 @@ fn decision_tree(b: &[u8], _own: u32, start: usize, playable: &HashSet<u32>, kno
     }
 }
 
-fn tree_leaves(t: &[u8], playable: &HashSet<u32>, known: &HashSet<u32>) -> Option<Vec<(u32, Vec<u32>)>> {
+fn tree_leaves(
+    t: &[u8],
+    playable: &HashSet<u32>,
+    known: &HashSet<u32>,
+) -> Option<Vec<(u32, Vec<u32>)>> {
     let n = t.len() / 12;
     let node = |i: usize| (u32le(t, 12 * i).unwrap(), u32le(t, 12 * i + 4).unwrap());
     let mut leaves = Vec::new();
@@ -279,7 +319,13 @@ fn tree_leaves(t: &[u8], playable: &HashSet<u32>, known: &HashSet<u32>) -> Optio
 
 /// The known switch/state id that selects `child` in a switch container: it stores `switch id, count,
 /// children...` groups after its child list.
-fn switch_key(b: &[u8], child: u32, list_start: usize, list_n: usize, known: &HashSet<u32>) -> Option<u32> {
+fn switch_key(
+    b: &[u8],
+    child: u32,
+    list_start: usize,
+    list_n: usize,
+    known: &HashSet<u32>,
+) -> Option<u32> {
     let needle = child.to_le_bytes();
     let list_end = list_start + 4 + 4 * list_n;
     let mut o = list_end;

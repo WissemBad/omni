@@ -24,7 +24,10 @@ pub fn prim_header(path: &Path) -> Option<(u64, u32)> {
 }
 
 pub fn prim_headers(paths: &[String]) -> Vec<Option<(u64, u32)>> {
-    paths.par_iter().map(|p| prim_header(Path::new(p))).collect()
+    paths
+        .par_iter()
+        .map(|p| prim_header(Path::new(p)))
+        .collect()
 }
 
 /// `(hash, flag)` of every reference of a `.meta` file; the flag's low bits are the language slot of a dialogue
@@ -37,14 +40,24 @@ pub fn meta_refs_flags(data: &[u8]) -> Option<Vec<(u64, u8)>> {
         let flags = data.get(44..44 + cnt)?;
         let base = 44 + cnt;
         for (i, &f) in flags.iter().enumerate() {
-            out.push((u64::from_le_bytes(data.get(base + i * 8..base + i * 8 + 8)?.try_into().ok()?), f));
+            out.push((
+                u64::from_le_bytes(data.get(base + i * 8..base + i * 8 + 8)?.try_into().ok()?),
+                f,
+            ));
         }
     }
     Some(out)
 }
 
 pub fn meta_refs_flags_many(paths: &[String]) -> Vec<Option<Vec<(u64, u8)>>> {
-    paths.par_iter().map(|p| std::fs::read(format!("{p}.meta")).ok().and_then(|d| meta_refs_flags(&d))).collect()
+    paths
+        .par_iter()
+        .map(|p| {
+            std::fs::read(format!("{p}.meta"))
+                .ok()
+                .and_then(|d| meta_refs_flags(&d))
+        })
+        .collect()
 }
 
 /// Whole files, read in parallel (`None` for a file that cannot be read).
@@ -56,12 +69,16 @@ pub fn read_files(paths: &[String]) -> Vec<Option<Vec<u8>>> {
 /// `labl` entry of its `LIST` chunk, read from the chunk headers only. Only file-name-like labels are kept; the
 /// markers of music ("Marker 2", "EXIT C") are not names.
 pub fn wem_label(path: &Path, offset: u64, size: i64) -> String {
-    raw_label(path, offset, size).filter(|l| filelike(l)).unwrap_or_default()
+    raw_label(path, offset, size)
+        .filter(|l| filelike(l))
+        .unwrap_or_default()
 }
 
 /// Same as [`wem_label`] for a .wem already in memory.
 pub fn wem_label_of(data: &[u8]) -> String {
-    label_in(&mut std::io::Cursor::new(data), 0, -1).filter(|l| filelike(l)).unwrap_or_default()
+    label_in(&mut std::io::Cursor::new(data), 0, -1)
+        .filter(|l| filelike(l))
+        .unwrap_or_default()
 }
 
 fn filelike(l: &str) -> bool {
@@ -69,7 +86,8 @@ fn filelike(l: &str) -> bool {
     let low = l.to_ascii_lowercase();
     b.len() >= 6
         && b[0].is_ascii_alphanumeric()
-        && b.iter().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-' | b'.'))
+        && b.iter()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-' | b'.'))
         && !low.starts_with("marker")
         && !low.starts_with("cue")
 }
@@ -85,7 +103,11 @@ pub(crate) fn label_in<R: Read + Seek>(f: &mut R, offset: u64, size: i64) -> Opt
     if &head[..4] != b"RIFF" {
         return None;
     }
-    let end = offset.saturating_add(if size >= 0 { size as u64 } else { 8 + u32::from_le_bytes(head[4..8].try_into().ok()?) as u64 });
+    let end = offset.saturating_add(if size >= 0 {
+        size as u64
+    } else {
+        8 + u32::from_le_bytes(head[4..8].try_into().ok()?) as u64
+    });
     let mut o = offset + 12;
     while o.saturating_add(8) <= end {
         f.seek(SeekFrom::Start(o)).ok()?;
@@ -100,7 +122,13 @@ pub(crate) fn label_in<R: Read + Seek>(f: &mut R, offset: u64, size: i64) -> Opt
                 let n = u32::from_le_bytes(body.get(i + 4..i + 8)?.try_into().ok()?) as usize;
                 let text = body.get(i + 12..(i + 8 + n).min(body.len()))?;
                 let text = text.split(|&c| c == 0).next().unwrap_or(&[]);
-                return Some(text.iter().map(|&c| c as char).collect::<String>().trim().to_string());
+                return Some(
+                    text.iter()
+                        .map(|&c| c as char)
+                        .collect::<String>()
+                        .trim()
+                        .to_string(),
+                );
             }
         }
         o = o.saturating_add(8 + sz + (sz & 1));
@@ -109,7 +137,10 @@ pub(crate) fn label_in<R: Read + Seek>(f: &mut R, offset: u64, size: i64) -> Opt
 }
 
 pub fn wem_labels(items: &[(String, u64, i64)]) -> Vec<String> {
-    items.par_iter().map(|(p, o, s)| wem_label(Path::new(p), *o, *s)).collect()
+    items
+        .par_iter()
+        .map(|(p, o, s)| wem_label(Path::new(p), *o, *s))
+        .collect()
 }
 
 #[cfg(test)]
@@ -127,7 +158,11 @@ mod tests {
         std::fs::write(&good, &data).unwrap();
         let truncated = dir.join("b.prim");
         std::fs::write(&truncated, 9999u64.to_le_bytes()).unwrap();
-        let r = prim_headers(&[good.display().to_string(), truncated.display().to_string(), dir.join("missing").display().to_string()]);
+        let r = prim_headers(&[
+            good.display().to_string(),
+            truncated.display().to_string(),
+            dir.join("missing").display().to_string(),
+        ]);
         assert_eq!(r[0], Some((data.len() as u64, 0b1100)));
         assert_eq!(r[1], Some((8, 0)));
         assert_eq!(r[2], None);
@@ -169,8 +204,17 @@ mod tests {
         let junk = dir.join("d.wem");
         std::fs::write(&junk, b"not a riff").unwrap();
         let s = |p: &Path| p.display().to_string();
-        let r = wem_labels(&[(s(&named), 0, -1), (s(&marker), 0, -1), (s(&embedded), 5, (prefixed.len() - 5) as i64), (s(&junk), 0, -1), (s(&dir.join("none")), 0, -1)]);
-        assert_eq!(r, vec!["vox_cc_line_civ01_001", "", "sfx_door_open", "", ""]);
+        let r = wem_labels(&[
+            (s(&named), 0, -1),
+            (s(&marker), 0, -1),
+            (s(&embedded), 5, (prefixed.len() - 5) as i64),
+            (s(&junk), 0, -1),
+            (s(&dir.join("none")), 0, -1),
+        ]);
+        assert_eq!(
+            r,
+            vec!["vox_cc_line_civ01_001", "", "sfx_door_open", "", ""]
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

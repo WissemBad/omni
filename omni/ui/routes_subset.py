@@ -36,8 +36,8 @@ def register(app: FastAPI, *, jobs, source_ids, source_of, catalog_of) -> None:
     def subset_pick():
         try:
             return {"path": pick_folder("Dossier de l’addon à créer")}
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(501, f"Sélecteur de dossier indisponible : {e}")
+        except Exception as e:
+            raise HTTPException(501, f"Sélecteur de dossier indisponible : {e}") from e
 
     def start(sid: str, body: dict) -> dict:
         req = SubsetRequest(**body)

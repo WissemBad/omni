@@ -48,7 +48,12 @@ fn fuzz(name: &str, seed: &[u8], f: impl Fn(&[u8])) {
     }
     for (k, input) in inputs.iter().enumerate() {
         let res = catch_unwind(AssertUnwindSafe(|| f(input)));
-        assert!(res.is_ok(), "{name} panicked on input #{k} ({} bytes): {:02x?}", input.len(), &input[..input.len().min(48)]);
+        assert!(
+            res.is_ok(),
+            "{name} panicked on input #{k} ({} bytes): {:02x?}",
+            input.len(),
+            &input[..input.len().min(48)]
+        );
     }
 }
 
@@ -107,9 +112,13 @@ fn vtf_audio_bank_collision_entity_survive_garbage() {
             let _ = audio::wem_pcm(b, &i);
         }
     });
-    fuzz("wwise::parse_bank", b"BKHD\x08\0\0\0\x96\0\0\0\x01\0\0\0HIRC\x04\0\0\0\0\0\0\0", |b| {
-        let _ = wwise::parse_bank(b);
-    });
+    fuzz(
+        "wwise::parse_bank",
+        b"BKHD\x08\0\0\0\x96\0\0\0\x01\0\0\0HIRC\x04\0\0\0\0\0\0\0",
+        |b| {
+            let _ = wwise::parse_bank(b);
+        },
+    );
     fuzz("aloc::parse", b"\x08\0\0\0NXSBODY\0\0\0\0\0", |b| {
         let _ = aloc::parse(b);
     });
@@ -207,9 +216,13 @@ fn unreal_parsers_survive_garbage() {
         }
     });
     std::fs::remove_dir_all(&dir).ok();
-    fuzz("iostore::container_header", b"nCoI\x02\0\0\0\0\0\0\0\0\0\0\0\x01\0\0\0\x01\0\0\0\0\0\0\0\0\0\0\0\x18\0\0\0", |b| {
-        let _ = iostore::parse_container_header(b);
-    });
+    fuzz(
+        "iostore::container_header",
+        b"nCoI\x02\0\0\0\0\0\0\0\0\0\0\0\x01\0\0\0\x01\0\0\0\0\0\0\0\0\0\0\0\x18\0\0\0",
+        |b| {
+            let _ = iostore::parse_container_header(b);
+        },
+    );
     fuzz("iostore::directory_index", b"\x05\0\0\0../\0\x01\0\0\0\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\0\0\0\0\x01\0\0\0\0\0\0\0\xff\xff\xff\xff\0\0\0\0\x01\0\0\0\x02\0\0\0a\0", |b| {
         let _ = iostore::parse_directory_index(b);
     });
@@ -224,9 +237,13 @@ fn unreal_parsers_survive_garbage() {
             let _ = zen::Package::parse(b.to_vec(), hv, 1012);
         }
     });
-    fuzz("zen::ScriptObjects::parse", b"\x01\0\0\0\x04\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x04abcd\x01\0\0\0", |b| {
-        let _ = zen::ScriptObjects::parse(b);
-    });
+    fuzz(
+        "zen::ScriptObjects::parse",
+        b"\x01\0\0\0\x04\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x04abcd\x01\0\0\0",
+        |b| {
+            let _ = zen::ScriptObjects::parse(b);
+        },
+    );
     let mut pe = vec![0u8; 0x400];
     pe[0..2].copy_from_slice(b"MZ");
     pe[0x3C..0x40].copy_from_slice(&0x80u32.to_le_bytes());
@@ -271,7 +288,12 @@ fn unreal_parsers_survive_garbage() {
     usmap.extend((body.len() as u32).to_le_bytes());
     usmap.extend((body.len() as u32).to_le_bytes());
     usmap.extend(&body);
-    assert_eq!(reflect::from_usmap(&usmap).unwrap().structs["S"].props.len(), 3);
+    assert_eq!(
+        reflect::from_usmap(&usmap).unwrap().structs["S"]
+            .props
+            .len(),
+        3
+    );
     fuzz("reflect::from_usmap", &usmap, |b| {
         let _ = reflect::from_usmap(b);
     });
@@ -281,7 +303,11 @@ fn unreal_parsers_survive_garbage() {
     let mut seed = vec![0x02u8, 0x7F, 0xFF];
     seed.extend(vec![1u8; 200]);
     fuzz("props + assets", &seed, |b| {
-        let ctx = props::Ctx { schema: &schema, names: &names, ue5: 1008 };
+        let ctx = props::Ctx {
+            schema: &schema,
+            names: &names,
+            ue5: 1008,
+        };
         let _ = props::read_object(&ctx, "StaticMesh", b, false);
         let mut r = crate::unreal::reader::Reader::new(b);
         let _ = ctx.properties("StaticMesh", &mut r);
@@ -294,7 +320,8 @@ fn unreal_parsers_survive_garbage() {
             let _ = crate::unreal::assets::convert_mip(pf, 4, 4, b);
         }
     });
-    let mut abeu = b"ABEU\x01\x02\0\0\x80\xbb\0\0\x00\x10\0\0\0\x10\0\0\x01\0\0\0\0\0\0\0\0\0".to_vec();
+    let mut abeu =
+        b"ABEU\x01\x02\0\0\x80\xbb\0\0\x00\x10\0\0\0\x10\0\0\x01\0\0\0\0\0\0\0\0\0".to_vec();
     abeu.extend([0x99, 0x99, 0x20, 0]);
     abeu.extend(vec![0x5Au8; 32]);
     fuzz("binka::decode", &abeu, |b| {
@@ -302,14 +329,19 @@ fn unreal_parsers_survive_garbage() {
         let _ = audio::wem_info(b);
     });
 
-    let mut mate = b"\x01\x02mapTexture2D_01\0mapDiffuse\0\0\0mapTexture2D_02\0mapEmissive\0".to_vec();
+    let mut mate =
+        b"\x01\x02mapTexture2D_01\0mapDiffuse\0\0\0mapTexture2D_02\0mapEmissive\0".to_vec();
     mate.extend(vec![0x41u8; 64]);
     fuzz("mate::slots", &mate, |b| {
         let _ = crate::mate::slots(b);
     });
-    fuzz("modellist::parse", b"models/a/b.mdl\r\n# note\r\nC:\\x\\models\\c.dx90.vtx\r\n", |b| {
-        let _ = crate::modellist::parse(&String::from_utf8_lossy(b));
-    });
+    fuzz(
+        "modellist::parse",
+        b"models/a/b.mdl\r\n# note\r\nC:\\x\\models\\c.dx90.vtx\r\n",
+        |b| {
+            let _ = crate::modellist::parse(&String::from_utf8_lossy(b));
+        },
+    );
     let sch = schema::tests::bin1(&[0u8; 80], &["float32", "bool"]);
     fuzz("schema", &sch, |b| {
         let _ = schema::class_schema(b);
@@ -377,7 +409,10 @@ fn skin_weights_are_bounded_by_their_buffers() {
 
 #[test]
 fn vertex_buffers_are_bounded_by_their_data() {
-    use crate::unreal::{mesh::{vertex_buffers, Lod}, reader::Reader};
+    use crate::unreal::{
+        mesh::{vertex_buffers, Lod},
+        reader::Reader,
+    };
     let head = |ntex: u32, nv: u32, high: u32| {
         let mut b = le(&[12, 0, 12, 0]); // positions: stride, no count, empty bulk array
         b.extend([0u8, 0]);
@@ -407,12 +442,15 @@ fn vertex_buffers_are_bounded_by_their_data() {
 #[test]
 fn bc6h_mip_is_bounded_by_its_blocks() {
     assert!(crate::unreal::assets::convert_mip("PF_BC6H", 65536, 65536, &[0u8; 64]).is_err());
-    assert!(crate::unreal::assets::convert_mip("PF_FloatRGBA", u32::MAX, u32::MAX, &[0u8; 64]).is_err());
+    assert!(
+        crate::unreal::assets::convert_mip("PF_FloatRGBA", u32::MAX, u32::MAX, &[0u8; 64]).is_err()
+    );
 }
 
 #[test]
 fn binka_sample_count_is_bounded_by_the_stream() {
-    let mut abeu = b"ABEU\x01\x08\0\0\x80\xbb\0\0\xff\xff\xff\xff\0\x10\0\0\0\x10\0\0\0\0\0\0".to_vec();
+    let mut abeu =
+        b"ABEU\x01\x08\0\0\x80\xbb\0\0\xff\xff\xff\xff\0\x10\0\0\0\x10\0\0\0\0\0\0".to_vec();
     abeu.extend([0x99, 0x99, 0x20, 0]);
     abeu.extend(vec![0x5Au8; 32]);
     if let Ok(d) = crate::binka::decode(&abeu) {
@@ -428,13 +466,26 @@ fn rpkg_lz4_output_is_bounded() {
     let f = dir.join("data.bin");
     std::fs::write(&f, vec![0u8; 9 << 20]).unwrap();
     let file = std::fs::File::open(&f).unwrap();
-    let mut e = Entry { hash: 1, offset: 0, compressed: 16, scrambled: false, ty: *b"MIRP", data_size: 16 * 255 + 65,
-        sys_mem: 0, vid_mem: 0, refs: Vec::new() };
-    assert!(read_resource(&file, &e).unwrap_err().contains("implausible"));
+    let mut e = Entry {
+        hash: 1,
+        offset: 0,
+        compressed: 16,
+        scrambled: false,
+        ty: *b"MIRP",
+        data_size: 16 * 255 + 65,
+        sys_mem: 0,
+        vid_mem: 0,
+        refs: Vec::new(),
+    };
+    assert!(read_resource(&file, &e)
+        .unwrap_err()
+        .contains("implausible"));
     // within LZ4's 255:1 of 9 MiB, but more than one buffer may take
     e.compressed = 9 << 20;
     e.data_size = (1 << 31) + 1;
-    assert!(read_resource(&file, &e).unwrap_err().contains("implausible"));
+    assert!(read_resource(&file, &e)
+        .unwrap_err()
+        .contains("implausible"));
     drop(file);
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -485,7 +536,9 @@ fn usmap_size_is_bounded_by_its_data() {
     let mut usmap = vec![0xC4, 0x30, 0, 1];
     usmap.extend(le(&[8, 1 << 30]));
     usmap.extend([0u8; 8]);
-    let Err(e) = crate::unreal::reflect::from_usmap(&usmap) else { panic!("accepted") };
+    let Err(e) = crate::unreal::reflect::from_usmap(&usmap) else {
+        panic!("accepted")
+    };
     assert!(e.0.contains("usmap size"), "{e}");
 }
 
@@ -518,9 +571,14 @@ fn pe_sections_outside_the_file_are_ignored() {
 fn nesting_is_bounded() {
     use crate::unreal::{props, reader::Reader, reflect};
     // a struct that contains itself, and data that keeps saying "one property follows"
-    let schema = reflect::Schema::from_text("omni-mappings 1\nS Loop -\nP 1 Next Struct<Loop>\n").unwrap();
+    let schema =
+        reflect::Schema::from_text("omni-mappings 1\nS Loop -\nP 1 Next Struct<Loop>\n").unwrap();
     let names = vec!["None".to_string()];
-    let ctx = props::Ctx { schema: &schema, names: &names, ue5: 1008 };
+    let ctx = props::Ctx {
+        schema: &schema,
+        names: &names,
+        ue5: 1008,
+    };
     let data: Vec<u8> = [0x00u8, 0x03].repeat(100_000);
     let e = ctx.properties("Loop", &mut Reader::new(&data)).unwrap_err();
     assert!(e.0.contains("nested deeper"), "{e}");

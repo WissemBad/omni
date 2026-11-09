@@ -14,11 +14,11 @@ import threading
 import time
 from dataclasses import dataclass
 from functools import lru_cache
+from glob import escape as glob_escape
 from pathlib import Path
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
-from glob import escape as glob_escape
 from fastapi.responses import FileResponse, Response
 
 from ..core.config import CONFIG
@@ -393,7 +393,7 @@ def _describe(sid: str, root: str, external: bool, rel: str, mtime: float, sourc
             except Exception:  # noqa: BLE001 - a LOD that cannot be read is simply not listed
                 break
             used = np.unique(np.concatenate([me["idx"] for me in g.meshes])) if g.meshes else np.zeros(0, int)
-            lods.append({"lod": lod, "triangles": sum(len(me["idx"]) // 3 for me in g.meshes), "vertices": int(len(used)),
+            lods.append({"lod": lod, "triangles": sum(len(me["idx"]) // 3 for me in g.meshes), "vertices": len(used),
                          "switch": round(switch[lod], 2) if lod < len(switch) else 0})
             if lod == 0:
                 for me in g.meshes:
@@ -583,8 +583,8 @@ def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: 
         resolve_source(sid)
         try:
             return {"path": _pick_folder()}
-        except Exception as e:  # noqa: BLE001 - no GUI available: the user types the path instead
-            raise HTTPException(501, f"Sélecteur de dossier indisponible : {e}")
+        except Exception as e:
+            raise HTTPException(501, f"Sélecteur de dossier indisponible : {e}") from e
 
     # ---- models
     @app.get("/api/{sid}/output")
@@ -638,8 +638,8 @@ def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: 
             return Response(text, media_type="application/json")
         except HTTPException:
             raise
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(422, f"Modèle illisible ({type(e).__name__}: {e}). Version de Source non prise en charge ?")
+        except Exception as e:
+            raise HTTPException(422, f"Modèle illisible ({type(e).__name__}: {e}). Version de Source non prise en charge ?") from e
 
     @app.get("/api/{sid}/output/glb")
     def output_glb(sid: str, path: str, lod: int = 0, root: str = ""):
@@ -654,8 +654,8 @@ def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: 
                 build_glb(str(r.path), path, lod, out)
             except HTTPException:
                 raise
-            except Exception as e:  # noqa: BLE001
-                raise HTTPException(422, f"Rendu impossible : {type(e).__name__}: {e}")
+            except Exception as e:
+                raise HTTPException(422, f"Rendu impossible : {type(e).__name__}: {e}") from e
         return FileResponse(out, media_type="model/gltf-binary")
 
     def _anim_inputs(sid: str, root: str, path: str):
@@ -671,7 +671,7 @@ def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: 
         try:
             return animation.catalog(mdl, ani, addon)
         except (ValueError, OSError) as e:
-            raise HTTPException(422, f"Animations illisibles : {e}")
+            raise HTTPException(422, f"Animations illisibles : {e}") from e
 
     @app.get("/api/{sid}/output/animation")
     def output_animation(sid: str, path: str, source: str, seq: int, root: str = ""):
@@ -681,9 +681,9 @@ def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: 
         try:
             return animation.sample(mdl, ani, addon, source, seq)
         except KeyError as e:
-            raise HTTPException(404, str(e.args[0]))
+            raise HTTPException(404, str(e.args[0])) from e
         except (ValueError, OSError) as e:
-            raise HTTPException(422, f"Animation illisible : {e}")
+            raise HTTPException(422, f"Animation illisible : {e}") from e
 
     @app.get("/api/{sid}/output/collision")
     def output_collision(sid: str, path: str, root: str = ""):
@@ -718,7 +718,7 @@ def register(app: FastAPI, *, catalog_of, resolve_source, texcat_of=lambda sid: 
             try:
                 png = studio.png_bytes(studio.channel_view(studio.decode_vtf(f, size), channel))
             except (ValueError, KeyError, OSError) as e:
-                raise HTTPException(415, str(e))
+                raise HTTPException(415, str(e)) from e
             for old in out.parent.glob(f"{key}_*"):
                 old.unlink(missing_ok=True)
             out.parent.mkdir(parents=True, exist_ok=True)

@@ -32,3 +32,11 @@ def test_no_unused_native_exports():
     allowed = {"version", "omni_native"}
     unused = sorted(n for n in dir(N) if not n.startswith("_") and n not in _used() and n not in allowed)
     assert not unused, f"exported by the Rust core but never called from omni/ or scripts/: {unused}"
+
+
+def test_type_stub_is_up_to_date():
+    """``typings/omni_native.pyi`` lists the built module: ``python scripts/gen_native_stub.py`` rewrites it."""
+    import subprocess
+    import sys
+    rc = subprocess.call([sys.executable, str(ROOT / "scripts" / "gen_native_stub.py"), "--check"])
+    assert rc == 0, "typings/omni_native.pyi is out of date: run scripts/gen_native_stub.py"

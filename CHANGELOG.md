@@ -18,6 +18,15 @@ All notable changes to this project are documented here. The format follows [Kee
   checks as the setup page: an executable must be an existing `.exe` given by its full path.
 - Character previews and forced update checks are started with POST instead of GET.
 
+### Changed
+
+- Every pull request is checked by a stricter pipeline: formatting and lints of the Rust core (`cargo fmt`, `clippy`,
+  `cargo deny`), types (pyright, which may only improve), import contracts between the layers of omni, the version of
+  every file, dependency audits, and the package itself built on Windows and tried through its API.
+- The tests no longer depend on the machine they run on: a throwaway Omni folder, a synthetic HITMAN 3 game for the API
+  and the sources, golden outputs for the VTF, SMD and glTF writers, and the Rust core required.
+- `omni selfcheck` imports every source and the Rust core (used to test a package).
+
 ### Fixed
 
 - Resetting the data removes only what omni wrote in the exports folder (addon content, glTF, sounds, textures, Blender

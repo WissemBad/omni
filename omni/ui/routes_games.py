@@ -60,7 +60,7 @@ def register(app: FastAPI, *, source_ids, jobs=None, reset_runtime=None) -> None
         try:
             g = games.add(req.path)
         except ValueError as e:
-            raise HTTPException(400, str(e))
+            raise HTTPException(400, str(e)) from e
         return {**g, "job": start_prepare(g["id"])}
 
     @app.post("/api/games/pick")
@@ -68,14 +68,14 @@ def register(app: FastAPI, *, source_ids, jobs=None, reset_runtime=None) -> None
         """The native folder dialog, then add what the chosen folder holds."""
         try:
             path = pick_folder("Dossier du jeu")
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(501, f"Sélecteur de dossier indisponible : {e}")
+        except Exception as e:
+            raise HTTPException(501, f"Sélecteur de dossier indisponible : {e}") from e
         if not path:
             return {"cancelled": True}
         try:
             g = games.add(path)
         except ValueError as e:
-            raise HTTPException(400, str(e))
+            raise HTTPException(400, str(e)) from e
         return {**g, "job": start_prepare(g["id"])}
 
     @app.delete("/api/games/{game_id}")

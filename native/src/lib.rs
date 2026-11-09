@@ -10,44 +10,44 @@
 
 pub mod aloc;
 pub mod audio;
+pub mod binka;
 pub mod entity;
 pub mod eta;
-pub mod gltf;
+pub mod flac;
+#[cfg(test)]
+mod fuzz;
 pub mod geom;
+pub mod gltf;
 pub mod lbs;
 pub mod limits;
-pub mod modellist;
-pub mod skin;
-pub mod smd;
-pub mod texture;
-pub mod vtf;
-pub mod flac;
-pub mod binka;
-pub mod ww2ogg;
-pub mod wwise;
-pub mod par;
 pub mod mate;
+pub mod modellist;
+pub mod par;
+pub mod rpkg;
+pub mod rpkg_store;
 pub mod scan;
 pub mod schema;
 pub mod sign;
+pub mod skin;
+pub mod smd;
 pub mod source_anim;
-#[cfg(test)]
-mod fuzz;
-pub mod rpkg;
-pub mod rpkg_store;
+pub mod texture;
 pub mod unreal;
+pub mod vtf;
+pub mod ww2ogg;
+pub mod wwise;
 
 #[cfg(feature = "python")]
 mod py;
 #[cfg(feature = "python")]
-mod py_media;
+mod py_anim;
 #[cfg(feature = "python")]
 mod py_eta;
 #[cfg(feature = "python")]
-mod py_anim;
+mod py_glacier;
 #[cfg(feature = "python")]
 mod py_gltf;
 #[cfg(feature = "python")]
-mod py_unreal;
+mod py_media;
 #[cfg(feature = "python")]
-mod py_glacier;
+mod py_unreal;

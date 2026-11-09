@@ -30,7 +30,11 @@ struct Smooth {
 
 impl Smooth {
     fn new() -> Self {
-        Smooth { tau: 8.0, value: None, at: 0.0 }
+        Smooth {
+            tau: 8.0,
+            value: None,
+            at: 0.0,
+        }
     }
 
     fn apply(&mut self, est: Option<f64>, now: f64) -> Option<f64> {
@@ -59,8 +63,12 @@ fn fit(w: &[f64], y: &[f64]) -> (f64, [f64; 2]) {
         let sxx: f64 = x.iter().map(|v| v * v).sum();
         let sxy: f64 = x.iter().zip(y).map(|(a, b)| a * (b - FLOOR)).sum();
         let c = [FLOOR, if sxx > 0.0 { (sxy / sxx).max(0.0) } else { 0.0 }];
-        let err: f64 = x.iter().zip(y).map(|(a, b)| ((c[0] + c[1] * a - b) / b.max(0.2)).powi(2)).sum();
-        if best.map_or(true, |b| err < b.0) {
+        let err: f64 = x
+            .iter()
+            .zip(y)
+            .map(|(a, b)| ((c[0] + c[1] * a - b) / b.max(0.2)).powi(2))
+            .sum();
+        if best.is_none_or(|b| err < b.0) {
             best = Some((err, p, c));
         }
     }
@@ -95,7 +103,11 @@ impl Eta {
     pub fn new(total: usize, weights: HashMap<String, f64>, workers: usize, now: f64) -> Self {
         let mut v: Vec<f64> = weights.values().copied().collect();
         v.sort_by(|a, b| a.total_cmp(b));
-        let med = if v.is_empty() { 0.0 } else { (v[(v.len() - 1) / 2] + v[v.len() / 2]) / 2.0 };
+        let med = if v.is_empty() {
+            0.0
+        } else {
+            (v[(v.len() - 1) / 2] + v[v.len() / 2]) / 2.0
+        };
         Eta {
             total,
             workers: workers as f64,
@@ -139,10 +151,18 @@ impl Eta {
             let span = pts[pts.len() - 1].0 - pts[0].0;
             if span >= 5.0 {
                 let par = pts[1..].iter().filter_map(|p| p.1).sum::<f64>() / span;
-                return if self.workers > 0.0 { par.max(0.3).min(self.workers * 1.1) } else { par.max(0.3) };
+                return if self.workers > 0.0 {
+                    par.max(0.3).min(self.workers * 1.1)
+                } else {
+                    par.max(0.3)
+                };
             }
         }
-        if self.workers > 0.0 { self.workers } else { 1.0 }
+        if self.workers > 0.0 {
+            self.workers
+        } else {
+            1.0
+        }
     }
 
     /// Real / predicted seconds on the latest items (the nearest in size to what is left), within 0.5-2.
@@ -150,7 +170,11 @@ impl Eta {
         let k = self.y.len().min(30.max(self.y.len() / 10));
         let (w, y) = (&self.w[self.w.len() - k..], &self.y[self.y.len() - k..]);
         let pred: f64 = w.iter().map(|v| c[0] + c[1] * (v + 1.0).powf(p)).sum();
-        if pred > 0.0 { (y.iter().sum::<f64>() / pred).clamp(0.5, 2.0) } else { 1.0 }
+        if pred > 0.0 {
+            (y.iter().sum::<f64>() / pred).clamp(0.5, 2.0)
+        } else {
+            1.0
+        }
     }
 
     fn by_model(&mut self) -> Option<f64> {
@@ -163,8 +187,16 @@ impl Eta {
             self.model_n = self.n;
         }
         let (p, c) = self.model?;
-        let mut cpu: f64 = self.left.values().map(|w| c[0] + c[1] * (w + 1.0).powf(p)).sum();
-        let frac = if self.total > 0 { self.n as f64 / self.total as f64 } else { 0.0 };
+        let mut cpu: f64 = self
+            .left
+            .values()
+            .map(|w| c[0] + c[1] * (w + 1.0).powf(p))
+            .sum();
+        let frac = if self.total > 0 {
+            self.n as f64 / self.total as f64
+        } else {
+            0.0
+        };
         if frac > 0.8 {
             // near the end the latest items are the best reference
             cpu *= 1.0 + ((frac - 0.8) / 0.15).min(1.0) * (self.bias(p, c) - 1.0);
@@ -197,7 +229,11 @@ impl Eta {
         } else {
             self.total.saturating_sub(self.n) as f64
         };
-        if rate > 0.0 { Some(rest / rate) } else { None }
+        if rate > 0.0 {
+            Some(rest / rate)
+        } else {
+            None
+        }
     }
 
     /// Seconds left, or None. Recomputed at most once a second, whoever asks.
@@ -228,7 +264,11 @@ pub struct Rate {
 
 impl Default for Rate {
     fn default() -> Self {
-        Rate { pts: VecDeque::with_capacity(600), total: 0.0, smooth: Smooth::new() }
+        Rate {
+            pts: VecDeque::with_capacity(600),
+            total: 0.0,
+            smooth: Smooth::new(),
+        }
     }
 }
 
@@ -237,10 +277,10 @@ impl Rate {
         if let Some(t) = total {
             self.total = t;
         }
-        if self.pts.back().map_or(false, |p| done < p.1) {
+        if self.pts.back().is_some_and(|p| done < p.1) {
             self.pts.clear(); // the counter restarted
         }
-        if self.pts.back().map_or(true, |p| now - p.0 >= 0.2) || done >= self.total {
+        if self.pts.back().is_none_or(|p| now - p.0 >= 0.2) || done >= self.total {
             if self.pts.len() == 600 {
                 self.pts.pop_front();
             }
@@ -257,11 +297,19 @@ impl Rate {
             return Some(0.0);
         }
         let span = 15f64.max((t1 - self.pts[0].0) * 0.25);
-        let mut win: Vec<_> = self.pts.iter().filter(|p| t1 - p.0 <= span).copied().collect();
+        let mut win: Vec<_> = self
+            .pts
+            .iter()
+            .filter(|p| t1 - p.0 <= span)
+            .copied()
+            .collect();
         if win.len() < 2 {
             win = self.pts.iter().rev().take(2).rev().copied().collect();
         }
-        let (dt, dd) = (win[win.len() - 1].0 - win[0].0, win[win.len() - 1].1 - win[0].1);
+        let (dt, dd) = (
+            win[win.len() - 1].0 - win[0].0,
+            win[win.len() - 1].1 - win[0].1,
+        );
         if dt <= 0.0 || dd <= 0.0 {
             return None;
         }
@@ -275,7 +323,9 @@ mod tests {
 
     /// Deterministic pseudo-random numbers in [0, 1).
     fn rng(seed: &mut u64) -> f64 {
-        *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        *seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         (*seed >> 11) as f64 / (1u64 << 53) as f64
     }
 
@@ -285,12 +335,19 @@ mod tests {
         let mut items: Vec<(f64, f64)> = (0..n)
             .map(|_| {
                 let w = (rng(&mut seed) * 12.0).exp(); // 1 .. 160,000: a long tail like mesh sizes
-                (w, 0.9 + 0.0004 * w.powf(1.05) * (0.7 + 0.6 * rng(&mut seed)))
+                (
+                    w,
+                    0.9 + 0.0004 * w.powf(1.05) * (0.7 + 0.6 * rng(&mut seed)),
+                )
             })
             .collect();
         items.sort_by(|a, b| b.0.total_cmp(&a.0));
         let weights: HashMap<String, f64> = if with_weights {
-            items.iter().enumerate().map(|(i, it)| (i.to_string(), it.0)).collect()
+            items
+                .iter()
+                .enumerate()
+                .map(|(i, it)| (i.to_string(), it.0))
+                .collect()
         } else {
             HashMap::new()
         };
@@ -316,7 +373,10 @@ mod tests {
     #[test]
     fn weighted_estimate_follows_a_heavy_tail() {
         for (frac, est, real) in replay(8000, 8, true) {
-            assert!(est > real * 0.5 && est < real * 2.0, "at {frac}: estimated {est:.0}s, real {real:.0}s");
+            assert!(
+                est > real * 0.5 && est < real * 2.0,
+                "at {frac}: estimated {est:.0}s, real {real:.0}s"
+            );
         }
     }
 
@@ -333,7 +393,7 @@ mod tests {
         for i in 0..200 {
             e.done(None, None, None, 400.0 + i as f64 * 0.5);
         }
-        let est = e.estimate(502.0).unwrap();                  // 400 items left at 2 per second
+        let est = e.estimate(502.0).unwrap(); // 400 items left at 2 per second
         assert!(est < 300.0 && est > 150.0, "{est}");
     }
 
@@ -359,7 +419,10 @@ mod tests {
         let w: Vec<f64> = (0..200).map(|i| i as f64 * 50.0).collect();
         let y: Vec<f64> = w.iter().map(|w| FLOOR + 0.01 * (w + 1.0)).collect();
         let (p, c) = fit(&w, &y);
-        assert!((p - 1.0).abs() < 1e-9 && (c[0] - FLOOR).abs() < 1e-9 && (c[1] - 0.01).abs() < 1e-3, "{p} {c:?}");
+        assert!(
+            (p - 1.0).abs() < 1e-9 && (c[0] - FLOOR).abs() < 1e-9 && (c[1] - 0.01).abs() < 1e-3,
+            "{p} {c:?}"
+        );
     }
 
     #[test]

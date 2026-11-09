@@ -253,10 +253,7 @@ class UnrealSource(Source):
     @staticmethod
     def _rel(path: str) -> str:
         parts = [p for p in path.split("/") if p]
-        if parts and parts[0].lower() == "game":
-            parts = parts[1:]
-        else:
-            parts = ["engine"] + parts
+        parts = parts[1:] if parts and parts[0].lower() == "game" else ["engine"] + parts
         dirs = [slug(p, 32) for p in parts[:-1]][-3:]
         return "/".join(dirs + [slug(parts[-1], 48)]) if parts else "unnamed"
 

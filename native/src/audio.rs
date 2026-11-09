@@ -35,7 +35,8 @@ fn u16le(d: &[u8], o: usize) -> Option<u16> {
     d.get(o..o + 2).map(|b| u16::from_le_bytes([b[0], b[1]]))
 }
 fn u32le(d: &[u8], o: usize) -> Option<u32> {
-    d.get(o..o + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    d.get(o..o + 4)
+        .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
 }
 
 /// Pseudo codec id of Unreal's Bink Audio streams ("ABEU" container, decoded by binka.rs).
@@ -70,7 +71,7 @@ pub fn wem_info(b: &[u8]) -> Option<WemInfo> {
     while o + 8 <= b.len() {
         let id = &b[o..o + 4];
         let size = u32le(b, o + 4)? as usize;
-        let body_end = o.saturating_add(8).saturating_add(size).min(b.len());   // a 32-bit usize must not wrap
+        let body_end = o.saturating_add(8).saturating_add(size).min(b.len()); // a 32-bit usize must not wrap
         let body = &b[o + 8..body_end];
         match id {
             b"fmt " if body.len() >= 16 => {
@@ -90,9 +91,16 @@ pub fn wem_info(b: &[u8]) -> Option<WemInfo> {
             b"LIST" => {
                 if let Some(i) = body.windows(4).position(|w| w == b"labl") {
                     if let Some(n) = u32le(body, i + 4) {
-                        let s = body.get(i + 12..(i + 8 + n as usize).min(body.len())).unwrap_or(&[]);
+                        let s = body
+                            .get(i + 12..(i + 8 + n as usize).min(body.len()))
+                            .unwrap_or(&[]);
                         let s = s.split(|&c| c == 0).next().unwrap_or(&[]);
-                        info.label = s.iter().map(|&c| c as char).collect::<String>().trim().to_string();
+                        info.label = s
+                            .iter()
+                            .map(|&c| c as char)
+                            .collect::<String>()
+                            .trim()
+                            .to_string();
                     }
                 }
             }
@@ -115,7 +123,11 @@ pub fn wem_info(b: &[u8]) -> Option<WemInfo> {
 
 /// Platinum ADPCM -> interleaved i16. Data is interleaved per channel by frames of block_align/channels bytes;
 /// each frame starts with 2 history samples (s16) and a step index, then 4-bit codes, low nibble first.
-pub fn decode_ptadpcm(data: &[u8], channels: usize, block_align: usize) -> Result<Vec<i16>, String> {
+pub fn decode_ptadpcm(
+    data: &[u8],
+    channels: usize,
+    block_align: usize,
+) -> Result<Vec<i16>, String> {
     let frame = block_align / channels.max(1);
     if channels == 0 || frame < 6 {
         return Err("bad PTADPCM layout".into());
@@ -156,7 +168,11 @@ fn ogg_crc(data: &[u8]) -> u32 {
         for (i, e) in t.iter_mut().enumerate() {
             let mut r = (i as u32) << 24;
             for _ in 0..8 {
-                r = if r & 0x8000_0000 != 0 { (r << 1) ^ 0x04C1_1DB7 } else { r << 1 };
+                r = if r & 0x8000_0000 != 0 {
+                    (r << 1) ^ 0x04C1_1DB7
+                } else {
+                    r << 1
+                };
             }
             *e = r;
         }
@@ -179,7 +195,9 @@ pub fn ogg_packets(data: &[u8]) -> Result<Vec<Vec<u8>>, String> {
             return Err("not an Ogg page".into());
         }
         let nseg = data[o + 26] as usize;
-        let seg = data.get(o + 27..o + 27 + nseg).ok_or("truncated Ogg page")?;
+        let seg = data
+            .get(o + 27..o + 27 + nseg)
+            .ok_or("truncated Ogg page")?;
         let mut p = o + 27 + nseg;
         for &s in seg {
             let s = s as usize;
@@ -202,7 +220,11 @@ fn mode_blockflags(setup: &[u8]) -> Result<Vec<bool>, String> {
     while f >= 0 && bit(f as usize) == 0 {
         f -= 1;
     }
-    let val = |s: isize, n: usize| -> u32 { (0..n).map(|k| (bit((s + k as isize) as usize) as u32) << k).sum() };
+    let val = |s: isize, n: usize| -> u32 {
+        (0..n)
+            .map(|k| (bit((s + k as isize) as usize) as u32) << k)
+            .sum()
+    };
     let mut best = None;
     for m in 1..=64isize {
         let start = f - 41 * m;
@@ -213,7 +235,11 @@ fn mode_blockflags(setup: &[u8]) -> Result<Vec<bool>, String> {
             break;
         }
         if val(start - 6, 6) as isize == m - 1 {
-            best = Some((0..m).map(|k| bit((start + 41 * k) as usize) == 1).collect::<Vec<_>>());
+            best = Some(
+                (0..m)
+                    .map(|k| bit((start + 41 * k) as usize) == 1)
+                    .collect::<Vec<_>>(),
+            );
         }
     }
     best.ok_or_else(|| "cannot read Vorbis modes".into())
@@ -274,17 +300,36 @@ impl PageWriter {
 }
 
 /// Rebuild an Ogg Vorbis stream: same audio packets, our comment header, pages of ~4 KiB with exact granules.
-pub fn repack_vorbis(ogg: &[u8], total_samples: Option<u64>, tags: &[(String, String)]) -> Result<Vec<u8>, String> {
+pub fn repack_vorbis(
+    ogg: &[u8],
+    total_samples: Option<u64>,
+    tags: &[(String, String)],
+) -> Result<Vec<u8>, String> {
     let packets = ogg_packets(ogg)?;
-    if packets.len() < 3 || !packets[0].starts_with(b"\x01vorbis") || !packets[2].starts_with(b"\x05vorbis") {
+    if packets.len() < 3
+        || !packets[0].starts_with(b"\x01vorbis")
+        || !packets[2].starts_with(b"\x05vorbis")
+    {
         return Err("not a Vorbis stream".into());
     }
     let b = *packets[0].get(28).ok_or("short identification header")?;
     let bs = [1u64 << (b & 0x0F), 1u64 << (b >> 4)];
     let flags = mode_blockflags(&packets[2])?;
-    let mbits = if flags.len() > 1 { 32 - ((flags.len() - 1) as u32).leading_zeros() } else { 0 };
-    let serial = if ogg.len() >= 18 { u32::from_le_bytes([ogg[14], ogg[15], ogg[16], ogg[17]]) } else { 1 };
-    let mut w = PageWriter { out: Vec::with_capacity(ogg.len() + 512), seq: 0, serial };
+    let mbits = if flags.len() > 1 {
+        32 - ((flags.len() - 1) as u32).leading_zeros()
+    } else {
+        0
+    };
+    let serial = if ogg.len() >= 18 {
+        u32::from_le_bytes([ogg[14], ogg[15], ogg[16], ogg[17]])
+    } else {
+        1
+    };
+    let mut w = PageWriter {
+        out: Vec::with_capacity(ogg.len() + 512),
+        seq: 0,
+        serial,
+    };
     w.page(&[(&packets[0], true)], 0, 0x02);
     let comment = comment_packet(tags);
     // comment + setup on their own page(s); the setup can exceed one page
@@ -316,7 +361,12 @@ pub fn repack_vorbis(ogg: &[u8], total_samples: Option<u64>, tags: &[(String, St
             granules.push(total);
             continue;
         }
-        let word = u32::from_le_bytes([p[0], *p.get(1).unwrap_or(&0), *p.get(2).unwrap_or(&0), *p.get(3).unwrap_or(&0)]);
+        let word = u32::from_le_bytes([
+            p[0],
+            *p.get(1).unwrap_or(&0),
+            *p.get(2).unwrap_or(&0),
+            *p.get(3).unwrap_or(&0),
+        ]);
         let mode = ((word >> 1) & ((1u32 << mbits) - 1)) as usize;
         let size = bs[*flags.get(mode).unwrap_or(&false) as usize];
         if let Some(pv) = prev {
@@ -363,7 +413,11 @@ pub fn repack_vorbis(ogg: &[u8], total_samples: Option<u64>, tags: &[(String, St
     Ok(w.out)
 }
 
-pub fn wem_to_ogg(wem: &[u8], info: &WemInfo, tags: &[(String, String)]) -> Result<Vec<u8>, String> {
+pub fn wem_to_ogg(
+    wem: &[u8],
+    info: &WemInfo,
+    tags: &[(String, String)],
+) -> Result<Vec<u8>, String> {
     let books = crate::ww2ogg::CodebookLibrary::aotuv_codebooks().map_err(|e| e.to_string())?;
     // some media declare a RIFF / data size past their real end (the game streams the rest): clamp both
     let mut fixed = wem.to_vec();
@@ -373,23 +427,32 @@ pub fn wem_to_ogg(wem: &[u8], info: &WemInfo, tags: &[(String, String)]) -> Resu
     }
     if info.data_off >= 8 && info.data_off <= fixed.len() {
         let avail = (fixed.len() - info.data_off) as u32;
-        if u32le(&fixed, info.data_off - 4).map(|s| s > avail).unwrap_or(false) {
+        if u32le(&fixed, info.data_off - 4)
+            .map(|s| s > avail)
+            .unwrap_or(false)
+        {
             fixed[info.data_off - 4..info.data_off].copy_from_slice(&avail.to_le_bytes());
         }
     }
-    let mut conv = crate::ww2ogg::WwiseRiffVorbis::new(Cursor::new(fixed), books).map_err(|e| format!("ww2ogg: {e}"))?;
+    let mut conv = crate::ww2ogg::WwiseRiffVorbis::new(Cursor::new(fixed), books)
+        .map_err(|e| format!("ww2ogg: {e}"))?;
     let mut raw = Vec::with_capacity(wem.len() + 4096);
-    conv.generate_ogg(&mut raw).map_err(|e| format!("ww2ogg: {e}"))?;
+    conv.generate_ogg(&mut raw)
+        .map_err(|e| format!("ww2ogg: {e}"))?;
     repack_vorbis(&raw, info.samples, tags)
 }
 
 /// Decode an Ogg Vorbis stream to interleaved i16, trimmed to `samples` frames when known.
 pub fn decode_ogg(ogg: &[u8], samples: Option<u64>) -> Result<(Vec<i16>, u16, u32), String> {
-    let mut r = lewton::inside_ogg::OggStreamReader::new(Cursor::new(ogg)).map_err(|e| format!("vorbis: {e:?}"))?;
+    let mut r = lewton::inside_ogg::OggStreamReader::new(Cursor::new(ogg))
+        .map_err(|e| format!("vorbis: {e:?}"))?;
     let ch = r.ident_hdr.audio_channels as u16;
     let rate = r.ident_hdr.audio_sample_rate;
     let mut pcm = Vec::new();
-    while let Some(p) = r.read_dec_packet_itl().map_err(|e| format!("vorbis: {e:?}"))? {
+    while let Some(p) = r
+        .read_dec_packet_itl()
+        .map_err(|e| format!("vorbis: {e:?}"))?
+    {
         pcm.extend(p);
     }
     if let Some(n) = samples {
@@ -400,7 +463,12 @@ pub fn decode_ogg(ogg: &[u8], samples: Option<u64>) -> Result<(Vec<i16>, u16, u3
 
 // ------------------------------------------------------------------------------------------------ FLAC / WAV
 
-pub fn encode_flac(pcm: &[i16], channels: u16, rate: u32, tags: &[(String, String)]) -> Result<Vec<u8>, String> {
+pub fn encode_flac(
+    pcm: &[i16],
+    channels: u16,
+    rate: u32,
+    tags: &[(String, String)],
+) -> Result<Vec<u8>, String> {
     crate::flac::encode(pcm, channels, rate, tags)
 }
 
@@ -455,10 +523,17 @@ pub fn encode_wav(pcm: &[i16], channels: u16, rate: u32, tags: &[(String, String
 
 /// Decoded PCM of any supported .wem.
 pub fn wem_pcm(wem: &[u8], info: &WemInfo) -> Result<Vec<i16>, String> {
-    let data = wem.get(info.data_off..info.data_off + info.data_size).ok_or("truncated data chunk")?;
+    let data = wem
+        .get(info.data_off..info.data_off + info.data_size)
+        .ok_or("truncated data chunk")?;
     match info.codec {
         PTADPCM => decode_ptadpcm(data, info.channels as usize, info.block_align as usize),
-        0x0001 | 0xFFFE if info.bits == 16 => Ok(data.as_chunks::<2>().0.iter().map(|c| i16::from_le_bytes([c[0], c[1]])).collect()),
+        0x0001 | 0xFFFE if info.bits == 16 => Ok(data
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| i16::from_le_bytes([c[0], c[1]]))
+            .collect()),
         VORBIS => {
             let ogg = wem_to_ogg(wem, info, &[])?;
             Ok(decode_ogg(&ogg, info.samples)?.0)
@@ -485,14 +560,29 @@ pub fn convert(wem: &[u8], fmt: &str, tags: &[(String, String)]) -> Result<Conve
         return match fmt {
             "wav" | "pcm" => {
                 let t: &[(String, String)] = if fmt == "pcm" { &[] } else { tags };
-                Ok(Converted { ext: ".wav", bytes: encode_wav(&d.pcm, d.channels, d.sample_rate, t), info, pcm: None })
+                Ok(Converted {
+                    ext: ".wav",
+                    bytes: encode_wav(&d.pcm, d.channels, d.sample_rate, t),
+                    info,
+                    pcm: None,
+                })
             }
-            _ => Ok(Converted { ext: ".flac", bytes: encode_flac(&d.pcm, d.channels, d.sample_rate, tags)?, info, pcm: None }),
+            _ => Ok(Converted {
+                ext: ".flac",
+                bytes: encode_flac(&d.pcm, d.channels, d.sample_rate, tags)?,
+                info,
+                pcm: None,
+            }),
         };
     }
     if fmt == "auto" && info.codec == VORBIS {
         if let Ok(ogg) = wem_to_ogg(wem, &info, tags) {
-            return Ok(Converted { ext: ".ogg", bytes: ogg, info, pcm: None });
+            return Ok(Converted {
+                ext: ".ogg",
+                bytes: ogg,
+                info,
+                pcm: None,
+            });
         }
     }
     let pcm = wem_pcm(wem, &info)?;
@@ -502,9 +592,19 @@ pub fn convert(wem: &[u8], fmt: &str, tags: &[(String, String)]) -> Result<Conve
     match fmt {
         "wav" | "pcm" => {
             let t: &[(String, String)] = if fmt == "pcm" { &[] } else { tags };
-            Ok(Converted { ext: ".wav", bytes: encode_wav(&pcm, info.channels, info.rate, t), info, pcm: None })
+            Ok(Converted {
+                ext: ".wav",
+                bytes: encode_wav(&pcm, info.channels, info.rate, t),
+                info,
+                pcm: None,
+            })
         }
-        _ => Ok(Converted { ext: ".flac", bytes: encode_flac(&pcm, info.channels, info.rate, tags)?, info, pcm: None }),
+        _ => Ok(Converted {
+            ext: ".flac",
+            bytes: encode_flac(&pcm, info.channels, info.rate, tags)?,
+            info,
+            pcm: None,
+        }),
     }
 }
 
@@ -521,7 +621,8 @@ pub fn read_range(file: &str, offset: u64, size: i64) -> Result<Vec<u8>, String>
         // the range must lie in the file (sizes come from package indexes)
         let flen = f.metadata().map_err(|e| format!("{file}: {e}"))?.len();
         let avail = flen.saturating_sub(offset).min(usize::MAX as u64) as usize;
-        let n = crate::limits::checked_len(size as usize, 1, avail).map_err(|e| format!("{file} at {offset}: {e}"))?;
+        let n = crate::limits::checked_len(size as usize, 1, avail)
+            .map_err(|e| format!("{file} at {offset}: {e}"))?;
         let mut v = vec![0u8; n];
         f.seek(SeekFrom::Start(offset)).map_err(|e| e.to_string())?;
         f.read_exact(&mut v).map_err(|e| format!("{file}: {e}"))?;
@@ -540,8 +641,16 @@ pub fn scan(items: &[(String, u64, i64)]) -> Vec<Scan> {
     items
         .par_iter()
         .map(|(f, o, s)| match read_range(f, *o, *s) {
-            Ok(b) => Scan { sha1: sha1_smol::Sha1::from(&b).digest().to_string(), info: wem_info(&b), error: String::new() },
-            Err(e) => Scan { sha1: String::new(), info: None, error: e },
+            Ok(b) => Scan {
+                sha1: sha1_smol::Sha1::from(&b).digest().to_string(),
+                info: wem_info(&b),
+                error: String::new(),
+            },
+            Err(e) => Scan {
+                sha1: String::new(),
+                info: None,
+                error: e,
+            },
         })
         .collect()
 }
@@ -565,7 +674,9 @@ pub struct JobResult {
 const EXTS: [&str; 4] = [".ogg", ".flac", ".wav", ".mp3"];
 
 fn existing(base: &str) -> Option<PathBuf> {
-    EXTS.iter().map(|e| PathBuf::from(format!("{base}{e}"))).find(|p| p.exists())
+    EXTS.iter()
+        .map(|e| PathBuf::from(format!("{base}{e}")))
+        .find(|p| p.exists())
 }
 
 fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {
@@ -583,21 +694,47 @@ pub fn export(jobs: &[Job], fmt: &str) -> Vec<JobResult> {
     jobs.par_iter()
         .map(|j| {
             if let Some(p) = existing(&j.out_base) {
-                let info = read_range(&j.file, j.offset, j.size).ok().and_then(|b| wem_info(&b));
+                let info = read_range(&j.file, j.offset, j.size)
+                    .ok()
+                    .and_then(|b| wem_info(&b));
                 let bytes = fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
-                return JobResult { path: p.display().to_string(), skipped: true, info, bytes, error: String::new() };
+                return JobResult {
+                    path: p.display().to_string(),
+                    skipped: true,
+                    info,
+                    bytes,
+                    error: String::new(),
+                };
             }
             let run = || -> Result<JobResult, String> {
                 let wem = read_range(&j.file, j.offset, j.size)?;
                 let c = convert(&wem, fmt, &j.tags)?;
                 let path = PathBuf::from(format!("{}{}", j.out_base, c.ext));
                 write_atomic(&path, &c.bytes)?;
-                Ok(JobResult { path: path.display().to_string(), skipped: false, info: Some(c.info), bytes: c.bytes.len() as u64, error: String::new() })
+                Ok(JobResult {
+                    path: path.display().to_string(),
+                    skipped: false,
+                    info: Some(c.info),
+                    bytes: c.bytes.len() as u64,
+                    error: String::new(),
+                })
             };
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(run)) {
                 Ok(Ok(r)) => r,
-                Ok(Err(e)) => JobResult { path: String::new(), skipped: false, info: None, bytes: 0, error: e },
-                Err(_) => JobResult { path: String::new(), skipped: false, info: None, bytes: 0, error: "decoder panic".into() },
+                Ok(Err(e)) => JobResult {
+                    path: String::new(),
+                    skipped: false,
+                    info: None,
+                    bytes: 0,
+                    error: e,
+                },
+                Err(_) => JobResult {
+                    path: String::new(),
+                    skipped: false,
+                    info: None,
+                    bytes: 0,
+                    error: "decoder panic".into(),
+                },
             }
         })
         .collect()

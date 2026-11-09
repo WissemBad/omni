@@ -80,7 +80,10 @@ fn read_at(f: &File, buf: &mut [u8], mut off: u64) -> std::io::Result<()> {
     while done < buf.len() {
         let n = f.seek_read(&mut buf[done..], off)?;
         if n == 0 {
-            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "end of container"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "end of container",
+            ));
         }
         done += n;
         off += n as u64;
@@ -119,7 +122,10 @@ impl Container {
         let toc = std::fs::read(utoc)?;
         let mut r = Reader::new(&toc);
         if r.bytes(16)? != MAGIC {
-            return err(format!("{}: not an IoStore table of contents", utoc.display()));
+            return err(format!(
+                "{}: not an IoStore table of contents",
+                utoc.display()
+            ));
         }
         let version = r.u8()?;
         r.skip(3)?;
@@ -140,7 +146,10 @@ impl Container {
         let partition_size = r.u64()?;
         let overflow = r.u32()? as usize;
         if header_size != 0x90 || block_entry_size != 12 || block_size == 0 {
-            return err(format!("{}: unsupported IoStore header (size {header_size}, version {version})", utoc.display()));
+            return err(format!(
+                "{}: unsupported IoStore header (size {header_size}, version {version})",
+                utoc.display()
+            ));
         }
         r.seek(header_size)?;
         let encrypted = flags & 0x02 != 0;
@@ -152,7 +161,11 @@ impl Container {
             let index = r.u16()?;
             r.skip(1)?;
             let t = r.u8()?;
-            Ok(ChunkId { id, index, kind: if version >= 5 { t } else { remap_old_type(t) } })
+            Ok(ChunkId {
+                id,
+                index,
+                kind: if version >= 5 { t } else { remap_old_type(t) },
+            })
         })?;
         let offsets = r.n_of(entry_count, 10, |r| {
             let b = r.bytes(10)?;
@@ -182,7 +195,11 @@ impl Container {
         if signed {
             let size = r.u32()? as usize;
             r.skip(size.checked_mul(2).ok_or(Error("signature".into()))?)?;
-            r.skip(block_count.checked_mul(20).ok_or(Error("signature".into()))?)?;
+            r.skip(
+                block_count
+                    .checked_mul(20)
+                    .ok_or(Error("signature".into()))?,
+            )?;
         }
         let mut mount_point = String::new();
         let mut files = Vec::new();
@@ -202,7 +219,10 @@ impl Container {
         for (i, c) in chunks.iter().enumerate() {
             by_id.insert(*c, i as u32);
         }
-        let name = utoc.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        let name = utoc
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
         let mut partitions = Vec::new();
         let base: PathBuf = utoc.with_extension("ucas");
         partitions.push(File::open(&base).map_err(|e| Error(format!("{}: {e}", base.display())))?);
@@ -220,7 +240,11 @@ impl Container {
             encrypted,
             mount_point,
             block_size,
-            partition_size: if partition_size == 0 { u64::MAX } else { partition_size },
+            partition_size: if partition_size == 0 {
+                u64::MAX
+            } else {
+                partition_size
+            },
             partitions,
             chunks,
             offsets,
@@ -250,20 +274,32 @@ impl Container {
 
     /// The whole chunk at `index`.
     pub fn read_index(&self, index: u32) -> Result<Vec<u8>> {
-        let (off, len) = *self.offsets.get(index as usize).ok_or(Error("bad toc index".into()))?;
+        let (off, len) = *self
+            .offsets
+            .get(index as usize)
+            .ok_or(Error("bad toc index".into()))?;
         self.read_range_raw(off, len, 0, len)
     }
 
     /// `len` bytes at `start` inside the chunk `index` (only the blocks that hold them are read).
     pub fn read_partial(&self, index: u32, start: u64, len: u64) -> Result<Vec<u8>> {
-        let (off, size) = *self.offsets.get(index as usize).ok_or(Error("bad toc index".into()))?;
+        let (off, size) = *self
+            .offsets
+            .get(index as usize)
+            .ok_or(Error("bad toc index".into()))?;
         if start.checked_add(len).is_none_or(|e| e > size) {
             return err(format!("range {start}+{len} outside chunk of {size} bytes"));
         }
         self.read_range_raw(off, size, start, len)
     }
 
-    fn read_range_raw(&self, chunk_off: u64, chunk_len: u64, start: u64, len: u64) -> Result<Vec<u8>> {
+    fn read_range_raw(
+        &self,
+        chunk_off: u64,
+        chunk_len: u64,
+        start: u64,
+        len: u64,
+    ) -> Result<Vec<u8>> {
         if len > (1u64 << 32) || chunk_len > (1u64 << 36) {
             return err("chunk too large");
         }
@@ -277,18 +313,28 @@ impl Container {
             return err("chunk outside the compressed block table");
         }
         // the blocks that hold the range bound what it can return
-        let held: usize = self.blocks[first..=last].iter().map(|b| b.raw as usize).sum();
+        let held: usize = self.blocks[first..=last]
+            .iter()
+            .map(|b| b.raw as usize)
+            .sum();
         let mut out = Vec::with_capacity(checked_len(len as usize, 1, held).map_err(Error)?);
         let mut comp = Vec::new();
         let mut raw = Vec::new();
         for bi in first..=last {
             let b = self.blocks[bi];
             let block_start = bi as u64 * self.block_size;
-            let stored = if self.encrypted { (b.compressed as usize + 15) & !15 } else { b.compressed as usize };
+            let stored = if self.encrypted {
+                (b.compressed as usize + 15) & !15
+            } else {
+                b.compressed as usize
+            };
             comp.resize(stored, 0);
             let part = (b.offset / self.partition_size) as usize;
             let poff = b.offset % self.partition_size;
-            let file = self.partitions.get(part).ok_or(Error(format!("missing container partition {part}")))?;
+            let file = self
+                .partitions
+                .get(part)
+                .ok_or(Error(format!("missing container partition {part}")))?;
             read_at(file, &mut comp, poff)?;
             if self.encrypted {
                 match &self.key {
@@ -300,7 +346,11 @@ impl Container {
                 &comp[..b.raw.min(b.compressed) as usize]
             } else {
                 raw.resize(b.raw as usize, 0);
-                let method = self.methods.get(b.method as usize - 1).map(|s| s.as_str()).unwrap_or("?");
+                let method = self
+                    .methods
+                    .get(b.method as usize - 1)
+                    .map(|s| s.as_str())
+                    .unwrap_or("?");
                 decompress(method, &comp[..b.compressed as usize], &mut raw)?;
                 &raw
             };
@@ -339,7 +389,8 @@ pub fn decompress(method: &str, src: &[u8], dst: &mut [u8]) -> Result<()> {
             Ok(())
         }
         "lz4" => {
-            let n = lz4_flex::block::decompress_into(src, dst).map_err(|e| Error(format!("lz4: {e}")))?;
+            let n = lz4_flex::block::decompress_into(src, dst)
+                .map_err(|e| Error(format!("lz4: {e}")))?;
             if n != dst.len() {
                 return err("lz4: wrong size");
             }
@@ -367,19 +418,38 @@ pub(crate) fn parse_directory_index(data: &[u8]) -> Result<(String, Vec<(String,
         if guard > dirs.len() + 1 {
             return err("directory index has a cycle");
         }
-        let [name, first_child, _sibling, first_file] = *dirs.get(d as usize).ok_or(Error("bad directory index".into()))?;
+        let [name, first_child, _sibling, first_file] = *dirs
+            .get(d as usize)
+            .ok_or(Error("bad directory index".into()))?;
         let path = if name == u32::MAX {
             prefix
         } else {
-            let n = strings.get(name as usize).ok_or(Error("bad directory name".into()))?;
-            if prefix.is_empty() { n.clone() } else { format!("{prefix}/{n}") }
+            let n = strings
+                .get(name as usize)
+                .ok_or(Error("bad directory name".into()))?;
+            if prefix.is_empty() {
+                n.clone()
+            } else {
+                format!("{prefix}/{n}")
+            }
         };
         let mut f = first_file;
         let mut seen = 0usize;
         while f != u32::MAX {
-            let [fname, next, user] = *files.get(f as usize).ok_or(Error("bad file index".into()))?;
-            let n = strings.get(fname as usize).ok_or(Error("bad file name".into()))?;
-            out.push((if path.is_empty() { n.clone() } else { format!("{path}/{n}") }, user));
+            let [fname, next, user] = *files
+                .get(f as usize)
+                .ok_or(Error("bad file index".into()))?;
+            let n = strings
+                .get(fname as usize)
+                .ok_or(Error("bad file name".into()))?;
+            out.push((
+                if path.is_empty() {
+                    n.clone()
+                } else {
+                    format!("{path}/{n}")
+                },
+                user,
+            ));
             f = next;
             seen += 1;
             if seen > files.len() {
@@ -390,7 +460,9 @@ pub(crate) fn parse_directory_index(data: &[u8]) -> Result<(String, Vec<(String,
         let mut seen = 0usize;
         while c != u32::MAX {
             stack.push((c, path.clone()));
-            c = dirs.get(c as usize).ok_or(Error("bad directory index".into()))?[2];
+            c = dirs
+                .get(c as usize)
+                .ok_or(Error("bad directory index".into()))?[2];
             seen += 1;
             if seen > dirs.len() {
                 return err("directory list has a cycle");
@@ -405,11 +477,19 @@ pub(crate) fn parse_directory_index(data: &[u8]) -> Result<(String, Vec<(String,
 pub fn game_path(mount: &str, rel: &str) -> String {
     let full = format!("{}{}", mount.trim_start_matches("../../../"), rel);
     let parts: Vec<&str> = full.split('/').filter(|s| !s.is_empty()).collect();
-    if parts.len() >= 2 && parts[0].eq_ignore_ascii_case("Engine") && parts[1].eq_ignore_ascii_case("Content") {
+    if parts.len() >= 2
+        && parts[0].eq_ignore_ascii_case("Engine")
+        && parts[1].eq_ignore_ascii_case("Content")
+    {
         return format!("/Engine/{}", parts[2..].join("/"));
     }
     if let Some(ci) = parts.iter().position(|p| p.eq_ignore_ascii_case("Content")) {
-        if parts.iter().take(ci).any(|p| p.eq_ignore_ascii_case("Plugins")) && ci >= 1 {
+        if parts
+            .iter()
+            .take(ci)
+            .any(|p| p.eq_ignore_ascii_case("Plugins"))
+            && ci >= 1
+        {
             return format!("/{}/{}", parts[ci - 1], parts[ci + 1..].join("/"));
         }
         if ci == 1 {
@@ -449,7 +529,11 @@ pub fn parse_container_header(data: &[u8]) -> Result<(i32, HashMap<u64, StoreEnt
     for (i, id) in ids.iter().enumerate() {
         let base = i * size;
         let mut e = Reader::at(buf, base);
-        let (export_count, export_bundle_count) = if version <= 2 { (e.i32()?, e.i32()?) } else { (0, 0) };
+        let (export_count, export_bundle_count) = if version <= 2 {
+            (e.i32()?, e.i32()?)
+        } else {
+            (0, 0)
+        };
         if version > 2 {
             e.seek(base)?;
         }
@@ -460,7 +544,14 @@ pub fn parse_container_header(data: &[u8]) -> Result<(i32, HashMap<u64, StoreEnt
             let mut a = Reader::at(buf, base + member + rel);
             imported = a.n_of(num, 8, |a| a.u64())?;
         }
-        out.insert(*id, StoreEntry { export_count, export_bundle_count, imported });
+        out.insert(
+            *id,
+            StoreEntry {
+                export_count,
+                export_bundle_count,
+                imported,
+            },
+        );
     }
     Ok((version, out))
 }

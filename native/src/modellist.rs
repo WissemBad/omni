@@ -7,7 +7,15 @@
 use std::collections::HashSet;
 
 /// Files Source writes next to a `.mdl`: any of them names the model.
-const SIBLINGS: [&str; 7] = [".dx90.vtx", ".dx80.vtx", ".sw.vtx", ".vtx", ".vvd", ".phy", ".ani"];
+const SIBLINGS: [&str; 7] = [
+    ".dx90.vtx",
+    ".dx80.vtx",
+    ".sw.vtx",
+    ".vtx",
+    ".vvd",
+    ".phy",
+    ".ani",
+];
 
 fn comment_start(line: &str) -> Option<usize> {
     let t = line.trim_start();
@@ -39,7 +47,10 @@ pub fn normalise(line: &str) -> Option<String> {
     } else {
         s = s.trim_start_matches("./").trim_start_matches('/');
     }
-    if s.is_empty() || s.split('/').any(|p| p == ".." || p.is_empty() || p.contains(':')) {
+    if s.is_empty()
+        || s.split('/')
+            .any(|p| p == ".." || p.is_empty() || p.contains(':'))
+    {
         return None;
     }
     if let Some(base) = s.strip_suffix(".mdl") {
@@ -60,7 +71,10 @@ pub fn normalise(line: &str) -> Option<String> {
 /// Every model of the file, once, in order.
 pub fn parse(text: &str) -> Vec<String> {
     let mut seen = HashSet::new();
-    text.lines().filter_map(normalise).filter(|m| seen.insert(m.clone())).collect()
+    text.lines()
+        .filter_map(normalise)
+        .filter(|m| seen.insert(m.clone()))
+        .collect()
 }
 
 #[cfg(test)]

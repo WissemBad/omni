@@ -69,8 +69,8 @@ def register(app: FastAPI, *, jobs, reset_runtime) -> None:
                   "gmod": "Dossier de Garry’s Mod"}
         try:
             return {"path": pick_folder(titles.get(kind, "Choisir un dossier"))}
-        except Exception as e:  # noqa: BLE001 - no display / dialog failed: the user types the path
-            raise HTTPException(501, f"Sélecteur de dossier indisponible : {e}")
+        except Exception as e:
+            raise HTTPException(501, f"Sélecteur de dossier indisponible : {e}") from e
 
     @app.get("/api/setup/estimate")
     def estimate():
@@ -80,8 +80,8 @@ def register(app: FastAPI, *, jobs, reset_runtime) -> None:
             raise HTTPException(404, "Jeu introuvable")
         try:
             return setup.estimate(found[1])
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(500, f"{type(e).__name__}: {e}")
+        except Exception as e:
+            raise HTTPException(500, f"{type(e).__name__}: {e}") from e
 
     def _job(kind: str, label: str, fn, purge: bool = True):
         job = jobs.create("setup", label, "", 0, dedupe=f"setup:{kind}")
@@ -111,7 +111,7 @@ def register(app: FastAPI, *, jobs, reset_runtime) -> None:
             raise HTTPException(400, "Choisis d’abord le dossier du jeu")
 
         def run(job):
-            say = lambda m: jobs.log(job, m)  # noqa: E731
+            say = lambda m: jobs.log(job, m)
             cancel = jobs.cancel_event(job)
             st = setup.status()
             stages = [("extract", 80, not st["assets"]["ok"]), ("names", 10, not st["names"]["ok"]),
